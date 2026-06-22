@@ -88,12 +88,12 @@ class _AddSessionDialogState extends ConsumerState<AddSessionDialog> {
               decoration: const InputDecoration(labelText: 'Type'),
               items: const [
                 DropdownMenuItem(
-                  value: 'Assignment',
-                  child: Text('Assignment'),
+                  value: 'UAP',
+                  child: Text('UAP — Assignment Proctor'),
                 ),
                 DropdownMenuItem(
-                  value: 'Final Exam',
-                  child: Text('Final Exam'),
+                  value: 'UAS',
+                  child: Text('UAS — Final Exam Proctor'),
                 ),
               ],
               onChanged: (value) => setState(() => _type = value!),

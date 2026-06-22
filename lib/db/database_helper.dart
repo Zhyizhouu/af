@@ -1,219 +1,120 @@
-import 'package:af/models/proctor_session..dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
+import '../models/proctor_session.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../models/checklist_item.dart';
 import '../models/checklist_template_item.dart';
+import '../models/frequent_course.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
-  static Database? _database;
-
   DatabaseHelper._init();
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDB('af_app.db');
-    return _database!;
-  }
+  late Box<ProctorSession> sessionsBox;
+  late Box<ChecklistItem> checklistItemsBox;
+  late Box<ChecklistTemplateItem> templateBox;
+  late Box<FrequentCourse> frequentCoursesBox;
 
-  Future<Database> _initDB(String fileName) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, fileName);
-    return await openDatabase(
-      path,
-      version: 2,
-      onCreate: _createDB,
-      onUpgrade: _upgradeDB,
+  Future<void> init() async {
+    await Hive.initFlutter();
+
+    Hive.registerAdapter(ProctorSessionAdapter());
+    Hive.registerAdapter(ChecklistItemAdapter());
+    Hive.registerAdapter(ChecklistTemplateItemAdapter());
+    Hive.registerAdapter(FrequentCourseAdapter());
+
+    sessionsBox = await Hive.openBox<ProctorSession>('proctor_sessions');
+    checklistItemsBox = await Hive.openBox<ChecklistItem>('checklist_items');
+    templateBox = await Hive.openBox<ChecklistTemplateItem>(
+      'checklist_template',
     );
-  }
-
-  Future _createDB(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE checklist_template (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        label TEXT NOT NULL,
-        section TEXT NOT NULL,
-        sort_order INTEGER NOT NULL
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE proctor_sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        type TEXT NOT NULL,
-        date_time TEXT NOT NULL,
-        room TEXT NOT NULL,
-        course_code TEXT NOT NULL DEFAULT "",
-        course_name TEXT NOT NULL DEFAULT "",
-        course_class TEXT NOT NULL DEFAULT "",
-        status TEXT NOT NULL DEFAULT 'active',
-        created_at TEXT NOT NULL
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE checklist_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_id INTEGER NOT NULL,
-        label TEXT NOT NULL,
-        section TEXT NOT NULL,
-        is_checked INTEGER NOT NULL DEFAULT 0,
-        sort_order INTEGER NOT NULL,
-        FOREIGN KEY (session_id) REFERENCES proctor_sessions (id) ON DELETE CASCADE
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE frequent_courses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        course_code TEXT NOT NULL,
-        course_name TEXT NOT NULL,
-        course_class TEXT NOT NULL,
-        UNIQUE(course_code, course_name, course_class)
-      )
-    ''');
-  }
-
-  Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      await db.execute(
-        'ALTER TABLE proctor_sessions ADD COLUMN course_code TEXT NOT NULL DEFAULT ""',
-      );
-      await db.execute(
-        'ALTER TABLE proctor_sessions ADD COLUMN course_name TEXT NOT NULL DEFAULT ""',
-      );
-      await db.execute(
-        'ALTER TABLE proctor_sessions ADD COLUMN course_class TEXT NOT NULL DEFAULT ""',
-      );
-
-      // checklist_template and checklist_items need a 'section' column
-      await db.execute(
-        'ALTER TABLE checklist_template ADD COLUMN section TEXT NOT NULL DEFAULT ""',
-      );
-      await db.execute(
-        'ALTER TABLE checklist_items ADD COLUMN section TEXT NOT NULL DEFAULT ""',
-      );
-
-      await db.execute('''
-        CREATE TABLE frequent_courses (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          course_code TEXT NOT NULL,
-          course_name TEXT NOT NULL,
-          course_class TEXT NOT NULL,
-          UNIQUE(course_code, course_name, course_class)
-        )
-      ''');
-    }
+    frequentCoursesBox = await Hive.openBox<FrequentCourse>('frequent_courses');
   }
 
   // ---- Template ----
-  Future<int> insertTemplateItem(ChecklistTemplateItem item) async {
-    final db = await instance.database;
-    return await db.insert('checklist_template', item.toMap());
+  Future<void> insertTemplateItem(ChecklistTemplateItem item) async {
+    await templateBox.add(item);
   }
 
-  Future<List<ChecklistTemplateItem>> getTemplate() async {
-    final db = await instance.database;
-    final result = await db.query(
-      'checklist_template',
-      orderBy: 'sort_order ASC',
-    );
-    return result.map((e) => ChecklistTemplateItem.fromMap(e)).toList();
+  List<ChecklistTemplateItem> getTemplate({required String type}) {
+    final items = templateBox.values.where((i) => i.type == type).toList();
+    items.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return items;
   }
 
-  Future<int> deleteTemplateItem(int id) async {
-    final db = await instance.database;
-    return await db.delete(
-      'checklist_template',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  Future<int> clearTemplate() async {
-    final db = await instance.database;
-    return await db.delete('checklist_template');
+  Future<void> deleteTemplateItem(dynamic key) async {
+    await templateBox.delete(key);
   }
 
   // ---- Sessions ----
-  Future<int> insertSession(ProctorSession session) async {
-    final db = await instance.database;
-    return await db.insert('proctor_sessions', session.toMap());
+  Future<String> insertSession(ProctorSession session) async {
+    final key = await sessionsBox.add(session);
+    return key.toString();
   }
 
-  Future<List<ProctorSession>> getSessions(String status) async {
-    final db = await instance.database;
-    final result = await db.query(
-      'proctor_sessions',
-      where: 'status = ?',
-      whereArgs: [status],
-      orderBy: 'date_time ASC',
-    );
-    return result.map((e) => ProctorSession.fromMap(e)).toList();
+  List<ProctorSession> getSessions(String status) {
+    final sessions = sessionsBox.values
+        .where((s) => s.status == status)
+        .toList();
+    sessions.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    return sessions;
   }
 
-  Future<int> updateSessionStatus(int id, String status) async {
-    final db = await instance.database;
-    return await db.update(
-      'proctor_sessions',
-      {'status': status},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+  ProctorSession? getSessionByKey(dynamic key) {
+    return sessionsBox.get(key);
+  }
+
+  Future<void> updateSessionStatus(dynamic key, String status) async {
+    final session = sessionsBox.get(key);
+    if (session != null) {
+      session.status = status;
+      await session.save();
+    }
   }
 
   // ---- Checklist items ----
-  Future<int> insertChecklistItem(ChecklistItem item) async {
-    final db = await instance.database;
-    return await db.insert('checklist_items', item.toMap());
+  Future<void> insertChecklistItem(ChecklistItem item) async {
+    await checklistItemsBox.add(item);
   }
 
-  Future<List<ChecklistItem>> getChecklistItems(int sessionId) async {
-    final db = await instance.database;
-    final result = await db.query(
-      'checklist_items',
-      where: 'session_id = ?',
-      whereArgs: [sessionId],
-      orderBy: 'sort_order ASC',
-    );
-    return result.map((e) => ChecklistItem.fromMap(e)).toList();
+  List<ChecklistItem> getChecklistItems(String sessionKey) {
+    final items = checklistItemsBox.values
+        .where((i) => i.sessionKey == sessionKey)
+        .toList();
+    items.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return items;
   }
 
-  Future<int> updateChecklistItem(ChecklistItem item) async {
-    final db = await instance.database;
-    return await db.update(
-      'checklist_items',
-      item.toMap(),
-      where: 'id = ?',
-      whereArgs: [item.id],
-    );
+  Future<void> updateChecklistItem(ChecklistItem item) async {
+    await item.save();
   }
 
   // ---- Frequent Courses ----
-  Future<int> insertFrequentCourse(
+  Future<void> insertFrequentCourse(
     String code,
     String name,
     String courseClass,
   ) async {
-    final db = await instance.database;
-    return await db.insert('frequent_courses', {
-      'course_code': code,
-      'course_name': name,
-      'course_class': courseClass,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
-  }
-
-  Future<List<Map<String, dynamic>>> getFrequentCourses() async {
-    final db = await instance.database;
-    return await db.query('frequent_courses', orderBy: 'id DESC');
-  }
-
-  Future<int> deleteFrequentCourse(int id) async {
-    final db = await instance.database;
-    return await db.delete(
-      'frequent_courses',
-      where: 'id = ?',
-      whereArgs: [id],
+    final exists = frequentCoursesBox.values.any(
+      (c) =>
+          c.courseCode == code &&
+          c.courseName == name &&
+          c.courseClass == courseClass,
     );
+    if (!exists) {
+      await frequentCoursesBox.add(
+        FrequentCourse(
+          courseCode: code,
+          courseName: name,
+          courseClass: courseClass,
+        ),
+      );
+    }
+  }
+
+  List<FrequentCourse> getFrequentCourses() {
+    return frequentCoursesBox.values.toList().reversed.toList();
+  }
+
+  Future<void> deleteFrequentCourse(dynamic key) async {
+    await frequentCoursesBox.delete(key);
   }
 }

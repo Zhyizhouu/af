@@ -68,8 +68,9 @@ class HomeScreen extends ConsumerWidget {
                       itemCount: sessions.length,
                       itemBuilder: (context, index) {
                         final s = sessions[index];
+                        final sessionKey = s.key.toString();
                         final checklistAsync = ref.watch(
-                          sessionChecklistProvider(s.id!),
+                          sessionChecklistProvider(sessionKey),
                         );
 
                         return checklistAsync.when(

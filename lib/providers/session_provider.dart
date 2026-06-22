@@ -1,8 +1,7 @@
-import 'package:af/models/proctor_session..dart';
+import '../models/proctor_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../db/database_helper.dart';
 import '../models/checklist_item.dart';
-import 'template_provider.dart';
 
 enum SessionFilter { upcoming, today, archived }
 
@@ -48,19 +47,12 @@ final filteredSessionsProvider = FutureProvider<List<ProctorSession>>((
         .toList();
   }
 
-  // upcoming = active sessions strictly after today
-  return active
-      .where(
-        (s) =>
-            s.dateTime.isAfter(todayEnd) ||
-            s.dateTime.isAtSameMomentAs(todayEnd),
-      )
-      .toList();
+  return active.where((s) => !s.dateTime.isBefore(todayEnd)).toList();
 });
 
 final sessionChecklistProvider =
-    FutureProvider.family<List<ChecklistItem>, int>((ref, sessionId) async {
-      return DatabaseHelper.instance.getChecklistItems(sessionId);
+    FutureProvider.family<List<ChecklistItem>, String>((ref, sessionKey) async {
+      return DatabaseHelper.instance.getChecklistItems(sessionKey);
     });
 
 class SessionController {
@@ -88,13 +80,13 @@ class SessionController {
       createdAt: DateTime.now(),
     );
 
-    final sessionId = await db.insertSession(session);
+    final sessionKey = await db.insertSession(session);
 
-    final template = await db.getTemplate();
+    final template = db.getTemplate(type: type);
     for (final t in template) {
       await db.insertChecklistItem(
         ChecklistItem(
-          sessionId: sessionId,
+          sessionKey: sessionKey,
           label: t.label,
           section: t.section,
           isChecked: false,
@@ -110,22 +102,33 @@ class SessionController {
     ref.invalidate(activeSessionsProvider);
   }
 
-  Future<bool> toggleChecklistItem(ChecklistItem item, int sessionId) async {
+  Future<bool> toggleChecklistItem(
+    ChecklistItem item,
+    String sessionKey,
+  ) async {
     final db = DatabaseHelper.instance;
-    final updated = item.copyWith(isChecked: !item.isChecked);
-    await db.updateChecklistItem(updated);
+    item.isChecked = !item.isChecked;
+    await db.updateChecklistItem(item);
 
-    final allItems = await db.getChecklistItems(sessionId);
+    final allItems = db.getChecklistItems(sessionKey);
     final allChecked = allItems.every((i) => i.isChecked);
 
     if (allChecked) {
-      await db.updateSessionStatus(sessionId, 'archived');
+      final session = db.getSessionByKey(_keyFromString(sessionKey));
+      if (session != null) {
+        session.status = 'archived';
+        await session.save();
+      }
       ref.invalidate(activeSessionsProvider);
       ref.invalidate(archivedSessionsProvider);
     }
 
-    ref.invalidate(sessionChecklistProvider(sessionId));
+    ref.invalidate(sessionChecklistProvider(sessionKey));
     return allChecked;
+  }
+
+  dynamic _keyFromString(String key) {
+    return int.tryParse(key) ?? key;
   }
 }
 

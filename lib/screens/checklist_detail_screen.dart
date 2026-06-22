@@ -1,6 +1,6 @@
-import 'package:af/models/proctor_session..dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/proctor_session.dart';
 import '../providers/session_provider.dart';
 import '../widgets/app_background.dart';
 import '../widgets/glass_container.dart';
@@ -12,7 +12,8 @@ class ChecklistDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final checklistAsync = ref.watch(sessionChecklistProvider(session.id!));
+    final sessionKey = session.key.toString();
+    final checklistAsync = ref.watch(sessionChecklistProvider(sessionKey));
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -91,7 +92,7 @@ class ChecklistDetailScreen extends ConsumerWidget {
                                 onChanged: (_) async {
                                   final archived = await ref
                                       .read(sessionControllerProvider)
-                                      .toggleChecklistItem(item, session.id!);
+                                      .toggleChecklistItem(item, sessionKey);
 
                                   if (archived && context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(

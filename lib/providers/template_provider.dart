@@ -14,7 +14,7 @@ class TemplateController {
 
   Future<void> addItem(String label, String section) async {
     final db = DatabaseHelper.instance;
-    final current = await db.getTemplate();
+    final current = db.getTemplate();
     final newSortOrder = current.isEmpty ? 0 : current.last.sortOrder + 1;
     await db.insertTemplateItem(
       ChecklistTemplateItem(

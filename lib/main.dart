@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/home_screen.dart';
+import 'db/database_helper.dart';
 import 'db/seed_template.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await DatabaseHelper.instance.init();
   await seedTemplateIfEmpty();
   runApp(const ProviderScope(child: AFApp()));
 }
