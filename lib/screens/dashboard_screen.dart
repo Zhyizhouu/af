@@ -11,6 +11,7 @@ import '../theme/af_text.dart';
 import '../theme/af_tokens.dart';
 import '../widgets/af_account_button.dart';
 import '../widgets/af_chip.dart';
+import '../widgets/af_glass_icon.dart';
 import '../widgets/af_panel.dart';
 import '../widgets/af_scaffold.dart';
 import '../widgets/af_theme_toggle.dart';
@@ -135,6 +136,7 @@ class _ProgramTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.af;
     final locked = program.requiresAuth && !signedIn;
+    final glyph = AFGlassGlyph.forProgram(program.id);
 
     return AFPanel(
       label: program.name,
@@ -152,8 +154,24 @@ class _ProgramTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(program.tagline, style: AFText.meta(context, color: t.accent)),
-          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (glyph != null) ...[
+                // The mark sits on the panel, which is flat — nothing behind it
+                // to refract, so the backdrop blur is dropped here.
+                AFGlassIcon(glyph: glyph, size: 46, frosted: false),
+                const SizedBox(width: 14),
+              ],
+              Expanded(
+                child: Text(
+                  program.tagline,
+                  style: AFText.meta(context, color: t.accent),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           Text(program.description, style: AFText.body(context)),
           const SizedBox(height: 16),
           Row(

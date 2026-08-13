@@ -21,8 +21,10 @@ import 'package:af/programs/calendar/calendar_screen.dart';
 import 'package:af/programs/checklist/checklist_detail_screen.dart';
 import 'package:af/programs/checklist/checklist_home_screen.dart';
 import 'package:af/programs/qr/qr_screen.dart';
+import 'package:af/programs/af_program.dart';
 import 'package:af/screens/dashboard_screen.dart';
 import 'package:af/theme/app_theme.dart';
+import 'package:af/widgets/af_glass_icon.dart';
 
 /// Layout smoke tests.
 ///
@@ -169,6 +171,37 @@ void main() {
       await _pump(tester, const DashboardScreen(), size: _desktop);
       expect(find.text('SIGN IN →'), findsWidgets);
       expect(find.textContaining('account required'), findsWidgets);
+    });
+  });
+
+  // The marks are pure paint with no data behind them, so the useful check is
+  // that every glyph survives both extremes of the scale it has to serve: the
+  // board's 212px tile and a favicon.
+  group('glass icons', () {
+    Widget board(double size) => Center(
+          child: Wrap(
+            spacing: 24,
+            runSpacing: 24,
+            children: [
+              for (final glyph in AFGlassGlyph.values)
+                AFGlassIcon(glyph: glyph, size: size),
+            ],
+          ),
+        );
+
+    testWidgets('every mark paints at tile size', (tester) async {
+      await _pump(tester, board(212), size: _desktop, inShell: false);
+      expect(find.byType(AFGlassIcon), findsNWidgets(4));
+    });
+
+    testWidgets('every mark paints at favicon size', (tester) async {
+      await _pump(tester, board(32), size: _phone, inShell: false);
+      expect(find.byType(AFGlassIcon), findsNWidgets(4));
+    });
+
+    testWidgets('the dashboard carries one mark per program', (tester) async {
+      await _pump(tester, const DashboardScreen(), size: _desktop);
+      expect(find.byType(AFGlassIcon), findsNWidgets(afPrograms.length));
     });
   });
 
