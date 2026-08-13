@@ -37,16 +37,17 @@ dependencies:
   file_picker: ^8.0.0
   flutter_riverpod: ^2.5.1
   intl: ^0.19.0
+  qr: ^3.0.2
+  share_plus: ^12.0.2
+  path_provider: ^2.1.5
+  web: ^1.1.1
+  cupertino_icons: ^1.0.8
 
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/icon/icon.png"
   remove_alpha_ios: true
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
 
 
 

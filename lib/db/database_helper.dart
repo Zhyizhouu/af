@@ -13,6 +13,9 @@ class DatabaseHelper {
   late Box<ChecklistTemplateItem> templateBox;
   late Box<FrequentCourse> frequentCoursesBox;
 
+  /// App-wide preferences shared by every program (theme mode, QR defaults).
+  late Box settingsBox;
+
   Future<void> init() async {
     await Hive.initFlutter();
 
@@ -27,7 +30,14 @@ class DatabaseHelper {
       'checklist_template',
     );
     frequentCoursesBox = await Hive.openBox<FrequentCourse>('frequent_courses');
+    settingsBox = await Hive.openBox('af_settings');
   }
+
+  // ---- Settings ----
+  T? getSetting<T>(String key) => settingsBox.get(key) as T?;
+
+  Future<void> setSetting(String key, Object? value) =>
+      settingsBox.put(key, value);
 
   // ---- Template ----
   Future<void> insertTemplateItem(ChecklistTemplateItem item) async {

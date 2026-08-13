@@ -33,6 +33,10 @@ migrate_working_dir/
 .pub/
 /build/
 
+# Vercel: SDK fetched by vercel-build.sh, plus local CLI state
+.flutter/
+.vercel/
+
 # Symbolication related
 app.*.symbols
 

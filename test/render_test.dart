@@ -1,0 +1,235 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hive/hive.dart';
+
+import 'package:af/db/database_helper.dart';
+import 'package:af/models/checklist_item.dart';
+import 'package:af/models/checklist_template_item.dart';
+import 'package:af/models/frequent_course.dart';
+import 'package:af/models/proctor_session.dart';
+import 'package:af/programs/checklist/checklist_detail_screen.dart';
+import 'package:af/programs/checklist/checklist_home_screen.dart';
+import 'package:af/programs/qr/qr_screen.dart';
+import 'package:af/screens/dashboard_screen.dart';
+import 'package:af/theme/app_theme.dart';
+
+/// Layout smoke tests.
+///
+/// Every screen is pumped at a phone width and a desktop width, in both
+/// themes. The assertion that matters is `takeException()` — a RenderFlex
+/// overflow or an unbounded-constraint error fails the test, which is the
+/// cheapest way to catch the layout mistakes this design is prone to (long
+/// checklist labels, wide mono read-outs, narrow panels).
+
+const Size _phone = Size(390, 844);
+const Size _desktop = Size(1280, 900);
+
+late ProctorSession _session;
+
+void main() {
+  setUpAll(() async {
+    await _loadFonts();
+    await _openBoxes();
+  });
+
+  group('dashboard', () {
+    testWidgets('renders on a phone', (tester) async {
+      await _pump(tester, const DashboardScreen(), size: _phone);
+    });
+
+    testWidgets('renders on a desktop', (tester) async {
+      await _pump(tester, const DashboardScreen(), size: _desktop);
+    });
+
+    testWidgets('renders in dark mode', (tester) async {
+      await _pump(
+        tester,
+        const DashboardScreen(),
+        size: _desktop,
+        mode: ThemeMode.dark,
+      );
+    });
+  });
+
+  group('checklist', () {
+    testWidgets('session list renders on a phone', (tester) async {
+      await _pump(tester, const ChecklistHomeScreen(), size: _phone);
+      expect(find.text('Today'), findsOneWidget);
+    });
+
+    testWidgets('session list renders on a desktop', (tester) async {
+      await _pump(tester, const ChecklistHomeScreen(), size: _desktop);
+    });
+
+    testWidgets('detail renders long labels without overflowing',
+        (tester) async {
+      await _pump(
+        tester,
+        ChecklistDetailScreen(session: _session),
+        size: _phone,
+      );
+      expect(find.textContaining('Ruman'), findsWidgets);
+    });
+
+    testWidgets('detail renders in dark mode', (tester) async {
+      await _pump(
+        tester,
+        ChecklistDetailScreen(session: _session),
+        size: _desktop,
+        mode: ThemeMode.dark,
+      );
+    });
+  });
+
+  group('qr generator', () {
+    testWidgets('renders empty on a phone', (tester) async {
+      await _pump(tester, const QrScreen(), size: _phone);
+      expect(find.textContaining('Type something'), findsOneWidget);
+    });
+
+    testWidgets('renders empty on a desktop', (tester) async {
+      await _pump(tester, const QrScreen(), size: _desktop);
+    });
+
+    testWidgets('renders a real code after input', (tester) async {
+      await _pump(tester, const QrScreen(), size: _desktop);
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        'https://binus.ac.id/exam',
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+
+      // The read-out only shows dimensions once a matrix exists.
+      expect(find.textContaining('px'), findsWidgets);
+      expect(find.textContaining('binus-ac-id-exam'), findsOneWidget);
+    });
+
+    testWidgets('renders in dark mode', (tester) async {
+      await _pump(
+        tester,
+        const QrScreen(),
+        size: _desktop,
+        mode: ThemeMode.dark,
+      );
+    });
+  });
+}
+
+Future<void> _pump(
+  WidgetTester tester,
+  Widget screen, {
+  required Size size,
+  ThemeMode mode = ThemeMode.light,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+
+  await tester.pumpWidget(
+    ProviderScope(
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: mode,
+        home: screen,
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+
+  expect(tester.takeException(), isNull);
+}
+
+/// The test environment ships no fonts, so text would otherwise be laid out
+/// with a fallback metric and hide real overflow. Borrow the system's.
+Future<void> _loadFonts() async {
+  Future<void> load(String family, String path) async {
+    final file = File(path);
+    if (!file.existsSync()) return;
+    final bytes = await file.readAsBytes();
+    final loader = FontLoader(family)
+      ..addFont(Future.value(ByteData.view(bytes.buffer)));
+    await loader.load();
+  }
+
+  await load('Roboto', r'C:\Windows\Fonts\segoeui.ttf');
+  await load('Menlo', r'C:\Windows\Fonts\consola.ttf');
+}
+
+/// Wires [DatabaseHelper] to temporary boxes without going through
+/// `initFlutter`, which needs path_provider and a platform channel.
+Future<void> _openBoxes() async {
+  final directory = Directory.systemTemp.createTempSync('af_render_test');
+  Hive.init(directory.path);
+
+  Hive.registerAdapter(ProctorSessionAdapter());
+  Hive.registerAdapter(ChecklistItemAdapter());
+  Hive.registerAdapter(ChecklistTemplateItemAdapter());
+  Hive.registerAdapter(FrequentCourseAdapter());
+
+  final db = DatabaseHelper.instance;
+  db.sessionsBox = await Hive.openBox<ProctorSession>('proctor_sessions');
+  db.checklistItemsBox = await Hive.openBox<ChecklistItem>('checklist_items');
+  db.templateBox =
+      await Hive.openBox<ChecklistTemplateItem>('checklist_template');
+  db.frequentCoursesBox =
+      await Hive.openBox<FrequentCourse>('frequent_courses');
+  db.settingsBox = await Hive.openBox('af_settings');
+
+  _session = ProctorSession(
+    type: 'UAS',
+    dateTime: DateTime.now().add(const Duration(hours: 2)),
+    room: '724',
+    courseCode: 'COSC6092001',
+    courseName: 'Code Reengineering',
+    courseClass: 'BB01',
+    createdAt: DateTime.now(),
+  );
+  final key = await db.insertSession(_session);
+
+  // Deliberately includes one of the longest real template labels so the
+  // detail screen is exercised against text that has to wrap, and one fully
+  // checked section so the accented-panel path is painted.
+  const items = <({String section, String label, bool checked})>[
+    (
+      section: 'Fase 2 — Ruman & Setup PC (H-25 menit)',
+      label: 'Ruman: Restart PC',
+      checked: true,
+    ),
+    (
+      section: 'Fase 2 — Ruman & Setup PC (H-25 menit)',
+      label: 'Ruman: Clear VSCode Cache',
+      checked: false,
+    ),
+    (
+      section: 'Fase 6 — Selama Ujian Berlangsung',
+      label: 'Ujian >180 menit & ke toilet → harus didampingi pengawas, '
+          'pastikan tidak bawa contekan',
+      checked: false,
+    ),
+    (
+      section: 'Fase 9 — Selesai Mengawas',
+      label: 'Clear Drive D',
+      checked: true,
+    ),
+  ];
+
+  for (var i = 0; i < items.length; i++) {
+    await db.insertChecklistItem(
+      ChecklistItem(
+        sessionKey: key,
+        label: items[i].label,
+        section: items[i].section,
+        isChecked: items[i].checked,
+        sortOrder: i,
+      ),
+    );
+  }
+}
