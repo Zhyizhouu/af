@@ -164,7 +164,17 @@ class AFScaffold extends StatelessWidget {
 
   /// Horizontal breathing room. The QR page uses 20px.
   static const double gutter = 20;
+
+  /// Reading width, inherited from the QR Generator's `.wrap`. Right for
+  /// prose, forms and single-column lists.
   static const double maxContentWidth = 940;
+
+  /// Roomier, for tile grids and month grids.
+  static const double maxWideWidth = 1440;
+
+  /// Everything the window has. For views whose usefulness scales with width
+  /// — the calendar's time grids, chiefly.
+  static const double maxFullWidth = double.infinity;
 
   const AFScaffold({
     super.key,

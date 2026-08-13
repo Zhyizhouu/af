@@ -45,6 +45,14 @@ class ProctorSession extends HiveObject {
   @HiveField(10, defaultValue: false)
   bool deleted;
 
+  /// Set when someone reopens a finished session by hand.
+  ///
+  /// Exempts it from the stale sweep. Without this, reopening is futile: any
+  /// session worth reopening is by definition already past the cutoff, so the
+  /// next sweep would archive it straight back.
+  @HiveField(11, defaultValue: false)
+  bool reopened;
+
   ProctorSession({
     required this.type,
     required this.dateTime,
@@ -57,5 +65,6 @@ class ProctorSession extends HiveObject {
     this.syncId = '',
     this.updatedAt,
     this.deleted = false,
+    this.reopened = false,
   });
 }

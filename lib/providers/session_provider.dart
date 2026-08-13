@@ -2,6 +2,7 @@ import '../models/proctor_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../db/database_helper.dart';
+import '../db/session_maintenance.dart';
 import '../models/checklist_item.dart';
 import '../sync/sync_controller.dart';
 
@@ -12,12 +13,14 @@ enum SessionFilter { upcoming, today, archived }
 final activeSessionsProvider = FutureProvider<List<ProctorSession>>((
   ref,
 ) async {
+  await archiveStaleSessions();
   return DatabaseHelper.instance.getSessions('active');
 });
 
 final archivedSessionsProvider = FutureProvider<List<ProctorSession>>((
   ref,
 ) async {
+  await archiveStaleSessions();
   return DatabaseHelper.instance.getSessions('archived');
 });
 
@@ -120,6 +123,11 @@ class SessionController {
     ref.read(syncControllerProvider.notifier).requestSync();
   }
 
+  /// Flips one item. Returns whether every item is now checked.
+  ///
+  /// Ticking the last item no longer archives the session: filing is either
+  /// time-based ([archiveStaleSessions]) or explicit ([setFinished]). Having
+  /// a checkbox navigate the user out of the screen was the worse behaviour.
   Future<bool> toggleChecklistItem(
     ChecklistItem item,
     String sessionKey,
@@ -132,20 +140,32 @@ class SessionController {
     final allItems = db.getChecklistItems(sessionKey);
     final allChecked = allItems.every((i) => i.isChecked);
 
-    if (allChecked) {
-      final session = db.getSessionByKey(_keyFromString(sessionKey));
-      if (session != null) {
-        session.status = 'archived';
-        session.updatedAt = DateTime.now();
-        await session.save();
-      }
-      ref.invalidate(activeSessionsProvider);
-      ref.invalidate(archivedSessionsProvider);
-    }
-
     ref.invalidate(sessionChecklistProvider(sessionKey));
     ref.read(syncControllerProvider.notifier).requestSync();
     return allChecked;
+  }
+
+  /// Explicitly finish or reopen a session.
+  ///
+  /// Finished sessions carry `status == 'archived'`, which is what keeps them
+  /// out of Today and Upcoming — both read [activeSessionsProvider], and that
+  /// only returns active rows.
+  Future<void> setFinished(String sessionKey, bool finished) async {
+    final db = DatabaseHelper.instance;
+    final session = db.getSessionByKey(_keyFromString(sessionKey));
+    if (session == null) return;
+
+    session.status = finished ? 'archived' : 'active';
+    // Reopening is a deliberate override of the stale sweep; finishing by
+    // hand clears the exemption again.
+    session.reopened = !finished;
+    session.updatedAt = DateTime.now();
+    await session.save();
+
+    ref
+      ..invalidate(activeSessionsProvider)
+      ..invalidate(archivedSessionsProvider);
+    ref.read(syncControllerProvider.notifier).requestSync();
   }
 
   dynamic _keyFromString(String key) {

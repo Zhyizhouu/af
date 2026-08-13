@@ -28,13 +28,14 @@ class ProctorSessionAdapter extends TypeAdapter<ProctorSession> {
       syncId: fields[8] == null ? '' : fields[8] as String,
       updatedAt: fields[9] as DateTime?,
       deleted: fields[10] == null ? false : fields[10] as bool,
+      reopened: fields[11] == null ? false : fields[11] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, ProctorSession obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(12)
       ..writeByte(0)
       ..write(obj.type)
       ..writeByte(1)
@@ -56,7 +57,9 @@ class ProctorSessionAdapter extends TypeAdapter<ProctorSession> {
       ..writeByte(9)
       ..write(obj.updatedAt)
       ..writeByte(10)
-      ..write(obj.deleted);
+      ..write(obj.deleted)
+      ..writeByte(11)
+      ..write(obj.reopened);
   }
 
   @override

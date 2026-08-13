@@ -15,7 +15,16 @@ class EventEditorDialog extends ConsumerStatefulWidget {
   final CalendarEvent? event;
   final DateTime initialDay;
 
-  const EventEditorDialog({super.key, this.event, required this.initialDay});
+  /// Start hour for a new event, when created by tapping a slot in the time
+  /// grid. Null falls back to the next whole hour.
+  final int? initialHour;
+
+  const EventEditorDialog({
+    super.key,
+    this.event,
+    required this.initialDay,
+    this.initialHour,
+  });
 
   @override
   ConsumerState<EventEditorDialog> createState() => _EventEditorDialogState();
@@ -50,10 +59,11 @@ class _EventEditorDialogState extends ConsumerState<EventEditorDialog> {
       _startTime = TimeOfDay.fromDateTime(event.start);
       _endTime = TimeOfDay.fromDateTime(event.end);
     } else {
-      // Default to the next whole hour, one hour long.
-      final next = DateTime.now().add(const Duration(hours: 1));
-      _startTime = TimeOfDay(hour: next.hour, minute: 0);
-      _endTime = TimeOfDay(hour: (next.hour + 1) % 24, minute: 0);
+      // A tapped slot wins; otherwise default to the next whole hour.
+      final hour =
+          widget.initialHour ?? DateTime.now().add(const Duration(hours: 1)).hour;
+      _startTime = TimeOfDay(hour: hour, minute: 0);
+      _endTime = TimeOfDay(hour: (hour + 1) % 24, minute: 0);
     }
   }
 

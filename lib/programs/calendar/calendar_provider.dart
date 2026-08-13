@@ -36,15 +36,87 @@ final calendarEventsProvider = FutureProvider<List<CalendarEvent>>((ref) async {
   return DatabaseHelper.instance.getCalendarEvents();
 });
 
-/// The month currently on screen, normalised to its first day.
-final calendarMonthProvider = StateProvider<DateTime>((ref) {
-  final now = DateTime.now();
-  return DateTime(now.year, now.month);
-});
+/// The zoom levels the calendar can be viewed at.
+enum CalendarView {
+  year(label: 'Year', short: 'Y'),
+  month(label: 'Month', short: 'M'),
+  week(label: 'Week', short: 'W'),
+  threeDay(label: '3 Day', short: '3D'),
+  day(label: 'Day', short: 'D');
 
-final calendarSelectedDayProvider = StateProvider<DateTime>((ref) {
-  return dayKey(DateTime.now());
-});
+  const CalendarView({required this.label, required this.short});
+
+  final String label;
+
+  /// Used when the switcher has to fit on a phone.
+  final String short;
+
+  /// Whether this view lays days out against a time axis rather than as a
+  /// grid of dates. Those views are full-bleed and have no agenda side panel.
+  bool get isTimeGrid =>
+      this == CalendarView.day ||
+      this == CalendarView.threeDay ||
+      this == CalendarView.week;
+}
+
+final calendarViewProvider =
+    StateProvider<CalendarView>((ref) => CalendarView.month);
+
+/// The single date the calendar is positioned on.
+///
+/// Every view derives its visible range from this one value, so switching
+/// zoom levels keeps you where you were instead of jumping to today.
+final calendarAnchorProvider =
+    StateProvider<DateTime>((ref) => dayKey(DateTime.now()));
+
+int daysInMonth(int year, int month) => DateTime(year, month + 1, 0).day;
+
+/// The inclusive span of days [view] shows around [anchor].
+({DateTime start, DateTime end}) visibleRange(
+  CalendarView view,
+  DateTime anchor,
+) {
+  final day = dayKey(anchor);
+  switch (view) {
+    case CalendarView.day:
+      return (start: day, end: day);
+    case CalendarView.threeDay:
+      return (start: day, end: day.add(const Duration(days: 2)));
+    case CalendarView.week:
+      final monday =
+          day.subtract(Duration(days: day.weekday - DateTime.monday));
+      return (start: monday, end: monday.add(const Duration(days: 6)));
+    case CalendarView.month:
+      return (
+        start: DateTime(day.year, day.month),
+        end: DateTime(day.year, day.month, daysInMonth(day.year, day.month)),
+      );
+    case CalendarView.year:
+      return (start: DateTime(day.year), end: DateTime(day.year, 12, 31));
+  }
+}
+
+/// Moves the anchor one page forward (+1) or back (-1) in [view]'s own unit.
+DateTime stepAnchor(CalendarView view, DateTime anchor, int direction) {
+  switch (view) {
+    case CalendarView.day:
+      return anchor.add(Duration(days: direction));
+    case CalendarView.threeDay:
+      return anchor.add(Duration(days: 3 * direction));
+    case CalendarView.week:
+      return anchor.add(Duration(days: 7 * direction));
+    case CalendarView.month:
+      final month = anchor.month + direction;
+      final target = DateTime(anchor.year, month);
+      // Clamp so paging off the 31st does not skip a month.
+      final day = anchor.day.clamp(1, daysInMonth(target.year, target.month));
+      return DateTime(target.year, target.month, day);
+    case CalendarView.year:
+      final year = anchor.year + direction;
+      final day = anchor.day.clamp(1, daysInMonth(year, anchor.month));
+      return DateTime(year, anchor.month, day);
+  }
+}
 
 class CalendarController {
   final Ref ref;

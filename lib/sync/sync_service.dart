@@ -88,6 +88,7 @@ class SyncService {
         'createdAt': Timestamp.fromDate(s.createdAt),
         'updatedAt': Timestamp.fromDate(s.updatedAt ?? s.createdAt),
         'deleted': s.deleted,
+        'reopened': s.reopened,
       };
 
   ProctorSession _sessionFromMap(String syncId, Map<String, dynamic> data) =>
@@ -103,6 +104,7 @@ class SyncService {
         syncId: syncId,
         updatedAt: _date(data['updatedAt']),
         deleted: data['deleted'] as bool? ?? false,
+        reopened: data['reopened'] as bool? ?? false,
       );
 
   // ---- checklist items ----

@@ -30,9 +30,11 @@ class AFShell extends StatelessWidget {
         child: Column(
           children: [
             if (desktop)
+              // Full-bleed: pages now pick their own width, so a nav bar
+              // pinned to one of them would misalign against the others.
               AFNavBar(
                 location: location,
-                maxWidth: AFScaffold.maxContentWidth,
+                maxWidth: AFScaffold.maxFullWidth,
               ),
             Expanded(child: child),
           ],

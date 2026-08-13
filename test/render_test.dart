@@ -15,6 +15,7 @@ import 'package:af/models/checklist_item.dart';
 import 'package:af/models/checklist_template_item.dart';
 import 'package:af/models/frequent_course.dart';
 import 'package:af/models/proctor_session.dart';
+import 'package:af/programs/calendar/calendar_provider.dart';
 import 'package:af/programs/calendar/calendar_screen.dart';
 import 'package:af/programs/checklist/checklist_detail_screen.dart';
 import 'package:af/programs/checklist/checklist_home_screen.dart';
@@ -108,6 +109,34 @@ void main() {
     });
   });
 
+  group('calendar views', () {
+    for (final view in CalendarView.values) {
+      testWidgets('${view.name} renders on a desktop', (tester) async {
+        await _pump(
+          tester,
+          const CalendarScreen(),
+          size: _desktop,
+          location: '/calendar',
+          overrides: [
+            calendarViewProvider.overrideWith((ref) => view),
+          ],
+        );
+      });
+
+      testWidgets('${view.name} renders on a phone', (tester) async {
+        await _pump(
+          tester,
+          const CalendarScreen(),
+          size: _phone,
+          location: '/calendar',
+          overrides: [
+            calendarViewProvider.overrideWith((ref) => view),
+          ],
+        );
+      });
+    }
+  });
+
   group('auth', () {
     testWidgets('sign in renders on a phone', (tester) async {
       await _pump(tester, const SignInScreen(),
@@ -185,6 +214,7 @@ Future<void> _pump(
   ThemeMode mode = ThemeMode.light,
   String location = '/dashboard',
   bool inShell = true,
+  List<Override> overrides = const [],
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -192,6 +222,7 @@ Future<void> _pump(
 
   await tester.pumpWidget(
     ProviderScope(
+      overrides: overrides,
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,

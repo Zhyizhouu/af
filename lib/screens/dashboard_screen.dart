@@ -41,6 +41,7 @@ class DashboardScreen extends ConsumerWidget {
         SizedBox(width: 10),
         AFThemeToggle(),
       ],
+      maxWidth: AFScaffold.maxWideWidth,
       footer: AFFooter(
         signedIn
             ? '${afPrograms.length} programs · synced as ${user?.email ?? 'your account'}'
@@ -93,11 +94,13 @@ class _ProgramsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final columns = width >= AFBreakpoints.desktop
-        ? 3
-        : width >= AFBreakpoints.twoColumn
-            ? 2
-            : 1;
+    final columns = width >= 1300
+        ? 4
+        : width >= AFBreakpoints.desktop
+            ? 3
+            : width >= AFBreakpoints.twoColumn
+                ? 2
+                : 1;
     final tileWidth =
         (width - DashboardScreen._gap * (columns - 1)) / columns;
 

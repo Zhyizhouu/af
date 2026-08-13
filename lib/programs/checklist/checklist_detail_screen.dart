@@ -8,6 +8,7 @@ import '../../models/proctor_session.dart';
 import '../../providers/session_provider.dart';
 import '../../theme/af_text.dart';
 import '../../theme/af_tokens.dart';
+import '../../widgets/af_button.dart';
 import '../../widgets/af_panel.dart';
 import '../../widgets/af_progress.dart';
 import '../../widgets/af_scaffold.dart';
@@ -63,7 +64,12 @@ class ChecklistDetailScreen extends ConsumerWidget {
       actions: const [AFThemeToggle()],
       footer: total == 0
           ? null
-          : _ProgressFooter(checked: checked, total: total),
+          : _ProgressFooter(
+              checked: checked,
+              total: total,
+              sessionKey: sessionKey,
+              finished: session.status == 'archived',
+            ),
       child: checklistAsync.when(
         loading: () => const Center(
           child: SizedBox(
@@ -142,18 +148,20 @@ class _SectionPanel extends ConsumerWidget {
     ChecklistItem item,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
-    final router = GoRouter.of(context);
 
-    final archived = await ref
+    final allChecked = await ref
         .read(sessionControllerProvider)
         .toggleChecklistItem(item, sessionKey);
 
-    if (!archived || !context.mounted) return;
+    if (!allChecked || !context.mounted) return;
 
+    // A nudge, not a navigation. Filing the session is either the four-hour
+    // sweep's job or the user's, via "Mark as finished".
     messenger.showSnackBar(
-      const SnackBar(content: Text('Session complete — moved to Archived')),
+      const SnackBar(
+        content: Text('Every item checked — mark as finished when you are done'),
+      ),
     );
-    router.go('/checklists');
   }
 
   @override
@@ -244,14 +252,44 @@ class _ChecklistRow extends StatelessWidget {
   }
 }
 
-class _ProgressFooter extends StatelessWidget {
+class _ProgressFooter extends ConsumerWidget {
   final int checked;
   final int total;
+  final String sessionKey;
+  final bool finished;
 
-  const _ProgressFooter({required this.checked, required this.total});
+  const _ProgressFooter({
+    required this.checked,
+    required this.total,
+    required this.sessionKey,
+    required this.finished,
+  });
+
+  Future<void> _setFinished(
+    BuildContext context,
+    WidgetRef ref,
+    bool value,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
+
+    await ref.read(sessionControllerProvider).setFinished(sessionKey, value);
+    if (!context.mounted) return;
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          value
+              ? 'Marked finished — moved to Archived'
+              : 'Reopened — back in your active sessions',
+        ),
+      ),
+    );
+    if (value) router.go('/checklists');
+  }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = context.af;
     final progress = total == 0 ? 0.0 : checked / total;
     final percent = (progress * 100).round();
@@ -286,6 +324,22 @@ class _ProgressFooter extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             AFProgressBar(value: progress, height: 6),
+            const SizedBox(height: 14),
+            // Available before every item is ticked: a session can end early,
+            // and forcing a full checklist just to file it would be worse.
+            finished
+                ? AFButton.ghost(
+                    label: 'Reopen session',
+                    icon: Icons.undo,
+                    expand: true,
+                    onPressed: () => _setFinished(context, ref, false),
+                  )
+                : AFButton(
+                    label: 'Mark as finished',
+                    icon: Icons.check_circle_outline,
+                    expand: true,
+                    onPressed: () => _setFinished(context, ref, true),
+                  ),
           ],
         ),
       ),
