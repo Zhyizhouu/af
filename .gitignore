@@ -37,6 +37,10 @@ migrate_working_dir/
 .flutter/
 .vercel/
 
+# Local agent config — machine-specific, not shared
+.claude/
+CLAUDE.md
+
 # Symbolication related
 app.*.symbols
 

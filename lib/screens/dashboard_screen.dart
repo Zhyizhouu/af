@@ -375,7 +375,7 @@ class _UpNextRow extends StatelessWidget {
             width: 3,
             height: 30,
             margin: const EdgeInsets.only(right: 10),
-            color: entry.color,
+            color: agendaEntryColor(context, entry),
           ),
           Expanded(
             child: Column(
@@ -398,8 +398,10 @@ class _UpNextRow extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           AFChip(
-            label: entry.kind == AgendaKind.session ? 'session' : 'event',
-            color: entry.kind == AgendaKind.session ? t.accent : t.muted,
+            label: entry.kind == AgendaKind.session
+                ? 'session'
+                : (entry.category?.label ?? 'event'),
+            color: agendaEntryColor(context, entry),
           ),
         ],
       ),

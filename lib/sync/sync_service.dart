@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../db/database_helper.dart';
 import '../models/calendar_event.dart';
 import '../models/checklist_item.dart';
+import '../models/custom_category.dart';
 import '../models/proctor_session.dart';
 
 /// Two-way sync between the local Hive boxes and Firestore.
@@ -23,6 +24,7 @@ class SyncService {
   static const _sessions = 'sessions';
   static const _items = 'checklistItems';
   static const _events = 'events';
+  static const _categories = 'categories';
 
   CollectionReference<Map<String, dynamic>> _collection(
     String uid,
@@ -35,6 +37,9 @@ class SyncService {
   Future<void> syncAll(String uid) async {
     await _syncSessions(uid);
     await _syncChecklistItems(uid);
+    // Categories before events: an event's colour resolves through its
+    // category, so pulling events first would show them all as "Other".
+    await _syncCategories(uid);
     await _syncEvents(uid);
   }
 
@@ -230,7 +235,7 @@ class SyncService {
         'start': Timestamp.fromDate(e.start),
         'end': Timestamp.fromDate(e.end),
         'allDay': e.allDay,
-        'colorIndex': e.colorIndex,
+        'category': e.category,
         'createdAt': Timestamp.fromDate(e.createdAt),
         'updatedAt': Timestamp.fromDate(e.updatedAt),
         'deleted': e.deleted,
@@ -244,11 +249,57 @@ class SyncService {
         start: _date(data['start']),
         end: _date(data['end']),
         allDay: data['allDay'] as bool? ?? false,
-        colorIndex: (data['colorIndex'] as num?)?.toInt() ?? 0,
+        category: data['category'] as String? ?? 'other',
         createdAt: _date(data['createdAt']),
         updatedAt: _date(data['updatedAt']),
         deleted: data['deleted'] as bool? ?? false,
       );
+
+  // ---- custom categories ----
+
+  Future<void> _syncCategories(String uid) async {
+    final db = DatabaseHelper.instance;
+    final collection = _collection(uid, _categories);
+    final remote = await collection.get();
+
+    final remoteDocs = {for (final doc in remote.docs) doc.id: doc.data()};
+    final batch = _firestore.batch();
+
+    for (final category in db.customCategoriesBox.values) {
+      final data = remoteDocs[category.id];
+      if (data == null || _localWins(category.updatedAt, data)) {
+        batch.set(collection.doc(category.id), {
+          'label': category.label,
+          'toneIndex': category.toneIndex,
+          'createdAt': Timestamp.fromDate(category.createdAt),
+          'updatedAt': Timestamp.fromDate(category.updatedAt),
+          'deleted': category.deleted,
+        });
+      }
+    }
+
+    for (final entry in remoteDocs.entries) {
+      final local = db.customCategoriesBox.get(entry.key);
+      final data = entry.value;
+
+      if (local == null || !_localWins(local.updatedAt, data)) {
+        // Box is keyed by the sync id, so put() both inserts and updates.
+        await db.customCategoriesBox.put(
+          entry.key,
+          CustomCategory(
+            id: entry.key,
+            label: data['label'] as String? ?? 'Untitled',
+            toneIndex: (data['toneIndex'] as num?)?.toInt() ?? 0,
+            createdAt: _date(data['createdAt']),
+            updatedAt: _date(data['updatedAt']),
+            deleted: data['deleted'] as bool? ?? false,
+          ),
+        );
+      }
+    }
+
+    await batch.commit();
+  }
 
   // ---- helpers ----
 

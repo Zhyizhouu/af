@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/calendar_event.dart';
-import '../../theme/af_tokens.dart';
 import '../../widgets/af_button.dart';
 import '../../widgets/af_field.dart';
 import '../../widgets/af_text_field.dart';
+import 'category_picker.dart';
 import 'calendar_provider.dart';
 
 /// Create or edit a calendar event.
@@ -42,7 +42,7 @@ class _EventEditorDialogState extends ConsumerState<EventEditorDialog> {
   late TimeOfDay _startTime;
   late TimeOfDay _endTime;
   late bool _allDay;
-  late int _colorIndex;
+  late String _category;
 
   String? _error;
 
@@ -53,7 +53,9 @@ class _EventEditorDialogState extends ConsumerState<EventEditorDialog> {
 
     _day = dayKey(event?.start ?? widget.initialDay);
     _allDay = event?.allDay ?? false;
-    _colorIndex = event?.colorIndex ?? 0;
+    _category = (event?.category.isNotEmpty ?? false)
+        ? event!.category
+        : 'other';
 
     if (event != null) {
       _startTime = TimeOfDay.fromDateTime(event.start);
@@ -133,7 +135,7 @@ class _EventEditorDialogState extends ConsumerState<EventEditorDialog> {
           start: _start,
           end: _end,
           allDay: _allDay,
-          colorIndex: _colorIndex,
+          category: _category,
         );
 
     if (mounted) Navigator.of(context).pop();
@@ -148,7 +150,6 @@ class _EventEditorDialogState extends ConsumerState<EventEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.af;
     final editing = widget.event != null;
 
     return AlertDialog(
@@ -220,29 +221,11 @@ class _EventEditorDialogState extends ConsumerState<EventEditorDialog> {
                 ),
 
               AFField(
-                label: 'Colour',
-                child: Row(
-                  children: [
-                    for (var i = 0; i < afEventColors.length; i++)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: GestureDetector(
-                          onTap: () => setState(() => _colorIndex = i),
-                          child: Container(
-                            width: 26,
-                            height: 26,
-                            decoration: BoxDecoration(
-                              color: afEventColors[i],
-                              borderRadius: BorderRadius.circular(2),
-                              border: Border.all(
-                                color: _colorIndex == i ? t.ink : t.lineStrong,
-                                width: _colorIndex == i ? 2 : 1,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                label: 'Category',
+                value: 'sets the colour',
+                child: CategoryPicker(
+                  selectedSlug: _category,
+                  onChanged: (slug) => setState(() => _category = slug),
                 ),
               ),
 

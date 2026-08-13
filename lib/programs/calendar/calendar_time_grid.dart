@@ -429,9 +429,9 @@ class _EntryBlock extends ConsumerWidget {
         margin: compact ? const EdgeInsets.only(bottom: 3) : EdgeInsets.zero,
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
         decoration: BoxDecoration(
-          color: entry.color.withValues(alpha: 0.16),
+          color: agendaEntryColor(context, entry).withValues(alpha: 0.16),
           borderRadius: BorderRadius.circular(2),
-          border: Border(left: BorderSide(color: entry.color, width: 2.5)),
+          border: Border(left: BorderSide(color: agendaEntryColor(context, entry), width: 2.5)),
         ),
         child: compact
             ? _title(context, maxLines: 1)

@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 
+import '../programs/calendar/event_category.dart';
 import 'database_helper.dart';
 
 const _uuid = Uuid();
@@ -53,5 +54,13 @@ Future<void> runSyncMigration() async {
       dirty = true;
     }
     if (dirty) await item.save();
+  }
+
+  // Events predating classification carry a free-choice palette index; map it
+  // onto the nearest built-in so they keep a sensible colour.
+  for (final event in db.calendarEventsBox.values) {
+    if (event.category.isNotEmpty) continue;
+    event.category = legacyColorIndexToSlug(event.colorIndex);
+    await event.save();
   }
 }

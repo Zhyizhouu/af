@@ -13,6 +13,8 @@ import '../../widgets/af_scaffold.dart';
 import '../../widgets/af_segmented.dart';
 import '../../widgets/af_theme_toggle.dart';
 import 'calendar_provider.dart';
+import 'category_provider.dart';
+import 'event_category.dart';
 import 'calendar_time_grid.dart';
 import 'event_editor_dialog.dart';
 
@@ -46,6 +48,8 @@ class CalendarScreen extends ConsumerWidget {
             _Toolbar(view: view, anchor: anchor),
             const SizedBox(height: 16),
             _body(context, ref, view, anchor),
+            const SizedBox(height: 16),
+            const _CategoryLegend(),
             const SizedBox(height: 12),
           ],
         ),
@@ -411,7 +415,7 @@ class _DayCell extends ConsumerWidget {
                     width: 5,
                     height: 5,
                     decoration: BoxDecoration(
-                      color: entry.color,
+                      color: agendaEntryColor(context, entry),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -680,10 +684,8 @@ class _AgendaRow extends ConsumerWidget {
                       AFChip(
                         label: entry.kind == AgendaKind.session
                             ? 'session'
-                            : 'event',
-                        color: entry.kind == AgendaKind.session
-                            ? t.accent
-                            : t.muted,
+                            : (entry.category?.label ?? 'event'),
+                        color: agendaEntryColor(context, entry),
                       ),
                     ],
                   ),
@@ -693,13 +695,73 @@ class _AgendaRow extends ConsumerWidget {
                   top: 0,
                   bottom: 0,
                   width: 3,
-                  child: ColoredBox(color: entry.color),
+                  child: ColoredBox(color: agendaEntryColor(context, entry)),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Reads the colours back out. The grids and time blocks carry colour but no
+/// label, so without this the classification is only legible in the agenda.
+class _CategoryLegend extends ConsumerWidget {
+  const _CategoryLegend();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = context.af;
+    final categories =
+        ref.watch(categoriesProvider).valueOrNull ?? builtInCategories;
+
+    return Wrap(
+      spacing: 14,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(
+          'CATEGORIES',
+          style: AFText.mono(
+            size: 10,
+            color: t.muted,
+            weight: FontWeight.w700,
+            letterSpacing: 1.4,
+          ),
+        ),
+        for (final category in categories)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CategoryDot(category: category, size: 8),
+              const SizedBox(width: 6),
+              Text(
+                category.label,
+                style: AFText.mono(size: 11, color: t.muted),
+              ),
+            ],
+          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: t.accent,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Proctor session',
+              style: AFText.mono(size: 11, color: t.muted),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

@@ -27,13 +27,14 @@ class CalendarEventAdapter extends TypeAdapter<CalendarEvent> {
       createdAt: fields[7] as DateTime,
       updatedAt: fields[8] as DateTime,
       deleted: fields[9] as bool,
+      category: fields[10] == null ? '' : fields[10] as String,
     );
   }
 
   @override
   void write(BinaryWriter writer, CalendarEvent obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -53,7 +54,9 @@ class CalendarEventAdapter extends TypeAdapter<CalendarEvent> {
       ..writeByte(8)
       ..write(obj.updatedAt)
       ..writeByte(9)
-      ..write(obj.deleted);
+      ..write(obj.deleted)
+      ..writeByte(10)
+      ..write(obj.category);
   }
 
   @override

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../theme/af_tokens.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -7,23 +9,10 @@ import '../../models/calendar_event.dart';
 import '../../models/proctor_session.dart';
 import '../../providers/session_provider.dart';
 import '../../sync/sync_controller.dart';
+import 'category_provider.dart';
+import 'event_category.dart';
 
 const _uuid = Uuid();
-
-/// Event colours, fixed rather than token-derived so an event keeps its
-/// identity when the theme flips. Each is a mid-tone that stays legible on
-/// both the light and the dark panel.
-const List<Color> afEventColors = [
-  Color(0xFF4C5BFF),
-  Color(0xFF3E9E5C),
-  Color(0xFFC95A2C),
-  Color(0xFF8B5CF6),
-  Color(0xFF1699B0),
-  Color(0xFFDB4A80),
-];
-
-Color afEventColor(int index) =>
-    afEventColors[index % afEventColors.length];
 
 /// Midnight on the same day — the key used to bucket entries by date.
 DateTime dayKey(DateTime value) =>
@@ -131,7 +120,7 @@ class CalendarController {
     required DateTime end,
     String notes = '',
     bool allDay = false,
-    int colorIndex = 0,
+    String category = 'other',
   }) async {
     final now = DateTime.now();
     final existing =
@@ -144,7 +133,7 @@ class CalendarController {
       start: start,
       end: end,
       allDay: allDay,
-      colorIndex: colorIndex,
+      category: category,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     );
@@ -165,6 +154,11 @@ class CalendarController {
 final calendarControllerProvider =
     Provider((ref) => CalendarController(ref));
 
+/// The colour to draw an agenda entry with, resolved against the current
+/// theme. Sessions are not user-classified, so they take the accent.
+Color agendaEntryColor(BuildContext context, AgendaEntry entry) =>
+    entry.category?.color(context) ?? context.af.accent;
+
 // ---- merged agenda ----
 
 enum AgendaKind { event, session }
@@ -181,7 +175,9 @@ class AgendaEntry {
   final DateTime start;
   final DateTime end;
   final bool allDay;
-  final Color color;
+
+  /// Null for proctor sessions, which are not user-classified.
+  final EventCategory? category;
 
   /// Where tapping the row should navigate, if anywhere.
   final String? route;
@@ -194,11 +190,15 @@ class AgendaEntry {
     required this.start,
     required this.end,
     required this.allDay,
-    required this.color,
+    required this.category,
     this.route,
   });
 
-  factory AgendaEntry.fromEvent(CalendarEvent event) => AgendaEntry(
+  factory AgendaEntry.fromEvent(
+    CalendarEvent event,
+    Map<String, EventCategory> categories,
+  ) =>
+      AgendaEntry(
         kind: AgendaKind.event,
         id: event.id,
         title: event.title,
@@ -206,10 +206,11 @@ class AgendaEntry {
         start: event.start,
         end: event.end,
         allDay: event.allDay,
-        color: afEventColor(event.colorIndex),
+        // A slug can outlive its category; fall back rather than lose colour.
+        category: categories[event.category] ?? fallbackCategory,
       );
 
-  factory AgendaEntry.fromSession(ProctorSession session, Color color) {
+  factory AgendaEntry.fromSession(ProctorSession session) {
     final label = [
       session.courseCode,
       session.courseName,
@@ -225,7 +226,7 @@ class AgendaEntry {
       // Proctor sessions carry no duration; treat them as a point in time.
       end: session.dateTime,
       allDay: false,
-      color: color,
+      category: null,
       route: '/checklists/${session.key}',
     );
   }
@@ -234,13 +235,14 @@ class AgendaEntry {
 /// Every agenda entry, sessions and events together, sorted by start time.
 final agendaProvider = FutureProvider<List<AgendaEntry>>((ref) async {
   final events = await ref.watch(calendarEventsProvider.future);
+  final categories = await ref.watch(categoryLookupProvider.future);
   final active = await ref.watch(activeSessionsProvider.future);
   final archived = await ref.watch(archivedSessionsProvider.future);
 
   final entries = <AgendaEntry>[
-    for (final event in events) AgendaEntry.fromEvent(event),
+    for (final event in events) AgendaEntry.fromEvent(event, categories),
     for (final session in [...active, ...archived])
-      AgendaEntry.fromSession(session, afEventColor(1)),
+      AgendaEntry.fromSession(session),
   ]..sort((a, b) => a.start.compareTo(b.start));
 
   return entries;

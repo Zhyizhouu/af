@@ -29,8 +29,10 @@ class CalendarEvent extends HiveObject {
   @HiveField(5)
   bool allDay;
 
-  /// Index into the Calendar's palette, not a raw colour — so the same event
-  /// stays legible when the theme flips between light and dark.
+  /// Legacy free-choice palette index, superseded by [category].
+  ///
+  /// Kept only so events written before classification existed can be mapped
+  /// once at startup. Nothing reads it to draw with.
   @HiveField(6)
   int colorIndex;
 
@@ -43,6 +45,11 @@ class CalendarEvent extends HiveObject {
   @HiveField(9)
   bool deleted;
 
+  /// The category's slug. Empty on events written before classification
+  /// existed; `runSyncMigration` backfills those from [colorIndex].
+  @HiveField(10, defaultValue: '')
+  String category;
+
   CalendarEvent({
     required this.id,
     required this.title,
@@ -54,6 +61,7 @@ class CalendarEvent extends HiveObject {
     required this.createdAt,
     required this.updatedAt,
     this.deleted = false,
+    this.category = 'other',
   });
 
   /// The calendar days this event touches, normalised to midnight.

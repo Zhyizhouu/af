@@ -2,6 +2,7 @@ import '../models/proctor_session.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/calendar_event.dart';
 import '../models/checklist_item.dart';
+import '../models/custom_category.dart';
 import '../models/checklist_template_item.dart';
 import '../models/frequent_course.dart';
 
@@ -15,6 +16,7 @@ class DatabaseHelper {
   late Box<FrequentCourse> frequentCoursesBox;
 
   late Box<CalendarEvent> calendarEventsBox;
+  late Box<CustomCategory> customCategoriesBox;
 
   /// App-wide preferences shared by every program (theme mode, QR defaults).
   late Box settingsBox;
@@ -27,8 +29,11 @@ class DatabaseHelper {
     Hive.registerAdapter(ChecklistTemplateItemAdapter());
     Hive.registerAdapter(FrequentCourseAdapter());
     Hive.registerAdapter(CalendarEventAdapter());
+    Hive.registerAdapter(CustomCategoryAdapter());
 
     calendarEventsBox = await Hive.openBox<CalendarEvent>('calendar_events');
+    customCategoriesBox =
+        await Hive.openBox<CustomCategory>('event_categories');
     sessionsBox = await Hive.openBox<ProctorSession>('proctor_sessions');
     checklistItemsBox = await Hive.openBox<ChecklistItem>('checklist_items');
     templateBox = await Hive.openBox<ChecklistTemplateItem>(
@@ -61,6 +66,29 @@ class DatabaseHelper {
     event.deleted = true;
     event.updatedAt = DateTime.now();
     await event.save();
+  }
+
+  // ---- Categories ----
+
+  /// Live user-created categories, tombstones excluded.
+  List<CustomCategory> getCustomCategories() {
+    final categories =
+        customCategoriesBox.values.where((c) => !c.deleted).toList();
+    categories.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return categories;
+  }
+
+  Future<void> putCustomCategory(CustomCategory category) =>
+      customCategoriesBox.put(category.id, category);
+
+  /// Tombstones rather than removing. Events keep the slug and fall back to
+  /// "Other" when it no longer resolves.
+  Future<void> deleteCustomCategory(String id) async {
+    final category = customCategoriesBox.get(id);
+    if (category == null) return;
+    category.deleted = true;
+    category.updatedAt = DateTime.now();
+    await category.save();
   }
 
   // ---- Settings ----
