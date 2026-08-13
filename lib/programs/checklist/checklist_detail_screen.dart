@@ -58,6 +58,8 @@ class ChecklistDetailScreen extends ConsumerWidget {
       title: '${session.type} · Room ${session.room}',
       tagline: _stamp.format(session.dateTime),
       onBack: () => context.go('/checklists'),
+      // Unlike the index pages, this title is not in the nav bar.
+      showMastheadOnDesktop: true,
       actions: const [AFThemeToggle()],
       footer: total == 0
           ? null

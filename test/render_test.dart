@@ -8,6 +8,8 @@ import 'package:hive/hive.dart';
 
 import 'package:af/db/database_helper.dart';
 import 'package:af/app/af_shell.dart';
+import 'package:af/auth/register_screen.dart';
+import 'package:af/auth/sign_in_screen.dart';
 import 'package:af/models/calendar_event.dart';
 import 'package:af/models/checklist_item.dart';
 import 'package:af/models/checklist_template_item.dart';
@@ -106,6 +108,40 @@ void main() {
     });
   });
 
+  group('auth', () {
+    testWidgets('sign in renders on a phone', (tester) async {
+      await _pump(tester, const SignInScreen(),
+          size: _phone, location: '/signin', inShell: false);
+      expect(find.textContaining('No account yet'), findsOneWidget);
+    });
+
+    testWidgets('sign in renders on a desktop', (tester) async {
+      await _pump(tester, const SignInScreen(),
+          size: _desktop, location: '/signin', inShell: false);
+    });
+
+    testWidgets('register renders long form without overflowing',
+        (tester) async {
+      await _pump(tester, const RegisterScreen(),
+          size: _phone, location: '/register', inShell: false);
+      expect(find.textContaining('Already have an account'), findsOneWidget);
+    });
+
+    testWidgets('register renders in dark mode', (tester) async {
+      await _pump(tester, const RegisterScreen(),
+          size: _desktop, mode: ThemeMode.dark,
+          location: '/register', inShell: false);
+    });
+
+    // Firebase is absent in tests, so nobody is signed in and every program
+    // tile must fall back to its locked state rather than erroring.
+    testWidgets('dashboard locks programs when signed out', (tester) async {
+      await _pump(tester, const DashboardScreen(), size: _desktop);
+      expect(find.text('SIGN IN →'), findsWidgets);
+      expect(find.textContaining('account required'), findsWidgets);
+    });
+  });
+
   group('qr generator', () {
     testWidgets('renders empty on a phone', (tester) async {
       await _pump(tester, const QrScreen(), size: _phone);
@@ -148,6 +184,7 @@ Future<void> _pump(
   required Size size,
   ThemeMode mode = ThemeMode.light,
   String location = '/dashboard',
+  bool inShell = true,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -160,7 +197,9 @@ Future<void> _pump(
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: mode,
-        home: AFShell(location: location, child: screen),
+        home: inShell
+            ? AFShell(location: location, child: screen)
+            : screen,
       ),
     ),
   );

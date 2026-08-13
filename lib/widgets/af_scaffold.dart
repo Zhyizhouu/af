@@ -154,6 +154,14 @@ class AFScaffold extends StatelessWidget {
   /// Override the content column width for pages that need more room.
   final double maxWidth;
 
+  /// Keep the masthead on desktop.
+  ///
+  /// Off by default: the nav bar already shows the brand and the active
+  /// section, so on a wide screen a masthead reading "AF · Calendar" is pure
+  /// duplication. Pages whose title carries real information — a session's
+  /// room and time, say — opt back in.
+  final bool showMastheadOnDesktop;
+
   /// Horizontal breathing room. The QR page uses 20px.
   static const double gutter = 20;
   static const double maxContentWidth = 940;
@@ -167,6 +175,7 @@ class AFScaffold extends StatelessWidget {
     required this.child,
     this.footer,
     this.maxWidth = maxContentWidth,
+    this.showMastheadOnDesktop = false,
   });
 
   @override
@@ -174,6 +183,7 @@ class AFScaffold extends StatelessWidget {
     // AFShell owns the Scaffold and the SafeArea; a page is just the centred
     // content column that sits under the nav bar.
     final desktop = AFBreakpoints.isDesktop(context);
+    final showMasthead = !desktop || showMastheadOnDesktop;
 
     return Center(
       child: ConstrainedBox(
@@ -183,14 +193,15 @@ class AFScaffold extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 28),
-              AFMasthead(
-                title: title,
-                tagline: tagline,
-                onBack: onBack,
-                // The nav bar already carries these on desktop.
-                actions: desktop ? const [] : actions,
-              ),
+              SizedBox(height: showMasthead ? 28 : 20),
+              if (showMasthead)
+                AFMasthead(
+                  title: title,
+                  tagline: tagline,
+                  onBack: onBack,
+                  // The nav bar already carries these on desktop.
+                  actions: desktop ? const [] : actions,
+                ),
               Expanded(child: child),
               if (footer != null) footer!,
             ],

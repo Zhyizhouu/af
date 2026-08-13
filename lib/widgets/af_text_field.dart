@@ -25,6 +25,9 @@ class AFTextField extends StatefulWidget {
   final int? maxLength;
   final bool autofocus;
   final bool enabled;
+
+  /// Masks the input. Forces a single line, as Flutter requires.
+  final bool obscure;
   final Widget? prefix;
   final Widget? suffix;
   final FocusNode? focusNode;
@@ -45,6 +48,7 @@ class AFTextField extends StatefulWidget {
     this.maxLength,
     this.autofocus = false,
     this.enabled = true,
+    this.obscure = false,
     this.prefix,
     this.suffix,
     this.focusNode,
@@ -111,8 +115,9 @@ class _AFTextFieldState extends State<AFTextField> {
               controller: widget.controller,
               focusNode: _focusNode,
               enabled: widget.enabled,
-              minLines: widget.minLines,
-              maxLines: widget.maxLines,
+              obscureText: widget.obscure,
+              minLines: widget.obscure ? 1 : widget.minLines,
+              maxLines: widget.obscure ? 1 : widget.maxLines,
               style: textStyle,
               textAlign: widget.textAlign,
               cursorColor: t.accent,

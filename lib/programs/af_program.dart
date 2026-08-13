@@ -23,6 +23,13 @@ class AFProgram {
   /// False renders the tile as SOON and disables the tap target.
   final bool available;
 
+  /// Whether the program needs an account.
+  ///
+  /// Locked programs still appear on the dashboard — a signed-out visitor
+  /// should be able to see what AF holds — but the tile routes to sign-in
+  /// instead of opening.
+  final bool requiresAuth;
+
   const AFProgram({
     required this.id,
     required this.name,
@@ -30,6 +37,7 @@ class AFProgram {
     required this.description,
     required this.route,
     this.available = true,
+    this.requiresAuth = true,
   });
 }
 

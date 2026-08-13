@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../auth/auth_controller.dart';
 import '../programs/af_program.dart';
 import '../programs/calendar/calendar_provider.dart';
 import '../theme/af_breakpoints.dart';
@@ -27,16 +28,23 @@ class DashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final signedIn = ref.watch(isSignedInProvider);
+    final user = ref.watch(currentUserProvider);
+
     return AFScaffold(
       title: 'AF',
-      tagline: 'field tools — everything stays on device',
+      tagline: signedIn
+          ? 'field tools — synced to your account'
+          : 'field tools — sign in to sync',
       actions: const [
         AFAccountButton(),
         SizedBox(width: 10),
         AFThemeToggle(),
       ],
       footer: AFFooter(
-        '${afPrograms.length} programs installed · nothing leaves this device',
+        signedIn
+            ? '${afPrograms.length} programs · synced as ${user?.email ?? 'your account'}'
+            : '${afPrograms.length} programs · sign in to unlock and sync',
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -47,7 +55,7 @@ class DashboardScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _ProgramsSection(width: width),
+                _ProgramsSection(width: width, signedIn: signedIn),
                 const SizedBox(height: 28),
                 if (desktop)
                   IntrinsicHeight(
@@ -79,8 +87,9 @@ class DashboardScreen extends ConsumerWidget {
 
 class _ProgramsSection extends StatelessWidget {
   final double width;
+  final bool signedIn;
 
-  const _ProgramsSection({required this.width});
+  const _ProgramsSection({required this.width, required this.signedIn});
 
   @override
   Widget build(BuildContext context) {
@@ -104,7 +113,7 @@ class _ProgramsSection extends StatelessWidget {
             for (final program in afPrograms)
               SizedBox(
                 width: tileWidth,
-                child: _ProgramTile(program: program),
+                child: _ProgramTile(program: program, signedIn: signedIn),
               ),
           ],
         ),
@@ -115,20 +124,28 @@ class _ProgramsSection extends StatelessWidget {
 
 class _ProgramTile extends StatelessWidget {
   final AFProgram program;
+  final bool signedIn;
 
-  const _ProgramTile({required this.program});
+  const _ProgramTile({required this.program, required this.signedIn});
 
   @override
   Widget build(BuildContext context) {
     final t = context.af;
+    final locked = program.requiresAuth && !signedIn;
 
     return AFPanel(
       label: program.name,
       countWidget: AFChip(
-        label: program.available ? 'ready' : 'soon',
-        color: program.available ? t.ok : t.muted,
+        label: locked
+            ? 'locked'
+            : (program.available ? 'ready' : 'soon'),
+        color: locked ? t.warn : (program.available ? t.ok : t.muted),
       ),
-      onTap: program.available ? () => context.go(program.route) : null,
+      // Locked tiles stay tappable on purpose: the tap is how someone
+      // discovers they need an account, so it routes to sign-in.
+      onTap: locked
+          ? () => context.go('/signin')
+          : (program.available ? () => context.go(program.route) : null),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -138,13 +155,33 @@ class _ProgramTile extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _ProgramStatus(programId: program.id)),
+              Expanded(
+                child: locked
+                    ? Row(
+                        children: [
+                          Icon(Icons.lock_outline, size: 13, color: t.muted),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              'account required',
+                              style: AFText.meta(context),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      )
+                    : _ProgramStatus(programId: program.id),
+              ),
               const SizedBox(width: 12),
               Text(
-                program.available ? 'OPEN →' : 'SOON',
+                locked
+                    ? 'SIGN IN →'
+                    : (program.available ? 'OPEN →' : 'SOON'),
                 style: AFText.mono(
                   size: 12,
-                  color: program.available ? t.accent : t.muted,
+                  color: locked
+                      ? t.warn
+                      : (program.available ? t.accent : t.muted),
                   weight: FontWeight.w700,
                   letterSpacing: 0.6,
                 ),

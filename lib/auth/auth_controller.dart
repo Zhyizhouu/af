@@ -17,8 +17,20 @@ final currentUserProvider = Provider<User?>((ref) {
   return ref.watch(authStateProvider).valueOrNull;
 });
 
+final isSignedInProvider = Provider<bool>((ref) {
+  return ref.watch(currentUserProvider) != null;
+});
+
 class AuthController {
   const AuthController();
+
+  void _requireFirebase() {
+    if (afFirebaseReady) return;
+    throw FirebaseAuthException(
+      code: 'unavailable',
+      message: 'Firebase is not configured on this build.',
+    );
+  }
 
   /// Google sign-in.
   ///
@@ -26,13 +38,7 @@ class AuthController {
   /// plugin: a popup on web, and the native/Custom Tabs flow elsewhere. That
   /// keeps one dependency out of the tree and one fewer API to track.
   Future<void> signInWithGoogle() async {
-    if (!afFirebaseReady) {
-      throw FirebaseAuthException(
-        code: 'unavailable',
-        message: 'Firebase is not configured on this build.',
-      );
-    }
-
+    _requireFirebase();
     final provider = GoogleAuthProvider()..addScope('email');
 
     if (kIsWeb) {
@@ -40,6 +46,43 @@ class AuthController {
     } else {
       await FirebaseAuth.instance.signInWithProvider(provider);
     }
+  }
+
+  Future<void> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    _requireFirebase();
+    await FirebaseAuth.instance.signInWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+  }
+
+  Future<void> register({
+    required String email,
+    required String password,
+    String? displayName,
+  }) async {
+    _requireFirebase();
+    final credential =
+        await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+
+    final name = displayName?.trim();
+    if (name != null && name.isNotEmpty) {
+      await credential.user?.updateDisplayName(name);
+      // Without the reload the local User still reports a null displayName,
+      // so the account button would show the email until the next sign-in.
+      await credential.user?.reload();
+    }
+  }
+
+  Future<void> sendPasswordReset(String email) async {
+    _requireFirebase();
+    await FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
   }
 
   Future<void> signOut() async {
@@ -52,7 +95,7 @@ final authControllerProvider = Provider((ref) => const AuthController());
 
 /// Turns Firebase's error codes into something worth showing a person.
 String describeAuthError(Object error) {
-  if (error is! FirebaseAuthException) return 'Sign-in failed. Try again.';
+  if (error is! FirebaseAuthException) return 'Something went wrong. Try again.';
 
   return switch (error.code) {
     'unavailable' => 'Firebase is not configured on this build.',
@@ -61,12 +104,22 @@ String describeAuthError(Object error) {
     'web-context-canceled' =>
       'Sign-in cancelled.',
     'popup-blocked' => 'Your browser blocked the sign-in popup.',
-    'network-request-failed' => 'No connection. Sign-in needs the network.',
-    // Google is registered in the project but not switched on as a provider.
+    'network-request-failed' => 'No connection. Signing in needs the network.',
+    // The provider is registered in the project but not switched on.
     'operation-not-allowed' =>
-      'Google sign-in is not enabled in the Firebase console.',
+      'That sign-in method is not enabled in the Firebase console.',
     'account-exists-with-different-credential' =>
       'That email is already linked to a different sign-in method.',
-    _ => error.message ?? 'Sign-in failed (${error.code}).',
+    // Firebase deliberately blurs these so the form cannot be used to probe
+    // which addresses have accounts; mirror that in the wording.
+    'invalid-credential' || 'user-not-found' || 'wrong-password' =>
+      'Email or password is incorrect.',
+    'invalid-email' => 'That email address is not valid.',
+    'user-disabled' => 'That account has been disabled.',
+    'email-already-in-use' =>
+      'That email already has an account — sign in instead.',
+    'weak-password' => 'Use at least 6 characters for the password.',
+    'too-many-requests' => 'Too many attempts. Wait a moment and try again.',
+    _ => error.message ?? 'Something went wrong (${error.code}).',
   };
 }
