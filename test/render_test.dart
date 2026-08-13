@@ -7,10 +7,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
 import 'package:af/db/database_helper.dart';
+import 'package:af/app/af_shell.dart';
+import 'package:af/models/calendar_event.dart';
 import 'package:af/models/checklist_item.dart';
 import 'package:af/models/checklist_template_item.dart';
 import 'package:af/models/frequent_course.dart';
 import 'package:af/models/proctor_session.dart';
+import 'package:af/programs/calendar/calendar_screen.dart';
 import 'package:af/programs/checklist/checklist_detail_screen.dart';
 import 'package:af/programs/checklist/checklist_home_screen.dart';
 import 'package:af/programs/qr/qr_screen.dart';
@@ -29,6 +32,7 @@ const Size _phone = Size(390, 844);
 const Size _desktop = Size(1280, 900);
 
 late ProctorSession _session;
+late String _sessionKey;
 
 void main() {
   setUpAll(() async {
@@ -69,7 +73,7 @@ void main() {
         (tester) async {
       await _pump(
         tester,
-        ChecklistDetailScreen(session: _session),
+        ChecklistDetailScreen(sessionKey: _sessionKey),
         size: _phone,
       );
       expect(find.textContaining('Ruman'), findsWidgets);
@@ -78,10 +82,27 @@ void main() {
     testWidgets('detail renders in dark mode', (tester) async {
       await _pump(
         tester,
-        ChecklistDetailScreen(session: _session),
+        ChecklistDetailScreen(sessionKey: _sessionKey),
         size: _desktop,
         mode: ThemeMode.dark,
       );
+    });
+  });
+
+  group('calendar', () {
+    testWidgets('renders on a phone', (tester) async {
+      await _pump(tester, const CalendarScreen(),
+          size: _phone, location: '/calendar');
+    });
+
+    testWidgets('renders on a desktop', (tester) async {
+      await _pump(tester, const CalendarScreen(),
+          size: _desktop, location: '/calendar');
+    });
+
+    testWidgets('renders in dark mode', (tester) async {
+      await _pump(tester, const CalendarScreen(),
+          size: _desktop, mode: ThemeMode.dark, location: '/calendar');
     });
   });
 
@@ -126,6 +147,7 @@ Future<void> _pump(
   Widget screen, {
   required Size size,
   ThemeMode mode = ThemeMode.light,
+  String location = '/dashboard',
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -138,7 +160,7 @@ Future<void> _pump(
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: mode,
-        home: screen,
+        home: AFShell(location: location, child: screen),
       ),
     ),
   );
@@ -173,6 +195,7 @@ Future<void> _openBoxes() async {
   Hive.registerAdapter(ChecklistItemAdapter());
   Hive.registerAdapter(ChecklistTemplateItemAdapter());
   Hive.registerAdapter(FrequentCourseAdapter());
+  Hive.registerAdapter(CalendarEventAdapter());
 
   final db = DatabaseHelper.instance;
   db.sessionsBox = await Hive.openBox<ProctorSession>('proctor_sessions');
@@ -182,6 +205,8 @@ Future<void> _openBoxes() async {
   db.frequentCoursesBox =
       await Hive.openBox<FrequentCourse>('frequent_courses');
   db.settingsBox = await Hive.openBox('af_settings');
+  db.calendarEventsBox =
+      await Hive.openBox<CalendarEvent>('calendar_events');
 
   _session = ProctorSession(
     type: 'UAS',
@@ -193,6 +218,7 @@ Future<void> _openBoxes() async {
     createdAt: DateTime.now(),
   );
   final key = await db.insertSession(_session);
+  _sessionKey = key;
 
   // Deliberately includes one of the longest real template labels so the
   // detail screen is exercised against text that has to wrap, and one fully

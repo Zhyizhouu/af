@@ -1,7 +1,11 @@
 import '../models/proctor_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../db/database_helper.dart';
 import '../models/checklist_item.dart';
+import '../sync/sync_controller.dart';
+
+const _uuid = Uuid();
 
 enum SessionFilter { upcoming, today, archived }
 
@@ -50,6 +54,13 @@ final filteredSessionsProvider = FutureProvider<List<ProctorSession>>((
   return active.where((s) => !s.dateTime.isBefore(todayEnd)).toList();
 });
 
+/// Looks a session up by its Hive key, for deep links like
+/// `/checklists/3` — on web a refresh has only the URL to work from.
+final sessionByKeyProvider =
+    Provider.family<ProctorSession?, String>((ref, key) {
+  return DatabaseHelper.instance.getSessionByKey(int.tryParse(key) ?? key);
+});
+
 final sessionChecklistProvider =
     FutureProvider.family<List<ChecklistItem>, String>((ref, sessionKey) async {
       return DatabaseHelper.instance.getChecklistItems(sessionKey);
@@ -69,6 +80,7 @@ class SessionController {
   }) async {
     final db = DatabaseHelper.instance;
 
+    final now = DateTime.now();
     final session = ProctorSession(
       type: type,
       dateTime: dateTime,
@@ -77,7 +89,9 @@ class SessionController {
       courseName: courseName,
       courseClass: courseClass,
       status: 'active',
-      createdAt: DateTime.now(),
+      createdAt: now,
+      syncId: _uuid.v4(),
+      updatedAt: now,
     );
 
     final sessionKey = await db.insertSession(session);
@@ -91,6 +105,9 @@ class SessionController {
           section: t.section,
           isChecked: false,
           sortOrder: t.sortOrder,
+          syncId: _uuid.v4(),
+          sessionId: session.syncId,
+          updatedAt: now,
         ),
       );
     }
@@ -100,6 +117,7 @@ class SessionController {
     }
 
     ref.invalidate(activeSessionsProvider);
+    ref.read(syncControllerProvider.notifier).requestSync();
   }
 
   Future<bool> toggleChecklistItem(
@@ -108,6 +126,7 @@ class SessionController {
   ) async {
     final db = DatabaseHelper.instance;
     item.isChecked = !item.isChecked;
+    item.updatedAt = DateTime.now();
     await db.updateChecklistItem(item);
 
     final allItems = db.getChecklistItems(sessionKey);
@@ -117,6 +136,7 @@ class SessionController {
       final session = db.getSessionByKey(_keyFromString(sessionKey));
       if (session != null) {
         session.status = 'archived';
+        session.updatedAt = DateTime.now();
         await session.save();
       }
       ref.invalidate(activeSessionsProvider);
@@ -124,6 +144,7 @@ class SessionController {
     }
 
     ref.invalidate(sessionChecklistProvider(sessionKey));
+    ref.read(syncControllerProvider.notifier).requestSync();
     return allChecked;
   }
 

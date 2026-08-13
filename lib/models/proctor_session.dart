@@ -28,6 +28,23 @@ class ProctorSession extends HiveObject {
   @HiveField(7)
   final DateTime createdAt;
 
+  /// Stable cross-device identity, distinct from the Hive key.
+  ///
+  /// Hive keys are per-device auto-increment integers, so device A's session 0
+  /// and device B's session 0 are unrelated records — they cannot be used as
+  /// sync identities. Records written before sync existed default to empty and
+  /// are filled in by `runSyncMigration`.
+  @HiveField(8, defaultValue: '')
+  String syncId;
+
+  /// Last local mutation, for last-write-wins reconciliation.
+  @HiveField(9)
+  DateTime? updatedAt;
+
+  /// Tombstone. A row deleted outright could not propagate as a deletion.
+  @HiveField(10, defaultValue: false)
+  bool deleted;
+
   ProctorSession({
     required this.type,
     required this.dateTime,
@@ -37,5 +54,8 @@ class ProctorSession extends HiveObject {
     required this.courseClass,
     this.status = 'active',
     required this.createdAt,
+    this.syncId = '',
+    this.updatedAt,
+    this.deleted = false,
   });
 }

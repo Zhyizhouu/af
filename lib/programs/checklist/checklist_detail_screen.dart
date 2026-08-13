@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/checklist_item.dart';
@@ -14,15 +15,39 @@ import '../../widgets/af_theme_toggle.dart';
 
 /// One session's checklist, grouped into the template's sections.
 class ChecklistDetailScreen extends ConsumerWidget {
-  final ProctorSession session;
+  /// The session's Hive key. Taken from the URL rather than a passed object so
+  /// `/checklists/3` survives a browser refresh.
+  final String sessionKey;
 
-  const ChecklistDetailScreen({super.key, required this.session});
+  const ChecklistDetailScreen({super.key, required this.sessionKey});
 
   static final DateFormat _stamp = DateFormat('EEE d MMM yyyy · HH:mm');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sessionKey = session.key.toString();
+    final session = ref.watch(sessionByKeyProvider(sessionKey));
+
+    if (session == null) {
+      return AFScaffold(
+        title: 'AF · Checklists',
+        onBack: () => context.go('/checklists'),
+        actions: const [AFThemeToggle()],
+        child: AFEmptyState(
+          glyph: '!',
+          message: 'That session no longer exists.',
+          color: context.af.warn,
+        ),
+      );
+    }
+
+    return _detail(context, ref, session);
+  }
+
+  Widget _detail(
+    BuildContext context,
+    WidgetRef ref,
+    ProctorSession session,
+  ) {
     final checklistAsync = ref.watch(sessionChecklistProvider(sessionKey));
 
     final items = checklistAsync.valueOrNull ?? const <ChecklistItem>[];
@@ -32,7 +57,7 @@ class ChecklistDetailScreen extends ConsumerWidget {
     return AFScaffold(
       title: '${session.type} · Room ${session.room}',
       tagline: _stamp.format(session.dateTime),
-      onBack: () => Navigator.of(context).pop(),
+      onBack: () => context.go('/checklists'),
       actions: const [AFThemeToggle()],
       footer: total == 0
           ? null
@@ -50,7 +75,7 @@ class ChecklistDetailScreen extends ConsumerWidget {
           message: 'Could not load this checklist.\n$error',
           color: context.af.warn,
         ),
-        data: (items) => _body(context, ref, items, sessionKey),
+        data: (items) => _body(context, ref, items, session),
       ),
     );
   }
@@ -59,7 +84,7 @@ class ChecklistDetailScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     List<ChecklistItem> items,
-    String sessionKey,
+    ProctorSession session,
   ) {
     if (items.isEmpty) {
       return const AFEmptyState(message: 'This session has no checklist items.');
@@ -115,7 +140,7 @@ class _SectionPanel extends ConsumerWidget {
     ChecklistItem item,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
+    final router = GoRouter.of(context);
 
     final archived = await ref
         .read(sessionControllerProvider)
@@ -126,7 +151,7 @@ class _SectionPanel extends ConsumerWidget {
     messenger.showSnackBar(
       const SnackBar(content: Text('Session complete — moved to Archived')),
     );
-    navigator.pop();
+    router.go('/checklists');
   }
 
   @override

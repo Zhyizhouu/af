@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/af_breakpoints.dart';
 import '../theme/af_text.dart';
 import '../theme/af_tokens.dart';
 import 'af_button.dart';
@@ -150,7 +151,8 @@ class AFScaffold extends StatelessWidget {
   /// Pinned below the content, inside the same centred column.
   final Widget? footer;
 
-  final Widget? floatingActionButton;
+  /// Override the content column width for pages that need more room.
+  final double maxWidth;
 
   /// Horizontal breathing room. The QR page uses 20px.
   static const double gutter = 20;
@@ -164,37 +166,34 @@ class AFScaffold extends StatelessWidget {
     this.actions = const [],
     required this.child,
     this.footer,
-    this.floatingActionButton,
+    this.maxWidth = maxContentWidth,
   });
 
   @override
   Widget build(BuildContext context) {
-    final t = context.af;
+    // AFShell owns the Scaffold and the SafeArea; a page is just the centred
+    // content column that sits under the nav bar.
+    final desktop = AFBreakpoints.isDesktop(context);
 
-    return Scaffold(
-      backgroundColor: t.desk,
-      floatingActionButton: floatingActionButton,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: maxContentWidth),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: gutter),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 28),
-                  AFMasthead(
-                    title: title,
-                    tagline: tagline,
-                    onBack: onBack,
-                    actions: actions,
-                  ),
-                  Expanded(child: child),
-                  if (footer != null) footer!,
-                ],
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: gutter),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 28),
+              AFMasthead(
+                title: title,
+                tagline: tagline,
+                onBack: onBack,
+                // The nav bar already carries these on desktop.
+                actions: desktop ? const [] : actions,
               ),
-            ),
+              Expanded(child: child),
+              if (footer != null) footer!,
+            ],
           ),
         ),
       ),

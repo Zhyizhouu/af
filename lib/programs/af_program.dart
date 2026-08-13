@@ -1,16 +1,11 @@
-import 'package:flutter/widgets.dart';
-
-import 'checklist/checklist_home_screen.dart';
-import 'qr/qr_screen.dart';
-
 /// One program inside AF.
 ///
 /// AF is a shell; each program is a self-contained tool that owns its own
 /// screens but shares the design system and the local database. Adding a
-/// program means writing its screens and appending one entry to [afPrograms] —
-/// the dashboard picks it up from there.
+/// program means writing its screens, adding a route in `app/router.dart`, and
+/// appending one entry here — the dashboard and nav bar pick it up from there.
 class AFProgram {
-  /// Stable key. Used for dashboard status lookups and settings.
+  /// Stable key, used for dashboard status lookups and settings.
   final String id;
 
   /// Shown as the tile's panel label, uppercased.
@@ -22,24 +17,21 @@ class AFProgram {
   /// Prose description on the tile.
   final String description;
 
+  /// The route this tile opens.
+  final String route;
+
   /// False renders the tile as SOON and disables the tap target.
   final bool available;
-
-  final WidgetBuilder builder;
 
   const AFProgram({
     required this.id,
     required this.name,
     required this.tagline,
     required this.description,
-    required this.builder,
+    required this.route,
     this.available = true,
   });
 }
-
-Widget _buildChecklists(BuildContext context) => const ChecklistHomeScreen();
-
-Widget _buildQrGenerator(BuildContext context) => const QrScreen();
 
 const List<AFProgram> afPrograms = [
   AFProgram(
@@ -49,7 +41,16 @@ const List<AFProgram> afPrograms = [
     description:
         'Track UAP and UAS proctoring against the standard template. Sessions '
         'archive themselves once every item is ticked.',
-    builder: _buildChecklists,
+    route: '/checklists',
+  ),
+  AFProgram(
+    id: 'calendar',
+    name: 'Calendar',
+    tagline: 'everything on one grid',
+    description:
+        'Your own events on a month grid, with proctor sessions from '
+        'Checklists overlaid so nothing collides.',
+    route: '/calendar',
   ),
   AFProgram(
     id: 'qr',
@@ -59,6 +60,6 @@ const List<AFProgram> afPrograms = [
         'Turn a URL, Wi-Fi string or any text into a QR code. Tune error '
         'correction, quiet zone and colours, drop a logo in the middle, then '
         'export PNG or SVG.',
-    builder: _buildQrGenerator,
+    route: '/qr',
   ),
 ];

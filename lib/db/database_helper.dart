@@ -1,5 +1,6 @@
 import '../models/proctor_session.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../models/calendar_event.dart';
 import '../models/checklist_item.dart';
 import '../models/checklist_template_item.dart';
 import '../models/frequent_course.dart';
@@ -13,6 +14,8 @@ class DatabaseHelper {
   late Box<ChecklistTemplateItem> templateBox;
   late Box<FrequentCourse> frequentCoursesBox;
 
+  late Box<CalendarEvent> calendarEventsBox;
+
   /// App-wide preferences shared by every program (theme mode, QR defaults).
   late Box settingsBox;
 
@@ -23,7 +26,9 @@ class DatabaseHelper {
     Hive.registerAdapter(ChecklistItemAdapter());
     Hive.registerAdapter(ChecklistTemplateItemAdapter());
     Hive.registerAdapter(FrequentCourseAdapter());
+    Hive.registerAdapter(CalendarEventAdapter());
 
+    calendarEventsBox = await Hive.openBox<CalendarEvent>('calendar_events');
     sessionsBox = await Hive.openBox<ProctorSession>('proctor_sessions');
     checklistItemsBox = await Hive.openBox<ChecklistItem>('checklist_items');
     templateBox = await Hive.openBox<ChecklistTemplateItem>(
@@ -31,6 +36,31 @@ class DatabaseHelper {
     );
     frequentCoursesBox = await Hive.openBox<FrequentCourse>('frequent_courses');
     settingsBox = await Hive.openBox('af_settings');
+  }
+
+  // ---- Calendar ----
+
+  /// Live events, tombstones excluded, earliest first.
+  List<CalendarEvent> getCalendarEvents() {
+    final events =
+        calendarEventsBox.values.where((event) => !event.deleted).toList();
+    events.sort((a, b) => a.start.compareTo(b.start));
+    return events;
+  }
+
+  Future<void> putCalendarEvent(CalendarEvent event) async {
+    // Keyed by UUID rather than appended, so the same call both inserts and
+    // updates — which is what a sync pull will need to do later.
+    await calendarEventsBox.put(event.id, event);
+  }
+
+  /// Tombstones the event rather than removing the row. See [CalendarEvent].
+  Future<void> deleteCalendarEvent(String id) async {
+    final event = calendarEventsBox.get(id);
+    if (event == null) return;
+    event.deleted = true;
+    event.updatedAt = DateTime.now();
+    await event.save();
   }
 
   // ---- Settings ----

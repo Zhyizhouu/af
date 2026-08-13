@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/proctor_session.dart';
@@ -14,7 +15,6 @@ import '../../widgets/af_scaffold.dart';
 import '../../widgets/af_segmented.dart';
 import '../../widgets/af_theme_toggle.dart';
 import 'add_session_dialog.dart';
-import 'checklist_detail_screen.dart';
 
 /// AF · Checklists — the proctor session list.
 class ChecklistHomeScreen extends ConsumerWidget {
@@ -30,7 +30,7 @@ class ChecklistHomeScreen extends ConsumerWidget {
     return AFScaffold(
       title: 'AF · Checklists',
       tagline: 'proctor sessions, start to finish',
-      onBack: () => Navigator.of(context).pop(),
+      onBack: () => context.go('/dashboard'),
       actions: const [AFThemeToggle()],
       footer: Padding(
         padding: const EdgeInsets.only(top: 16, bottom: 16),
@@ -139,11 +139,7 @@ class _SessionCard extends ConsumerWidget {
             ? t.ok
             : (total > 0 && checked == total ? t.ok : t.muted),
       ),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ChecklistDetailScreen(session: session),
-        ),
-      ),
+      onTap: () => context.go('/checklists/$sessionKey'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

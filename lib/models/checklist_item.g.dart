@@ -22,13 +22,17 @@ class ChecklistItemAdapter extends TypeAdapter<ChecklistItem> {
       section: fields[2] as String,
       isChecked: fields[3] as bool,
       sortOrder: fields[4] as int,
+      syncId: fields[5] == null ? '' : fields[5] as String,
+      sessionId: fields[6] == null ? '' : fields[6] as String,
+      updatedAt: fields[7] as DateTime?,
+      deleted: fields[8] == null ? false : fields[8] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, ChecklistItem obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.sessionKey)
       ..writeByte(1)
@@ -38,7 +42,15 @@ class ChecklistItemAdapter extends TypeAdapter<ChecklistItem> {
       ..writeByte(3)
       ..write(obj.isChecked)
       ..writeByte(4)
-      ..write(obj.sortOrder);
+      ..write(obj.sortOrder)
+      ..writeByte(5)
+      ..write(obj.syncId)
+      ..writeByte(6)
+      ..write(obj.sessionId)
+      ..writeByte(7)
+      ..write(obj.updatedAt)
+      ..writeByte(8)
+      ..write(obj.deleted);
   }
 
   @override

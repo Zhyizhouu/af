@@ -1,21 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../programs/af_program.dart';
-import '../providers/session_provider.dart';
+import '../programs/calendar/calendar_provider.dart';
+import '../theme/af_breakpoints.dart';
 import '../theme/af_text.dart';
 import '../theme/af_tokens.dart';
+import '../widgets/af_account_button.dart';
 import '../widgets/af_chip.dart';
 import '../widgets/af_panel.dart';
 import '../widgets/af_scaffold.dart';
 import '../widgets/af_theme_toggle.dart';
 
-/// The AF launcher: every installed program, with a live status line each.
+/// The AF launcher.
+///
+/// Three sections: the programs themselves, what is happening today, and what
+/// is coming next. Programs lead because launching one is the dashboard's
+/// primary job; the two read-outs below answer "do I need to do anything?"
+/// without opening anything.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
-  /// Below this the tiles go single-column.
-  static const double _twoColumnBreakpoint = 620;
   static const double _gap = 20;
 
   @override
@@ -23,43 +30,85 @@ class DashboardScreen extends ConsumerWidget {
     return AFScaffold(
       title: 'AF',
       tagline: 'field tools — everything stays on device',
-      actions: const [AFThemeToggle()],
+      actions: const [
+        AFAccountButton(),
+        SizedBox(width: 10),
+        AFThemeToggle(),
+      ],
       footer: AFFooter(
-        '${afPrograms.length} programs installed · no accounts, no sync',
+        '${afPrograms.length} programs installed · nothing leaves this device',
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final columns =
-              constraints.maxWidth >= _twoColumnBreakpoint ? 2 : 1;
-          final tileWidth =
-              (constraints.maxWidth - _gap * (columns - 1)) / columns;
+          final width = constraints.maxWidth;
+          final desktop = width >= AFBreakpoints.desktop;
 
           return SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                AFPanelLabel(
-                  label: 'Programs',
-                  count: '${afPrograms.length}',
-                ),
+                _ProgramsSection(width: width),
+                const SizedBox(height: 28),
+                if (desktop)
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: const [
+                        Expanded(flex: 2, child: _TodaySection()),
+                        SizedBox(width: _gap),
+                        Expanded(flex: 3, child: _UpNextSection()),
+                      ],
+                    ),
+                  )
+                else ...const [
+                  _TodaySection(),
+                  SizedBox(height: _gap),
+                  _UpNextSection(),
+                ],
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: _gap,
-                  runSpacing: _gap,
-                  children: [
-                    for (final program in afPrograms)
-                      SizedBox(
-                        width: tileWidth,
-                        child: _ProgramTile(program: program),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
               ],
             ),
           );
         },
       ),
+    );
+  }
+}
+
+// ---- section 1: programs ----
+
+class _ProgramsSection extends StatelessWidget {
+  final double width;
+
+  const _ProgramsSection({required this.width});
+
+  @override
+  Widget build(BuildContext context) {
+    final columns = width >= AFBreakpoints.desktop
+        ? 3
+        : width >= AFBreakpoints.twoColumn
+            ? 2
+            : 1;
+    final tileWidth =
+        (width - DashboardScreen._gap * (columns - 1)) / columns;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AFPanelLabel(label: 'Programs', count: '${afPrograms.length}'),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: DashboardScreen._gap,
+          runSpacing: DashboardScreen._gap,
+          children: [
+            for (final program in afPrograms)
+              SizedBox(
+                width: tileWidth,
+                child: _ProgramTile(program: program),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -79,11 +128,7 @@ class _ProgramTile extends StatelessWidget {
         label: program.available ? 'ready' : 'soon',
         color: program.available ? t.ok : t.muted,
       ),
-      onTap: program.available
-          ? () => Navigator.of(context).push(
-                MaterialPageRoute(builder: program.builder),
-              )
-          : null,
+      onTap: program.available ? () => context.go(program.route) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -112,8 +157,8 @@ class _ProgramTile extends StatelessWidget {
   }
 }
 
-/// A live read-out for a program, in the spirit of the QR Generator's
-/// always-on counters. Programs without one render an empty line.
+/// A live read-out per program, in the spirit of the QR Generator's always-on
+/// counters. Programs without a meaningful one render nothing.
 class _ProgramStatus extends ConsumerWidget {
   final String programId;
 
@@ -121,33 +166,203 @@ class _ProgramStatus extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (programId != 'checklists') return const SizedBox.shrink();
+    final entries = ref.watch(agendaProvider).valueOrNull;
+    if (entries == null) return const SizedBox.shrink();
 
-    final sessions = ref.watch(activeSessionsProvider).valueOrNull;
-    if (sessions == null) return const SizedBox.shrink();
+    final today = dayKey(DateTime.now());
+    final todays = entries.where((e) => isSameDay(e.start, today));
 
-    final now = DateTime.now();
-    final today = sessions
-        .where(
-          (session) =>
-              session.dateTime.year == now.year &&
-              session.dateTime.month == now.month &&
-              session.dateTime.day == now.day,
-        )
-        .length;
-
-    final label = switch (today) {
-      0 => sessions.isEmpty
-          ? 'nothing scheduled'
-          : '${sessions.length} upcoming',
-      1 => '1 session today',
-      _ => '$today sessions today',
-    };
+    final String label;
+    switch (programId) {
+      case 'checklists':
+        final count =
+            todays.where((e) => e.kind == AgendaKind.session).length;
+        label = count == 0 ? 'nothing scheduled' : '$count today';
+      case 'calendar':
+        final count = todays.where((e) => e.kind == AgendaKind.event).length;
+        label = count == 0 ? 'no events today' : '$count event'
+            '${count == 1 ? '' : 's'} today';
+      default:
+        return const SizedBox.shrink();
+    }
 
     return Text(
       label,
       style: AFText.meta(context),
       overflow: TextOverflow.ellipsis,
+    );
+  }
+}
+
+// ---- section 2: today ----
+
+class _TodaySection extends ConsumerWidget {
+  const _TodaySection();
+
+  static final DateFormat _date = DateFormat('EEE d MMM');
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = context.af;
+    final entries = ref.watch(agendaProvider).valueOrNull ?? const [];
+
+    final now = DateTime.now();
+    final today = dayKey(now);
+    final weekEnd = today.add(const Duration(days: 7));
+
+    final todays = entries.where((e) => isSameDay(e.start, today)).toList();
+    final sessions =
+        todays.where((e) => e.kind == AgendaKind.session).length;
+    final events = todays.where((e) => e.kind == AgendaKind.event).length;
+    final week = entries
+        .where((e) => !e.start.isBefore(today) && e.start.isBefore(weekEnd))
+        .length;
+
+    return AFPanel(
+      label: 'Today',
+      count: _date.format(now).toUpperCase(),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: _Stat(value: '$sessions', label: 'sessions')),
+          _Rule(color: t.line),
+          Expanded(child: _Stat(value: '$events', label: 'events')),
+          _Rule(color: t.line),
+          Expanded(child: _Stat(value: '$week', label: 'next 7 days')),
+        ],
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  final String value;
+  final String label;
+
+  const _Stat({required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.af;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          style: AFText.mono(size: 28, color: t.ink, weight: FontWeight.w700),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label.toUpperCase(),
+          style: AFText.mono(size: 10, color: t.muted, letterSpacing: 1.0),
+        ),
+      ],
+    );
+  }
+}
+
+class _Rule extends StatelessWidget {
+  final Color color;
+
+  const _Rule({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 44,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      color: color,
+    );
+  }
+}
+
+// ---- section 3: up next ----
+
+class _UpNextSection extends ConsumerWidget {
+  const _UpNextSection();
+
+  static final DateFormat _stamp = DateFormat('EEE d MMM · HH:mm');
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = context.af;
+    final upcoming = ref.watch(upcomingAgendaProvider).valueOrNull;
+
+    return AFPanel(
+      label: 'Up next',
+      count: upcoming == null || upcoming.isEmpty ? '—' : '${upcoming.length}',
+      child: upcoming == null || upcoming.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: AFEmptyState(
+                glyph: '',
+                message: 'Nothing scheduled. Enjoy it.',
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < upcoming.length; i++) ...[
+                  if (i > 0) Divider(height: 17, color: t.line),
+                  _UpNextRow(entry: upcoming[i], stamp: _stamp),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+class _UpNextRow extends StatelessWidget {
+  final AgendaEntry entry;
+  final DateFormat stamp;
+
+  const _UpNextRow({required this.entry, required this.stamp});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.af;
+
+    return InkWell(
+      onTap: () => context.go(entry.route ?? '/calendar'),
+      borderRadius: t.borderRadius,
+      highlightColor: t.accentSoft,
+      splashColor: t.accentSoft,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 3,
+            height: 30,
+            margin: const EdgeInsets.only(right: 10),
+            color: entry.color,
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.title,
+                  style: AFText.body(context),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  entry.allDay
+                      ? '${stamp.format(entry.start).split(' · ').first} · all day'
+                      : stamp.format(entry.start),
+                  style: AFText.meta(context),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          AFChip(
+            label: entry.kind == AgendaKind.session ? 'session' : 'event',
+            color: entry.kind == AgendaKind.session ? t.accent : t.muted,
+          ),
+        ],
+      ),
     );
   }
 }
