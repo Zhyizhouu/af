@@ -179,6 +179,13 @@ class AgendaEntry {
   /// Null for proctor sessions, which are not user-classified.
   final EventCategory? category;
 
+  /// Whether this entry is already dealt with — a proctor session marked as
+  /// finished, or swept into the archive. Calendar events have no such state.
+  ///
+  /// The calendar still shows these on their day, since the day happened; it
+  /// is only the dashboard's forward-looking list that drops them.
+  final bool finished;
+
   /// Where tapping the row should navigate, if anywhere.
   final String? route;
 
@@ -191,6 +198,7 @@ class AgendaEntry {
     required this.end,
     required this.allDay,
     required this.category,
+    this.finished = false,
     this.route,
   });
 
@@ -227,6 +235,7 @@ class AgendaEntry {
       end: session.dateTime,
       allDay: false,
       category: null,
+      finished: session.status == 'archived',
       route: '/checklists/${session.key}',
     );
   }
@@ -274,8 +283,15 @@ final agendaForDayProvider =
 });
 
 /// The next few entries from now, for the dashboard.
+///
+/// Finished sessions are dropped even when their time has not passed: "Up
+/// next" is what is still owed, and marking a session finished is the user
+/// saying it no longer is.
 final upcomingAgendaProvider = FutureProvider<List<AgendaEntry>>((ref) async {
   final entries = await ref.watch(agendaProvider.future);
   final now = DateTime.now();
-  return entries.where((entry) => !entry.end.isBefore(now)).take(6).toList();
+  return entries
+      .where((entry) => !entry.finished && !entry.end.isBefore(now))
+      .take(6)
+      .toList();
 });

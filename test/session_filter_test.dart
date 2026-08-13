@@ -12,6 +12,7 @@ import 'package:af/models/custom_category.dart';
 import 'package:af/models/checklist_template_item.dart';
 import 'package:af/models/frequent_course.dart';
 import 'package:af/models/proctor_session.dart';
+import 'package:af/programs/calendar/calendar_provider.dart';
 import 'package:af/providers/session_provider.dart';
 
 /// Pins the rule behind "Mark as finished": a finished session must disappear
@@ -166,5 +167,41 @@ void main() {
 
     expect(await read(SessionFilter.upcoming), hasLength(1));
     expect(await read(SessionFilter.archived), isEmpty);
+  });
+
+  // The dashboard's "Up next" reads the merged agenda, which carries archived
+  // sessions so the calendar can still draw them on their day. Filtering by
+  // time alone is therefore not enough: a session finished early is still in
+  // the future.
+  group('dashboard up next', () {
+    Future<List<AgendaEntry>> upNext() =>
+        container.read(upcomingAgendaProvider.future);
+
+    test('lists a session that is still to come', () async {
+      await addSession(at: DateTime.now().add(const Duration(days: 3)));
+      expect(await upNext(), hasLength(1));
+    });
+
+    test('drops a session marked as finished ahead of its time', () async {
+      final key =
+          await addSession(at: DateTime.now().add(const Duration(days: 3)));
+
+      await container.read(sessionControllerProvider).setFinished(key, true);
+      container.invalidate(agendaProvider);
+
+      expect(await upNext(), isEmpty);
+    });
+
+    test('brings it back when reopened', () async {
+      final key =
+          await addSession(at: DateTime.now().add(const Duration(days: 3)));
+      final controller = container.read(sessionControllerProvider);
+
+      await controller.setFinished(key, true);
+      await controller.setFinished(key, false);
+      container.invalidate(agendaProvider);
+
+      expect(await upNext(), hasLength(1));
+    });
   });
 }
