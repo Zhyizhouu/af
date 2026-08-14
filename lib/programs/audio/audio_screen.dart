@@ -91,6 +91,25 @@ class _AudioScreenState extends State<AudioScreen> {
 
   AudioFormat? get _selected => _limits?.formatById(_format);
 
+  /// The bitrates the selected format actually accepts.
+  List<int> get _rates =>
+      _limits?.bitratesFor(_selected) ?? const [128, 192, 256, 320];
+
+  /// Moves the chosen bitrate onto the new format's list.
+  ///
+  /// Without this, picking 320 for MP3 and then switching to Opus sends a
+  /// bitrate libopus refuses — and the job fails a minute later rather than
+  /// the control simply not offering it.
+  void _chooseFormat(String id) {
+    setState(() {
+      _format = id;
+      final rates = _rates;
+      if (rates.isNotEmpty && !rates.contains(_bitrate)) {
+        _bitrate = rates.reduce((a, b) => (a - _bitrate).abs() <= (b - _bitrate).abs() ? a : b);
+      }
+    });
+  }
+
   // ---- actions ----
 
   Future<void> _pick() async {
@@ -300,14 +319,13 @@ class _AudioScreenState extends State<AudioScreen> {
             AFHint(selected.note, tip: true),
           // Hidden rather than disabled for the lossless formats: a bitrate
           // control that changes nothing is worse than no control.
-          if (selected?.lossy ?? true)
+          if (_rates.isNotEmpty)
             AFField(
               label: 'Bitrate',
               value: '$_bitrate kbit/s',
               child: AFSegmented<int>(
                 segments: [
-                  for (final rate in _limits?.bitrates ?? const [128, 192, 256, 320])
-                    AFSegment(value: rate, label: '$rate'),
+                  for (final rate in _rates) AFSegment(value: rate, label: '$rate'),
                 ],
                 value: _bitrate,
                 onChanged:
@@ -356,7 +374,7 @@ class _AudioScreenState extends State<AudioScreen> {
               AFSegment(value: format.id, label: format.label),
           ],
           value: _format,
-          onChanged: _busy ? (_) {} : (id) => setState(() => _format = id),
+          onChanged: _busy ? (_) {} : _chooseFormat,
         ),
       );
     }

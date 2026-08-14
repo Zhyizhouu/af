@@ -88,6 +88,16 @@ const List<AFProgram> afPrograms = [
     route: '/audio',
   ),
   AFProgram(
+    id: 'captions',
+    name: 'Captions',
+    tagline: 'transcribe, retime, write back in',
+    description:
+        'Transcribe a video, correct the timings on a timeline, then write the '
+        'captions back into it as a track. Downloads as a captioned MP4 or as '
+        'an SRT to drop on an editing timeline.',
+    route: '/captions',
+  ),
+  AFProgram(
     id: 'qr',
     name: 'QR Generator',
     shortName: 'QR',

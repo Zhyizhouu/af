@@ -57,6 +57,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/jobs/{id}/result", s.handleDownload)
 	mux.HandleFunc("DELETE /v1/jobs/{id}", s.handleCancel)
 
+	mux.HandleFunc("GET /v1/captions/limits", s.handleCaptionLimits)
+	mux.HandleFunc("POST /v1/captions", s.handleCaptionCreate)
+	mux.HandleFunc("GET /v1/captions/{id}", s.handleCaptionStatus)
+	mux.HandleFunc("GET /v1/captions/{id}/segments", s.handleCaptionSegments)
+	mux.HandleFunc("POST /v1/captions/{id}/approve", s.handleCaptionApprove)
+	mux.HandleFunc("GET /v1/captions/{id}/result/{artefact}", s.handleCaptionDownload)
+	mux.HandleFunc("DELETE /v1/captions/{id}", s.handleCaptionCancel)
+
 	return s.withCORS(s.withLogging(mux))
 }
 

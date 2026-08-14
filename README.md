@@ -88,6 +88,51 @@ before a conversion will. To try the stack before the Firebase console work is
 finished, set `AF_AUTH_DISABLED=true` in `.env` — localhost only; it accepts
 every request as one shared user.
 
+## Captions
+
+The same stack, a second workflow. Transcription goes through Gemini; the
+timings do not go anywhere near a player until somebody has looked at them.
+
+```
+mp4 → ffmpeg: 16kHz mono → split into 10-min chunks → Gemini (JSON schema)
+    → offset + normalise → ⏸ REVIEW ⏸ → ffmpeg: mux -c copy → mp4 + srt
+```
+
+**The pause is the feature.** Segment timings from a language model are close
+rather than exact, and a caption that is close is a caption that is wrong. So
+the workflow stops, holds the transcript, and waits for you to fix it on a
+timeline in AF. Temporal makes that ordinary to write: the workflow blocks on
+a signal channel for up to an hour, survives a worker restart while it waits,
+and needs no job table or state machine of its own to remember where it got to.
+Leave it alone and it muxes as transcribed — an imperfect track beats nothing.
+
+Three things fight the drift:
+
+- **Chunking.** Ten minutes at a time, with each chunk's offset added back.
+  The offset is exact because ffmpeg chose the cut. `AF_CAPTION_CHUNK_SECONDS`
+  is the accuracy dial — lower is tighter and more API calls.
+- **Normalisation.** Overlaps pushed apart, out-of-order segments sorted,
+  anything past the real duration clamped or dropped, flash-frames stretched.
+  Applied to the model's output *and* to what comes back from the editor.
+- **The editor.** Blocks on a timeline at three zoom levels, editable text and
+  in/out times, half-second nudges for the constant-offset case.
+
+Out comes a **captioned MP4** with a `mov_text` track (`-c copy`, so not a
+frame is re-encoded) and the **SRT** alongside it — the sidecar is what
+actually imports into a Premiere timeline as an editable caption track.
+
+Setting it up needs one key:
+
+```bash
+# .env — the worker's environment, never the Flutter bundle
+AF_GEMINI_API_KEY=...   # https://aistudio.google.com/apikey
+```
+
+Without it the caption page says so on arrival instead of accepting an upload
+it cannot process. Note that captioning is the one part of AF where a file
+leaves your machine: the extracted audio is uploaded to Google, transcribed,
+and deleted again by the same job.
+
 ### Scaling
 
 Workers poll one task queue and Temporal hands each task to exactly one of

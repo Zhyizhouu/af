@@ -14,8 +14,10 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/Zhyizhouu/af/backend/internal/caption"
 	"github.com/Zhyizhouu/af/backend/internal/config"
 	"github.com/Zhyizhouu/af/backend/internal/convert"
+	"github.com/Zhyizhouu/af/backend/internal/gemini"
 	"github.com/Zhyizhouu/af/backend/internal/media"
 	"github.com/Zhyizhouu/af/backend/internal/storage"
 )
@@ -65,12 +67,39 @@ func run(log *slog.Logger) error {
 		MaxConcurrentActivityExecutionSize: cfg.WorkerMaxConcurrent,
 	})
 
+	ffmpeg := media.New(os.Getenv("AF_FFMPEG_PATH"), os.Getenv("AF_FFPROBE_PATH"))
+	tempDir := os.Getenv("AF_TEMP_DIR")
+
 	w.RegisterWorkflow(convert.Audio)
 	w.RegisterActivity(&convert.Activities{
 		Blobs:      blobs,
-		Transcoder: media.New(os.Getenv("AF_FFMPEG_PATH"), os.Getenv("AF_FFPROBE_PATH")),
-		TempDir:    os.Getenv("AF_TEMP_DIR"),
+		Transcoder: ffmpeg,
+		TempDir:    tempDir,
 	})
+
+	// Captioning is optional: without a key the workflow is not registered, so
+	// a stray job fails fast on this queue instead of retrying against a
+	// client that could never have worked.
+	if cfg.GeminiAPIKey == "" {
+		log.Warn("AF_GEMINI_API_KEY is unset: this worker will not caption video")
+	} else {
+		transcriber, err := gemini.New(gemini.Options{
+			APIKey: cfg.GeminiAPIKey,
+			Model:  cfg.GeminiModel,
+		})
+		if err != nil {
+			return err
+		}
+
+		w.RegisterWorkflow(caption.Generate)
+		w.RegisterActivity(&caption.Activities{
+			Blobs:        blobs,
+			Video:        ffmpeg,
+			Transcriber:  transcriber,
+			ChunkSeconds: cfg.CaptionChunkSecond,
+			TempDir:      tempDir,
+		})
+	}
 
 	log.Info("worker polling",
 		"queue", cfg.TaskQueue,

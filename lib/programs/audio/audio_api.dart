@@ -47,6 +47,13 @@ class AudioFormat {
   /// than shown doing nothing.
   final bool lossy;
 
+  /// Bitrates this codec accepts, or empty for the server's common set.
+  ///
+  /// Not decoration: libopus refuses anything above 256k and fails the whole
+  /// conversion rather than clamping, so offering 320 for it would be
+  /// offering a setting that cannot work.
+  final List<int> bitrates;
+
   /// The one thing worth knowing before picking this format.
   final String note;
 
@@ -56,6 +63,7 @@ class AudioFormat {
     required this.extension,
     required this.lossy,
     required this.note,
+    this.bitrates = const [],
   });
 
   factory AudioFormat.fromJson(Map<String, dynamic> json) => AudioFormat(
@@ -63,6 +71,10 @@ class AudioFormat {
         label: json['label'] as String? ?? '',
         extension: json['extension'] as String? ?? '',
         lossy: json['lossy'] as bool? ?? false,
+        bitrates: (json['bitrates'] as List?)
+                ?.map((b) => (b as num).toInt())
+                .toList() ??
+            const [],
         note: json['note'] as String? ?? '',
       );
 }
@@ -105,6 +117,14 @@ class AudioLimits {
       if (format.id == id) return format;
     }
     return null;
+  }
+
+  /// The bitrates to offer for [format]: its own list where it has one, the
+  /// common set otherwise, and none at all for lossless output.
+  List<int> bitratesFor(AudioFormat? format) {
+    if (format == null) return bitrates;
+    if (!format.lossy) return const [];
+    return format.bitrates.isNotEmpty ? format.bitrates : bitrates;
   }
 }
 

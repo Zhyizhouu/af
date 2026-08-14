@@ -79,8 +79,9 @@ func (r Request) Validate() error {
 	}
 	// A bitrate on a lossless format is ignored rather than rejected — it is a
 	// setting that does not apply, not a malformed request.
-	if format.Lossy && !ValidBitrate(r.Bitrate) {
-		return fmt.Errorf("bitrate %d is not one of %v", r.Bitrate, Bitrates)
+	if format.Lossy && !format.Accepts(r.Bitrate) {
+		return fmt.Errorf("%s does not accept %d kbit/s; it takes one of %v",
+			format.Label, r.Bitrate, format.BitratesFor())
 	}
 	return nil
 }

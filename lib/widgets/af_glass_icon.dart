@@ -19,6 +19,7 @@ enum AFGlassGlyph {
   calendar,
   habits,
   audio,
+  captions,
   qr;
 
   /// The mark for an `AFProgram.id`, or null for a program without one.
@@ -27,6 +28,7 @@ enum AFGlassGlyph {
         'calendar' => AFGlassGlyph.calendar,
         'habits' => AFGlassGlyph.habits,
         'audio' => AFGlassGlyph.audio,
+        'captions' => AFGlassGlyph.captions,
         'qr' => AFGlassGlyph.qr,
         _ => null,
       };
@@ -39,6 +41,7 @@ enum AFGlassGlyph {
         AFGlassGlyph.calendar => 130 / 212,
         AFGlassGlyph.habits => 126 / 212,
         AFGlassGlyph.audio => 126 / 212,
+        AFGlassGlyph.captions => 128 / 212,
         AFGlassGlyph.qr => 124 / 212,
       };
 }
@@ -395,6 +398,8 @@ class _GlyphPainter extends CustomPainter {
         _paintHabits(canvas);
       case AFGlassGlyph.audio:
         _paintAudio(canvas);
+      case AFGlassGlyph.captions:
+        _paintCaptions(canvas);
       case AFGlassGlyph.qr:
         _paintQr(canvas);
       case AFGlassGlyph.af:
@@ -486,6 +491,34 @@ class _GlyphPainter extends CustomPainter {
   /// Symmetric about the middle rather than standing on a baseline, which is
   /// what keeps it from reading as the habits chart at favicon size. A musical
   /// note was the other candidate and turns to mush at 32px.
+  /// A frame with two caption lines across its lower half — the shape a
+  /// subtitled still has, which reads faster than the letters "CC".
+  void _paintCaptions(Canvas canvas) {
+    final frame = Path()
+      ..addRRect(RRect.fromLTRBR(12, 20, 88, 80, const Radius.circular(5)))
+      ..addRRect(RRect.fromLTRBR(18, 26, 82, 74, const Radius.circular(3)))
+      ..fillType = PathFillType.evenOdd;
+
+    _dropShadow(canvas, frame);
+    canvas.drawPath(frame, Paint()..color = const Color(0x28FFFFFF));
+    canvas.drawPath(
+      frame,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..color = const Color(0xB8FFFFFF),
+    );
+
+    // The lit part is the caption itself: a long line over a short one, the
+    // way two lines of subtitle actually sit.
+    final lines = Path()
+      ..addRRect(RRect.fromLTRBR(26, 52, 74, 58, const Radius.circular(3)))
+      ..addRRect(RRect.fromLTRBR(26, 63, 58, 69, const Radius.circular(3)));
+
+    _glow(canvas, lines, tint.withValues(alpha: 0.85), 7);
+    canvas.drawPath(lines, Paint()..color = tint.withValues(alpha: 0.9));
+  }
+
   void _paintAudio(Canvas canvas) {
     const centre = 50.0;
     const width = 9.0;

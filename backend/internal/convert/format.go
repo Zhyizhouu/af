@@ -23,6 +23,13 @@ type Format struct {
 	// the control rather than offering a setting that does nothing.
 	Lossy bool `json:"lossy"`
 
+	// Bitrates this codec will actually accept, or nil for the common set.
+	//
+	// Not every encoder spans the same range: libopus refuses anything above
+	// 256k and fails the whole conversion rather than clamping. Offering a
+	// setting that cannot work is worse than not offering it.
+	Bitrates []int `json:"bitrates,omitempty"`
+
 	// Note is shown under the picker — the one thing worth knowing before
 	// choosing this format.
 	Note string `json:"note"`
@@ -62,11 +69,50 @@ var Formats = []Format{
 	{
 		ID: "opus", Label: "Opus", Extension: "opus", MIME: "audio/opus",
 		Codec: "libopus", Lossy: true,
-		Note: "best quality per byte, especially for speech",
+		// libopus caps at 256k and errors out above it. It also needs far less
+		// than the others for the same quality, so the range starts lower.
+		Bitrates: []int{96, 128, 192, 256},
+		Note:     "best quality per byte — caps at 256",
 	},
 }
 
 const DefaultFormat = "mp3"
+
+// BitratesFor is the menu for one format: its own list where it has one, the
+// common set otherwise, and nothing at all for lossless output.
+func (f Format) BitratesFor() []int {
+	if !f.Lossy {
+		return nil
+	}
+	if len(f.Bitrates) > 0 {
+		return f.Bitrates
+	}
+	return Bitrates
+}
+
+func (f Format) Accepts(kbps int) bool {
+	for _, b := range f.BitratesFor() {
+		if b == kbps {
+			return true
+		}
+	}
+	return false
+}
+
+// DefaultBitrateFor keeps a format change from carrying an impossible setting
+// across — 320 chosen for MP3 must not follow the user to Opus.
+func (f Format) DefaultBitrateFor() int {
+	options := f.BitratesFor()
+	if len(options) == 0 {
+		return 0
+	}
+	for _, b := range options {
+		if b == DefaultBitrate {
+			return b
+		}
+	}
+	return options[len(options)-1]
+}
 
 func FormatByID(id string) (Format, error) {
 	if id == "" {

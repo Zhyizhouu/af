@@ -78,21 +78,18 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bitrate := convert.DefaultBitrate
-	if raw := r.URL.Query().Get("bitrate"); raw != "" {
+	// Lossless output has no bitrate. Zeroing it rather than carrying a
+	// default that was never applied is what lets the UI say "WAV" instead of
+	// "WAV at 192 kbit/s".
+	bitrate := format.DefaultBitrateFor()
+	if raw := r.URL.Query().Get("bitrate"); raw != "" && format.Lossy {
 		parsed, err := strconv.Atoi(raw)
-		if err != nil || !convert.ValidBitrate(parsed) {
-			writeError(w, http.StatusBadRequest,
-				fmt.Sprintf("Bitrate must be one of %v kbit/s.", convert.Bitrates))
+		if err != nil || !format.Accepts(parsed) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf(
+				"%s takes one of %v kbit/s.", format.Label, format.BitratesFor()))
 			return
 		}
 		bitrate = parsed
-	}
-	// Lossless output has no bitrate. Zeroing it here rather than carrying a
-	// default that was never applied is what lets the UI say "WAV" instead of
-	// "WAV at 192 kbit/s".
-	if !format.Lossy {
-		bitrate = 0
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, s.cfg.MaxUploadBytes)

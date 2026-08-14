@@ -86,7 +86,18 @@ services:
       - "9333:9333"
       - "8888:8888"
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://localhost:9333/cluster/status"]
+      # 127.0.0.1 rather than localhost: busybox wget resolves localhost to
+      # ::1 first and SeaweedFS binds IPv4 only, so the name form fails with a
+      # connection refused while the server is perfectly healthy.
+      #
+      # Both ports, because they come up at different moments in the same
+      # process — the master answering does not mean the S3 gateway the app
+      # actually talks to is listening yet. `nc -z` rather than a request,
+      # since an unauthenticated GET to the S3 root is a 403 and wget treats
+      # that as a failure.
+      test:
+        - CMD-SHELL
+        - "wget -q -O- http://127.0.0.1:9333/cluster/status >/dev/null && nc -z 127.0.0.1 8333"
       interval: 10s
       timeout: 5s
       retries: 12
@@ -112,6 +123,10 @@ services:
       AF_ALLOWED_ORIGINS: ${AF_ALLOWED_ORIGINS:-http://localhost:*,https://*.vercel.app}
       AF_MAX_UPLOAD_BYTES: ${AF_MAX_UPLOAD_BYTES:-536870912}
       AF_RESULT_TTL: ${AF_RESULT_TTL:-2h}
+      AF_REVIEW_TTL: ${AF_REVIEW_TTL:-1h}
+      # The gateway only needs to know whether captioning is possible, so it
+      # can say so before somebody uploads. The worker is what actually calls.
+      AF_GEMINI_API_KEY: ${AF_GEMINI_API_KEY:-}
       # Leave unset to require a real Firebase ID token. See .env.example.
       AF_AUTH_DISABLED: ${AF_AUTH_DISABLED:-false}
     ports:
@@ -139,6 +154,10 @@ services:
       # ffmpeg will use every core it is given, so one file at a time per
       # replica keeps each conversion fast. Add replicas, not concurrency.
       AF_WORKER_MAX_CONCURRENT: ${AF_WORKER_MAX_CONCURRENT:-1}
+      # Unset means this worker transcodes audio but does not caption video.
+      AF_GEMINI_API_KEY: ${AF_GEMINI_API_KEY:-}
+      AF_GEMINI_MODEL: ${AF_GEMINI_MODEL:-}
+      AF_CAPTION_CHUNK_SECONDS: ${AF_CAPTION_CHUNK_SECONDS:-600}
     volumes:
       - scratch:/work
     deploy:

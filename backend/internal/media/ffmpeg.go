@@ -24,6 +24,11 @@ type FFmpeg struct {
 	FFprobePath string
 }
 
+// commandContext is where every ffmpeg invocation in this package is built,
+// so the one thing that must never vary — that arguments come from code and
+// never from a request — has a single place to be checked.
+var commandContext = exec.CommandContext
+
 func New(ffmpegPath, ffprobePath string) FFmpeg {
 	if ffmpegPath == "" {
 		ffmpegPath = "ffmpeg"

@@ -125,6 +125,10 @@ func (a *Activities) Convert(ctx context.Context, req Request) (Result, error) {
 // Discard removes one object. Missing is success: the workflow calls this on
 // both the happy and the cancelled path, and a retry after a partial failure
 // should not fail because the first attempt already worked.
+//
+// Temporal registers activities by method name into one flat namespace per
+// worker, so this name is claimed for the whole task queue — the caption
+// package's equivalent is DiscardObject for exactly that reason.
 func (a *Activities) Discard(ctx context.Context, key string) error {
 	if key == "" {
 		return nil
