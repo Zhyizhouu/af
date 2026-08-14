@@ -62,14 +62,14 @@ class ChecklistDetailScreen extends ConsumerWidget {
       // Unlike the index pages, this title is not in the nav bar.
       showMastheadOnDesktop: true,
       actions: const [AFThemeToggle()],
-      footer: total == 0
-          ? null
-          : _ProgressFooter(
-              checked: checked,
-              total: total,
-              sessionKey: sessionKey,
-              finished: session.status == 'archived',
-            ),
+      // Always rendered, even with no items: the footer carries finish and
+      // delete, and a session with an empty checklist still has to be filable.
+      footer: _SessionFooter(
+        checked: checked,
+        total: total,
+        sessionKey: sessionKey,
+        session: session,
+      ),
       child: checklistAsync.when(
         loading: () => const Center(
           child: SizedBox(
@@ -252,18 +252,20 @@ class _ChecklistRow extends StatelessWidget {
   }
 }
 
-class _ProgressFooter extends ConsumerWidget {
+class _SessionFooter extends ConsumerWidget {
   final int checked;
   final int total;
   final String sessionKey;
-  final bool finished;
+  final ProctorSession session;
 
-  const _ProgressFooter({
+  const _SessionFooter({
     required this.checked,
     required this.total,
     required this.sessionKey,
-    required this.finished,
+    required this.session,
   });
+
+  bool get finished => session.status == 'archived';
 
   Future<void> _setFinished(
     BuildContext context,
@@ -288,6 +290,49 @@ class _ProgressFooter extends ConsumerWidget {
     if (value) router.go('/checklists');
   }
 
+  /// Deleting takes the checklist with it and reaches every signed-in device,
+  /// so it asks first — unlike a calendar event, which is one row and cheap to
+  /// recreate.
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('DELETE SESSION?'),
+        content: Text(
+          '${session.type} · Room ${session.room} and its '
+          '${total == 1 ? '1 checklist item' : '$total checklist items'} '
+          'will be removed from every device signed in to this account. '
+          'This cannot be undone.',
+          style: AFText.body(context),
+        ),
+        actions: [
+          AFButton.quiet(
+            label: 'Cancel',
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+          AFButton.danger(
+            label: 'Delete',
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      ),
+    );
+
+    // Nothing is looked up until the user has actually said yes — the router
+    // and the messenger are only needed on the way out.
+    if (confirmed != true || !context.mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
+
+    await ref.read(sessionControllerProvider).delete(sessionKey);
+
+    router.go('/checklists');
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Session deleted')),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = context.af;
@@ -301,30 +346,32 @@ class _ProgressFooter extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Text(
-                  '$checked / $total checked',
-                  style: AFText.mono(
-                    size: 12.5,
-                    color: t.ink,
-                    weight: FontWeight.w600,
+            if (total > 0) ...[
+              Row(
+                children: [
+                  Text(
+                    '$checked / $total checked',
+                    style: AFText.mono(
+                      size: 12.5,
+                      color: t.ink,
+                      weight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const Spacer(),
-                Text(
-                  '$percent%',
-                  style: AFText.mono(
-                    size: 12.5,
-                    color: progress >= 1 ? t.ok : t.muted,
-                    weight: FontWeight.w600,
+                  const Spacer(),
+                  Text(
+                    '$percent%',
+                    style: AFText.mono(
+                      size: 12.5,
+                      color: progress >= 1 ? t.ok : t.muted,
+                      weight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            AFProgressBar(value: progress, height: 6),
-            const SizedBox(height: 14),
+                ],
+              ),
+              const SizedBox(height: 10),
+              AFProgressBar(value: progress, height: 6),
+              const SizedBox(height: 14),
+            ],
             // Available before every item is ticked: a session can end early,
             // and forcing a full checklist just to file it would be worse.
             finished
@@ -340,6 +387,13 @@ class _ProgressFooter extends ConsumerWidget {
                     expand: true,
                     onPressed: () => _setFinished(context, ref, true),
                   ),
+            const SizedBox(height: 10),
+            AFButton.danger(
+              label: 'Delete session',
+              icon: Icons.delete_outline,
+              expand: true,
+              onPressed: () => _confirmDelete(context, ref),
+            ),
           ],
         ),
       ),

@@ -85,6 +85,27 @@ void main() {
       expect(find.textContaining('Ruman'), findsWidgets);
     });
 
+    // Delete takes the whole checklist with it and reaches every device, so
+    // the confirmation is the part worth pinning: no dialog, no deletion.
+    testWidgets('detail asks before deleting, and cancel keeps the session',
+        (tester) async {
+      await _pump(
+        tester,
+        ChecklistDetailScreen(sessionKey: _sessionKey),
+        size: _desktop,
+      );
+
+      await tester.tap(find.text('Delete session'));
+      await tester.pumpAndSettle();
+      expect(find.text('DELETE SESSION?'), findsOneWidget);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('DELETE SESSION?'), findsNothing);
+      expect(DatabaseHelper.instance.getSessionByKey(_session.key), isNotNull);
+    });
+
     testWidgets('detail renders in dark mode', (tester) async {
       await _pump(
         tester,

@@ -118,16 +118,21 @@ class DatabaseHelper {
     return key.toString();
   }
 
+  /// Sessions with the given status, tombstones excluded, earliest first.
   List<ProctorSession> getSessions(String status) {
     final sessions = sessionsBox.values
-        .where((s) => s.status == status)
+        .where((s) => s.status == status && !s.deleted)
         .toList();
     sessions.sort((a, b) => a.dateTime.compareTo(b.dateTime));
     return sessions;
   }
 
+  /// Null for a deleted session, so a stale `/checklists/3` URL or a deletion
+  /// arriving from another device lands on the "no longer exists" state
+  /// instead of opening a ghost record.
   ProctorSession? getSessionByKey(dynamic key) {
-    return sessionsBox.get(key);
+    final session = sessionsBox.get(key);
+    return session == null || session.deleted ? null : session;
   }
 
   Future<void> updateSessionStatus(dynamic key, String status) async {
@@ -138,14 +143,43 @@ class DatabaseHelper {
     }
   }
 
+  /// Tombstones a session and every checklist item hanging off it.
+  ///
+  /// The rows stay: a record removed outright looks to the other device like a
+  /// document it is simply missing, and gets recreated on the next sync. The
+  /// items go too, or they outlive their parent in Firestore with nothing left
+  /// to relink them to.
+  Future<void> deleteSession(dynamic key) async {
+    final session = sessionsBox.get(key);
+    if (session == null || session.deleted) return;
+
+    // One timestamp for the whole cascade, so the session and its items cannot
+    // land on opposite sides of a concurrent edit elsewhere.
+    final now = DateTime.now();
+
+    session
+      ..deleted = true
+      ..updatedAt = now;
+    await session.save();
+
+    for (final item in checklistItemsBox.values) {
+      if (item.sessionKey != key.toString() || item.deleted) continue;
+      item
+        ..deleted = true
+        ..updatedAt = now;
+      await item.save();
+    }
+  }
+
   // ---- Checklist items ----
   Future<void> insertChecklistItem(ChecklistItem item) async {
     await checklistItemsBox.add(item);
   }
 
+  /// A session's items, tombstones excluded, in template order.
   List<ChecklistItem> getChecklistItems(String sessionKey) {
     final items = checklistItemsBox.values
-        .where((i) => i.sessionKey == sessionKey)
+        .where((i) => i.sessionKey == sessionKey && !i.deleted)
         .toList();
     items.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     return items;

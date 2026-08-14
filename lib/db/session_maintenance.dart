@@ -22,6 +22,10 @@ Future<int> archiveStaleSessions({DateTime? now}) async {
   var archived = 0;
   for (final session in db.sessionsBox.values) {
     if (session.status != 'active') continue;
+    // Tombstones are skipped rather than archived: bumping their updatedAt
+    // would push a pointless write on every sync, and could beat a genuine
+    // edit made on another device.
+    if (session.deleted) continue;
     if (session.reopened) continue;
     if (session.dateTime.isAfter(cutoff)) continue;
 

@@ -168,6 +168,20 @@ class SessionController {
     ref.read(syncControllerProvider.notifier).requestSync();
   }
 
+  /// Deletes a session and its checklist items.
+  ///
+  /// A tombstone rather than a removal, so the deletion reaches the user's
+  /// other devices — see [DatabaseHelper.deleteSession].
+  Future<void> delete(String sessionKey) async {
+    await DatabaseHelper.instance.deleteSession(_keyFromString(sessionKey));
+
+    ref
+      ..invalidate(activeSessionsProvider)
+      ..invalidate(archivedSessionsProvider)
+      ..invalidate(sessionChecklistProvider(sessionKey));
+    ref.read(syncControllerProvider.notifier).requestSync();
+  }
+
   dynamic _keyFromString(String key) {
     return int.tryParse(key) ?? key;
   }
