@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'app/data_scope.dart';
 import 'app/firebase_init.dart';
 import 'app/router.dart';
 import 'app/url_strategy.dart';
@@ -11,7 +12,6 @@ import 'db/seed_template.dart';
 import 'db/sync_migration.dart';
 import 'programs/habits/habit_provider.dart';
 import 'providers/theme_provider.dart';
-import 'sync/sync_controller.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
@@ -61,12 +61,13 @@ class _AFAppState extends ConsumerState<AFApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    // Pull the account's data down as soon as somebody signs in, including on
-    // a cold start where the session was restored from disk.
+    // Swap the local database to whoever is signed in — including on a cold
+    // start, where Firebase restores the session a beat after startup. The
+    // scope switch is also what pulls the account's data down, so syncing is
+    // not triggered separately: doing both would risk a sync landing against
+    // the scope that is on its way out.
     ref.listen(authStateProvider, (previous, next) {
-      if (next.valueOrNull != null) {
-        ref.read(syncControllerProvider.notifier).syncNow();
-      }
+      ref.read(dataScopeProvider.notifier).switchTo(next.valueOrNull?.uid);
     });
 
     return MaterialApp.router(

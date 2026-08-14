@@ -8,9 +8,44 @@ import '../models/frequent_course.dart';
 import '../models/habit.dart';
 import '../models/habit_day.dart';
 
+/// Local storage, scoped to whoever is signed in.
+///
+/// Every box holding user content is named `<base>__<scope>`, where the scope is
+/// the Firebase uid, or [localScope] when nobody is signed in. Two accounts on
+/// one device therefore never share a box — before this, they did, and signing
+/// in as a second account merged the first one's records into its own Firestore
+/// subtree on the next push.
+///
+/// Two boxes stay unscoped on purpose: [settingsBox] holds device preferences
+/// like the theme, and [templateBox] holds the proctoring checklist template.
+/// Neither is user content and neither is synced.
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   DatabaseHelper._init();
+
+  /// The scope used before sign-in, and after sign-out.
+  ///
+  /// Not a throwaway: anything created here is real data, and the first
+  /// sign-in adopts it by pushing it to that account.
+  static const String localScope = 'local';
+
+  /// The box a [base] name resolves to under [scope].
+  ///
+  /// The local scope deliberately keeps the **original, unsuffixed** names.
+  /// That is not cosmetic: it means an install predating scoping needs no
+  /// migration at all — its existing boxes simply *are* the local scope. No
+  /// copying, no deleting, no half-finished move to recover from. (Copying was
+  /// the first attempt, and it cannot work: Hive refuses to store one
+  /// HiveObject instance in two boxes, so every record would need cloning by
+  /// hand, per model.)
+  static String boxName(String base, String scope) =>
+      scope == localScope ? base : '${base}__$scope';
+
+  String _scope = localScope;
+  bool _open = false;
+
+  /// The uid whose data is currently loaded, or [localScope].
+  String get scope => _scope;
 
   late Box<ProctorSession> sessionsBox;
   late Box<ChecklistItem> checklistItemsBox;
@@ -40,18 +75,62 @@ class DatabaseHelper {
     Hive.registerAdapter(HabitAdapter());
     Hive.registerAdapter(HabitDayAdapter());
 
-    habitsBox = await Hive.openBox<Habit>('habits');
-    habitDaysBox = await Hive.openBox<HabitDay>('habit_days');
-    calendarEventsBox = await Hive.openBox<CalendarEvent>('calendar_events');
-    customCategoriesBox =
-        await Hive.openBox<CustomCategory>('event_categories');
-    sessionsBox = await Hive.openBox<ProctorSession>('proctor_sessions');
-    checklistItemsBox = await Hive.openBox<ChecklistItem>('checklist_items');
     templateBox = await Hive.openBox<ChecklistTemplateItem>(
       'checklist_template',
     );
-    frequentCoursesBox = await Hive.openBox<FrequentCourse>('frequent_courses');
     settingsBox = await Hive.openBox('af_settings');
+
+    // Auth has not resolved yet at startup, so the local scope opens first and
+    // the auth listener swaps to the account's scope a beat later.
+    await openScope(localScope);
+  }
+
+  /// Swaps the open boxes to [scope]'s.
+  ///
+  /// Every new box is opened before any field is reassigned, and the old ones
+  /// close only afterwards — so there is no moment where a widget rebuilding
+  /// mid-switch can read a closed box.
+  Future<void> openScope(String scope) async {
+    if (_open && _scope == scope) return;
+
+    String name(String base) => boxName(base, scope);
+
+    final sessions =
+        await Hive.openBox<ProctorSession>(name('proctor_sessions'));
+    final items = await Hive.openBox<ChecklistItem>(name('checklist_items'));
+    final courses =
+        await Hive.openBox<FrequentCourse>(name('frequent_courses'));
+    final events = await Hive.openBox<CalendarEvent>(name('calendar_events'));
+    final categories =
+        await Hive.openBox<CustomCategory>(name('event_categories'));
+    final habits = await Hive.openBox<Habit>(name('habits'));
+    final habitDays = await Hive.openBox<HabitDay>(name('habit_days'));
+
+    final previous = _open
+        ? <Box>[
+            sessionsBox,
+            checklistItemsBox,
+            frequentCoursesBox,
+            calendarEventsBox,
+            customCategoriesBox,
+            habitsBox,
+            habitDaysBox,
+          ]
+        : const <Box>[];
+
+    sessionsBox = sessions;
+    checklistItemsBox = items;
+    frequentCoursesBox = courses;
+    calendarEventsBox = events;
+    customCategoriesBox = categories;
+    habitsBox = habits;
+    habitDaysBox = habitDays;
+    _scope = scope;
+    _open = true;
+
+    for (final box in previous) {
+      await box.close();
+    }
   }
 
   // ---- Calendar ----

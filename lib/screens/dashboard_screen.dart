@@ -65,38 +65,48 @@ class DashboardScreen extends ConsumerWidget {
               children: [
                 _ProgramsSection(width: width, signedIn: signedIn),
                 const SizedBox(height: 28),
-                if (desktop)
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: const [
-                        Expanded(flex: 2, child: _HabitsSection()),
-                        SizedBox(width: _gap),
-                        Expanded(flex: 3, child: _HabitChartSection()),
-                      ],
-                    ),
-                  )
-                else ...const [
-                  _HabitsSection(),
-                  SizedBox(height: _gap),
-                  _HabitChartSection(),
-                ],
-                const SizedBox(height: _gap),
-                if (desktop)
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: const [
-                        Expanded(flex: 2, child: _TodaySection()),
-                        SizedBox(width: _gap),
-                        Expanded(flex: 3, child: _UpNextSection()),
-                      ],
-                    ),
-                  )
-                else ...const [
-                  _TodaySection(),
-                  SizedBox(height: _gap),
-                  _UpNextSection(),
+                // Signing out does not wipe the Hive boxes — AF is local-first,
+                // and a sign-out is not a request to destroy anything. So the
+                // read-outs have to be gated the same way the tiles and the
+                // router already gate the programs they summarise, or they go
+                // on showing the last account's habits and agenda to whoever
+                // opens the laptop next.
+                if (!signedIn)
+                  const _SignedOutPanel()
+                else ...[
+                  if (desktop)
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: const [
+                          Expanded(flex: 2, child: _HabitsSection()),
+                          SizedBox(width: _gap),
+                          Expanded(flex: 3, child: _HabitChartSection()),
+                        ],
+                      ),
+                    )
+                  else ...const [
+                    _HabitsSection(),
+                    SizedBox(height: _gap),
+                    _HabitChartSection(),
+                  ],
+                  const SizedBox(height: _gap),
+                  if (desktop)
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: const [
+                          Expanded(flex: 2, child: _TodaySection()),
+                          SizedBox(width: _gap),
+                          Expanded(flex: 3, child: _UpNextSection()),
+                        ],
+                      ),
+                    )
+                  else ...const [
+                    _TodaySection(),
+                    SizedBox(height: _gap),
+                    _UpNextSection(),
+                  ],
                 ],
                 const SizedBox(height: 12),
               ],
@@ -246,6 +256,30 @@ class _StateBadge extends StatelessWidget {
         border: Border.all(color: t.lineStrong),
       ),
       child: Icon(icon, size: 11, color: t.muted),
+    );
+  }
+}
+
+/// What stands in for the read-outs when nobody is signed in.
+///
+/// One panel rather than four empty ones: the answer to every read-out is the
+/// same, and repeating it four times reads like four separate failures.
+class _SignedOutPanel extends StatelessWidget {
+  const _SignedOutPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return AFPanel(
+      label: 'Your day',
+      count: 'LOCKED',
+      onTap: () => context.go('/signin'),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(vertical: 18),
+        child: AFEmptyState(
+          glyph: '',
+          message: 'Sign in to see your habits, today, and what is coming up.',
+        ),
+      ),
     );
   }
 }

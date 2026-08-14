@@ -2,11 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/data_refresh.dart';
 import '../auth/auth_controller.dart';
-import '../programs/calendar/calendar_provider.dart';
-import '../programs/calendar/category_provider.dart';
-import '../programs/habits/habit_provider.dart';
-import '../providers/session_provider.dart';
 import 'sync_service.dart';
 
 enum SyncStatus { signedOut, idle, syncing, synced, failed }
@@ -73,14 +70,7 @@ class SyncController extends StateNotifier<SyncState> {
 
       // Hive is read through these providers, so anything pulled down is only
       // visible once they are refreshed.
-      ref
-        ..invalidate(activeSessionsProvider)
-        ..invalidate(archivedSessionsProvider)
-        ..invalidate(sessionChecklistProvider)
-        ..invalidate(calendarEventsProvider)
-        ..invalidate(categoriesProvider)
-        ..invalidate(habitsProvider)
-        ..invalidate(habitDaysProvider);
+      refreshAllData(ref);
 
       state = SyncState(
         status: SyncStatus.synced,

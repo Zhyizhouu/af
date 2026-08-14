@@ -202,6 +202,23 @@ void main() {
         findsNWidgets(afPrograms.where((p) => p.requiresAuth).length),
       );
     });
+
+    // Signing out leaves the Hive boxes intact by design, so the read-outs
+    // have to be gated or they keep showing the last account's data to whoever
+    // opens the app next.
+    testWidgets('dashboard hides the read-outs when signed out',
+        (tester) async {
+      await _pump(tester, const DashboardScreen(), size: _desktop);
+
+      expect(find.text('LOCKED'), findsOneWidget);
+      expect(find.textContaining('Sign in to see your habits'), findsOneWidget);
+
+      // The seeded habit is on disk and would otherwise be listed by name.
+      expect(find.text('Read'), findsNothing);
+      expect(find.textContaining('HABITS TODAY'), findsNothing);
+      expect(find.text('UP NEXT'), findsNothing);
+      expect(find.text('TODAY'), findsNothing);
+    });
   });
 
   // The marks are pure paint with no data behind them, so the useful check is
