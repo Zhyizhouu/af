@@ -10,6 +10,7 @@ import '../programs/calendar/calendar_provider.dart';
 import '../programs/calendar/event_category.dart';
 import '../programs/habits/habit_chart.dart';
 import '../programs/habits/habit_provider.dart';
+import '../programs/habits/habit_time.dart';
 import '../theme/af_breakpoints.dart';
 import '../theme/af_text.dart';
 import '../theme/af_tokens.dart';
@@ -51,6 +52,7 @@ class DashboardScreen extends ConsumerWidget {
         signedIn
             ? '${afPrograms.length} programs · synced as ${user?.email ?? 'your account'}'
             : '${afPrograms.length} programs · sign in to unlock and sync',
+        showClock: true,
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -255,6 +257,8 @@ class _StateBadge extends StatelessWidget {
 class _HabitsSection extends ConsumerWidget {
   const _HabitsSection();
 
+  static final DateFormat _habitDate = DateFormat('d MMMM y');
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = context.af;
@@ -265,7 +269,9 @@ class _HabitsSection extends ConsumerWidget {
     final today = ref.watch(currentDayProvider);
 
     return AFPanel(
-      label: 'Habits today',
+      // The date comes off the watched day, not the clock, so it rolls over
+      // with the rest of the panel rather than going stale at midnight.
+      label: 'Habits today - ${_habitDate.format(dayFromKey(today))}',
       count: habits.isEmpty ? '—' : '${marks.length}/${habits.length}',
       onTap: () => context.go('/habits'),
       child: habits.isEmpty

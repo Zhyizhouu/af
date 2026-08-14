@@ -1,5 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import '../programs/habits/habit_time.dart';
 import '../theme/af_breakpoints.dart';
 import '../theme/af_text.dart';
 import '../theme/af_tokens.dart';
@@ -226,17 +230,94 @@ class AFScaffold extends StatelessWidget {
 class AFFooter extends StatelessWidget {
   final String text;
 
-  const AFFooter(this.text, {super.key});
+  /// Appends the live GMT+7 clock — the one AF actually cuts its days on.
+  final bool showClock;
+
+  const AFFooter(this.text, {super.key, this.showClock = false});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 24, bottom: 16),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: AFText.mono(size: 11, color: context.af.muted, letterSpacing: 0.22),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: AFText.mono(
+              size: 11,
+              color: context.af.muted,
+              letterSpacing: 0.22,
+            ),
+          ),
+          if (showClock) ...[
+            const SizedBox(height: 6),
+            const AFClock(),
+          ],
+        ],
       ),
+    );
+  }
+}
+
+/// The canonical clock: Jakarta, ticking.
+///
+/// Shown so the time AF reckons days by is visible rather than assumed. It is
+/// **derived from this device's clock**, offset from UTC — not fetched from a
+/// server. A device whose clock is badly wrong reads wrong here too, which is
+/// the point: the discrepancy becomes visible instead of silently landing a
+/// tick on the wrong day.
+class AFClock extends StatefulWidget {
+  const AFClock({super.key});
+
+  @override
+  State<AFClock> createState() => _AFClockState();
+}
+
+class _AFClockState extends State<AFClock> {
+  static final DateFormat _stamp = DateFormat('EEE d MMM y · HH:mm:ss');
+
+  late Timer _timer;
+  late DateTime _now = jakartaNow();
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => setState(() => _now = jakartaNow()),
+    );
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.af;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 5,
+          height: 5,
+          margin: const EdgeInsets.only(right: 7),
+          decoration: BoxDecoration(
+            color: t.accent,
+            borderRadius: BorderRadius.circular(1),
+          ),
+        ),
+        Text(
+          'GMT+7 · ${_stamp.format(_now)}',
+          style: AFText.mono(size: 11, color: t.muted, letterSpacing: 0.22),
+        ),
+      ],
     );
   }
 }

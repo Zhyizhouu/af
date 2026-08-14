@@ -38,6 +38,7 @@ class HabitsScreen extends ConsumerWidget {
             ? 'no habits yet'
             : '${habits.length} habit${habits.length == 1 ? '' : 's'} · '
                 'day starts at midnight GMT+7',
+        showClock: true,
       ),
       child: ListView(
         padding: const EdgeInsets.only(bottom: 8),
