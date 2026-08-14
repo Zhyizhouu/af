@@ -23,6 +23,7 @@ import 'package:af/programs/calendar/calendar_provider.dart';
 import 'package:af/programs/calendar/calendar_screen.dart';
 import 'package:af/programs/checklist/checklist_detail_screen.dart';
 import 'package:af/programs/checklist/checklist_home_screen.dart';
+import 'package:af/programs/habits/habit_provider.dart';
 import 'package:af/programs/habits/habit_range.dart';
 import 'package:af/programs/habits/habits_screen.dart';
 import 'package:af/programs/qr/qr_screen.dart';
@@ -256,6 +257,41 @@ void main() {
     testWidgets('page renders in dark mode', (tester) async {
       await _pump(tester, const HabitsScreen(), size: _desktop,
           location: '/habits', mode: ThemeMode.dark);
+    });
+
+    // The mechanism the whole feature turns on, driven across a real 00:00 on
+    // the real page: the top row relabels itself and a new @Today appears above
+    // it, without anything in storage being renamed.
+    testWidgets('at midnight @Today becomes @Yesterday', (tester) async {
+      // Deliberately months away from the real date. Testing against today's
+      // actual date lets a broken build pass, because some row is labelled
+      // @Today either way and the assertion cannot tell which.
+      var now = DateTime.utc(2026, 3, 10, 16); // 23:00 in Jakarta
+      final day = CurrentDay(clock: () => now);
+
+      await _pump(
+        tester,
+        const HabitsScreen(),
+        size: _desktop,
+        location: '/habits',
+        overrides: [currentDayProvider.overrideWith((ref) => day)],
+      );
+
+      expect(find.text('@Today'), findsOneWidget);
+      expect(find.text('March 10, 2026'), findsOneWidget);
+      expect(find.text('March 11, 2026'), findsNothing);
+
+      // Cross midnight and let the rollover land.
+      now = DateTime.utc(2026, 3, 10, 17, 30); // 00:30 in Jakarta, next day
+      day.refresh();
+      await tester.pumpAndSettle();
+
+      expect(find.text('@Today'), findsOneWidget);
+      expect(find.text('@Yesterday'), findsOneWidget);
+      // The 10th is still listed — it simply is not "today" any more — and the
+      // 11th has appeared above it.
+      expect(find.text('March 11, 2026'), findsOneWidget);
+      expect(find.text('March 10, 2026'), findsOneWidget);
     });
 
     // Every range has to survive being drawn — Year is 12 monthly buckets and

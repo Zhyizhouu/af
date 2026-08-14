@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
@@ -62,6 +63,122 @@ void main() {
     test('recent keys run backwards without gaps', () {
       final keys = recentDayKeys(3, now: DateTime.utc(2026, 8, 13, 18));
       expect(keys, ['2026-08-14', '2026-08-13', '2026-08-12']);
+    });
+  });
+
+  // The rollover is scheduled, not polled: the timer sleeps until the boundary
+  // and lands on it exactly.
+  group('midnight rollover', () {
+    test('counts down to the next Jakarta midnight', () {
+      // 15:00 UTC is 22:00 in Jakarta, so two hours to go.
+      expect(
+        untilNextJakartaMidnight(DateTime.utc(2026, 8, 14, 15)),
+        const Duration(hours: 2),
+      );
+    });
+
+    test('a full day remains the instant it rolls over', () {
+      // 17:00 UTC is exactly Jakarta midnight.
+      expect(
+        untilNextJakartaMidnight(DateTime.utc(2026, 8, 14, 17)),
+        const Duration(hours: 24),
+      );
+    });
+
+    test('is never zero or negative, so scheduling cannot busy-loop', () {
+      for (var hour = 0; hour < 24; hour++) {
+        for (final minute in const [0, 1, 59]) {
+          final delay =
+              untilNextJakartaMidnight(DateTime.utc(2026, 8, 14, hour, minute));
+          expect(delay, greaterThan(Duration.zero));
+          expect(delay, lessThanOrEqualTo(const Duration(hours: 24)));
+        }
+      }
+    });
+
+    // The whole mechanism, driven across a real 00:00 on a fake clock.
+    test('the timer flips the day at midnight, and labels follow', () {
+      fakeAsync((async) {
+        // 16:59 UTC is 23:59 in Jakarta — one minute to go.
+        var now = DateTime.utc(2026, 8, 14, 16, 59);
+        final day = CurrentDay(clock: () => now);
+        addTearDown(day.dispose);
+
+        expect(day.state, '2026-08-14');
+        expect(habitDayLabel('2026-08-14', today: day.state), '@Today');
+        expect(habitDayLabel('2026-08-13', today: day.state), '@Yesterday');
+        expect(habitDayLabel('2026-08-12', today: day.state), '@12 August 2026');
+
+        // Cross midnight and let the scheduled timer run.
+        now = DateTime.utc(2026, 8, 14, 17, 0, 30);
+        async.elapse(const Duration(minutes: 2));
+
+        expect(day.state, '2026-08-15');
+        // Yesterday's row keeps its key and relabels itself — the label is
+        // derived, so nothing is renamed in storage.
+        expect(habitDayLabel('2026-08-15', today: day.state), '@Today');
+        expect(habitDayLabel('2026-08-14', today: day.state), '@Yesterday');
+        expect(habitDayLabel('2026-08-13', today: day.state), '@13 August 2026');
+      });
+    });
+
+    test('it keeps rolling on subsequent nights', () {
+      fakeAsync((async) {
+        var now = DateTime.utc(2026, 8, 14, 17);
+        final day = CurrentDay(clock: () => now);
+        addTearDown(day.dispose);
+        expect(day.state, '2026-08-15');
+
+        // Stepped past the one-second cushion the scheduler adds, and the fake
+        // clock is advanced by exactly what the fake timer elapses so the two
+        // stay in lockstep.
+        const step = Duration(days: 1, seconds: 2);
+        for (var i = 1; i <= 3; i++) {
+          now = now.add(step);
+          async.elapse(step);
+          expect(day.state, jakartaDayKey(now));
+        }
+      });
+    });
+
+    // A suspended phone or a throttled tab sleeps through the timer entirely.
+    test('resuming after a missed rollover catches up', () {
+      fakeAsync((async) {
+        var now = DateTime.utc(2026, 8, 14, 16);
+        final day = CurrentDay(clock: () => now);
+        addTearDown(day.dispose);
+        expect(day.state, '2026-08-14');
+
+        // Jump three days without letting any timer run, as a suspended app
+        // would, then do what the lifecycle observer does on resume.
+        now = now.add(const Duration(days: 3));
+        day.refresh();
+
+        expect(day.state, '2026-08-17');
+      });
+    });
+
+    test('a new @Today row appears at the top of the table', () {
+      expect(dayKeysFrom('2026-08-14', 3),
+          ['2026-08-14', '2026-08-13', '2026-08-12']);
+      // After the rollover the same call yields one more row, led by the new day.
+      expect(dayKeysFrom('2026-08-15', 3),
+          ['2026-08-15', '2026-08-14', '2026-08-13']);
+    });
+
+    // The bug the watch exists to prevent: a screen built before midnight
+    // would otherwise hold the old key and mark the wrong day.
+    test('a tick after the rollover lands on the new day', () async {
+      final habit = await controller.create(name: 'Read');
+      const before = '2026-08-14';
+      const after = '2026-08-15';
+
+      await controller.toggle(habit.id, before);
+      await controller.toggle(habit.id, after);
+
+      expect(DatabaseHelper.instance.getHabitDay(before)!.completed, [habit.id]);
+      expect(DatabaseHelper.instance.getHabitDay(after)!.completed, [habit.id]);
+      expect(DatabaseHelper.instance.habitDaysBox.length, 2);
     });
   });
 

@@ -71,22 +71,24 @@ final _fullMonth = DateFormat('MMMM y');
 /// The chart series for the selected range, oldest bucket first.
 final habitSeriesProvider = FutureProvider<List<HabitBucket>>((ref) async {
   final range = ref.watch(habitRangeProvider);
+  // Watched, not read: at midnight the whole series shifts by one bucket.
+  final today = ref.watch(currentDayProvider);
   final habits = await ref.watch(habitsProvider.future);
   final days = await ref.watch(habitDaysProvider.future);
 
   return range.isMonthly
       ? _monthlyBuckets(habits, days)
-      : _dailyBuckets(range, habits, days);
+      : _dailyBuckets(range, today, habits, days);
 });
 
 List<HabitBucket> _dailyBuckets(
   HabitRange range,
+  String today,
   List<Habit> habits,
   Map<String, HabitDay> days,
 ) {
-  final today = jakartaDayKey();
-  // recentDayKeys counts back from today, so reverse for a left-to-right axis.
-  final keys = recentDayKeys(range.days).reversed.toList();
+  // Counts back from today, so reverse for a left-to-right axis.
+  final keys = dayKeysFrom(today, range.days).reversed.toList();
 
   return [
     for (final key in keys)

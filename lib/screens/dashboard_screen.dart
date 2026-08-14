@@ -10,7 +10,6 @@ import '../programs/calendar/calendar_provider.dart';
 import '../programs/calendar/event_category.dart';
 import '../programs/habits/habit_chart.dart';
 import '../programs/habits/habit_provider.dart';
-import '../programs/habits/habit_time.dart';
 import '../theme/af_breakpoints.dart';
 import '../theme/af_text.dart';
 import '../theme/af_tokens.dart';
@@ -261,7 +260,9 @@ class _HabitsSection extends ConsumerWidget {
     final t = context.af;
     final habits = ref.watch(habitsProvider).valueOrNull ?? const <Habit>[];
     final marks = ref.watch(todayMarksProvider).valueOrNull ?? const <String>{};
-    final today = jakartaDayKey();
+    // Watched, so a tab left open past midnight ticks the new day rather than
+    // writing into the day key this closure was built with.
+    final today = ref.watch(currentDayProvider);
 
     return AFPanel(
       label: 'Habits today',

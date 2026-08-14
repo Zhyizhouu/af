@@ -9,6 +9,7 @@ import 'db/database_helper.dart';
 import 'db/seed_habits.dart';
 import 'db/seed_template.dart';
 import 'db/sync_migration.dart';
+import 'programs/habits/habit_provider.dart';
 import 'providers/theme_provider.dart';
 import 'sync/sync_controller.dart';
 import 'theme/app_theme.dart';
@@ -28,11 +29,38 @@ void main() async {
   runApp(const ProviderScope(child: AFApp()));
 }
 
-class AFApp extends ConsumerWidget {
+class AFApp extends ConsumerStatefulWidget {
   const AFApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AFApp> createState() => _AFAppState();
+}
+
+class _AFAppState extends ConsumerState<AFApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// The midnight timer only fires if the app was awake to run it. A suspended
+  /// phone or a throttled browser tab will have slept straight through the
+  /// rollover, so coming back to the foreground re-checks the date.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(currentDayProvider.notifier).refresh();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // Pull the account's data down as soon as somebody signs in, including on
     // a cold start where the session was restored from disk.
     ref.listen(authStateProvider, (previous, next) {

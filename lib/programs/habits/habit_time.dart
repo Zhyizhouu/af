@@ -34,20 +34,41 @@ String jakartaDayKey([DateTime? instant]) {
 /// A day key as a naive midnight [DateTime], for formatting and arithmetic.
 DateTime dayFromKey(String key) => _keyFormat.parse(key);
 
-/// The [count] most recent day keys ending today, newest first.
+/// The [count] day keys ending at [todayKey], newest first.
 ///
-/// Like every `now` in this file, the argument is a real instant in any zone —
-/// not an already-shifted Jakarta clock. Conversion happens here, once.
-List<String> recentDayKeys(int count, {DateTime? now}) {
-  // Sampled once: reading the clock per field could straddle midnight and
-  // produce a list that skips or repeats a day.
-  final moment =
-      now == null ? jakartaNow() : now.toUtc().add(jakartaOffset);
-  final today = DateTime(moment.year, moment.month, moment.day);
+/// Takes the day rather than reading the clock, so the rows a view lists and
+/// the labels it puts on them come from one value. Deriving them separately
+/// lets them disagree for the minute either side of midnight.
+List<String> dayKeysFrom(String todayKey, int count) {
+  final today = dayFromKey(todayKey);
   return [
     for (var i = 0; i < count; i++)
       _keyFormat.format(today.subtract(Duration(days: i))),
   ];
+}
+
+/// The [count] most recent day keys ending today, newest first.
+///
+/// Like every `now` in this file, the argument is a real instant in any zone —
+/// not an already-shifted Jakarta clock. Conversion happens here, once.
+List<String> recentDayKeys(int count, {DateTime? now}) =>
+    dayKeysFrom(jakartaDayKey(now), count);
+
+/// How long until the Jakarta day rolls over.
+///
+/// Used to schedule the rollover rather than polling: a timer that sleeps until
+/// the boundary costs nothing and lands on it exactly, where a one-minute poll
+/// would leave the table showing the wrong `@Today` for up to a minute.
+Duration untilNextJakartaMidnight([DateTime? instant]) {
+  final jakarta =
+      instant == null ? jakartaNow() : instant.toUtc().add(jakartaOffset);
+  // Built with DateTime.utc, not DateTime: the shifted clock above carries the
+  // UTC flag, and the plain constructor would make a *local* midnight. The
+  // subtraction would then silently fold in the machine's own offset, so the
+  // rollover would fire hours early or late everywhere except UTC+0.
+  final nextMidnight = DateTime.utc(jakarta.year, jakarta.month, jakarta.day)
+      .add(const Duration(days: 1));
+  return nextMidnight.difference(jakarta);
 }
 
 /// `@Today`, `@Yesterday`, or `@14 August 2026`.
@@ -55,8 +76,8 @@ List<String> recentDayKeys(int count, {DateTime? now}) {
 /// The two relative labels are the only ones worth special-casing: they are the
 /// rows anyone actually ticks. Everything older reads better as a real date
 /// than as "@5 days ago", which forces the reader to do arithmetic.
-String habitDayLabel(String key, {DateTime? now}) {
-  final today = jakartaDayKey(now);
+String habitDayLabel(String key, {String? today, DateTime? now}) {
+  today ??= jakartaDayKey(now);
   if (key == today) return '@Today';
 
   final yesterday = _keyFormat.format(

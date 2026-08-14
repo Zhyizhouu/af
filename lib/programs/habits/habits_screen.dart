@@ -356,7 +356,10 @@ class _MarksTable extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = context.af;
     final days = ref.watch(habitDaysProvider).valueOrNull ?? const {};
-    final keys = recentDayKeys(range.days);
+    // At midnight this rebuilds, a fresh @Today row appears at the top, and the
+    // row that held it relabels itself to @Yesterday.
+    final today = ref.watch(currentDayProvider);
+    final keys = dayKeysFrom(today, range.days);
 
     final fixed = _habitWidth * habits.length + _dateWidth + _marksWidth;
 
@@ -400,6 +403,7 @@ class _MarksTable extends ConsumerWidget {
                               Divider(height: 1, color: t.line),
                           itemBuilder: (context, index) => _MarksRow(
                             dayKey: keys[index],
+                            today: today,
                             habits: habits,
                             nameWidth: nameWidth,
                             completed: (days[keys[index]]?.completed ??
@@ -471,6 +475,7 @@ class _HeaderRow extends StatelessWidget {
 
 class _MarksRow extends ConsumerWidget {
   final String dayKey;
+  final String today;
   final List<Habit> habits;
   final double nameWidth;
   final Set<String> completed;
@@ -478,6 +483,7 @@ class _MarksRow extends ConsumerWidget {
 
   const _MarksRow({
     required this.dayKey,
+    required this.today,
     required this.habits,
     required this.nameWidth,
     required this.completed,
@@ -489,7 +495,7 @@ class _MarksRow extends ConsumerWidget {
     final t = context.af;
     final live = completed.where((id) => habits.any((h) => h.id == id)).length;
     final percent = habits.isEmpty ? 0 : (live * 100 / habits.length).round();
-    final label = habitDayLabel(dayKey);
+    final label = habitDayLabel(dayKey, today: today);
     final relative = label == '@Today' || label == '@Yesterday';
 
     return SizedBox(
