@@ -166,11 +166,14 @@ void main() {
     });
 
     // Firebase is absent in tests, so nobody is signed in and every program
-    // tile must fall back to its locked state rather than erroring.
+    // in the gallery must fall back to its locked state rather than erroring.
+    // The gallery carries no prose, so the lock badge is the whole signal.
     testWidgets('dashboard locks programs when signed out', (tester) async {
       await _pump(tester, const DashboardScreen(), size: _desktop);
-      expect(find.text('SIGN IN →'), findsWidgets);
-      expect(find.textContaining('account required'), findsWidgets);
+      expect(
+        find.byIcon(Icons.lock_outline),
+        findsNWidgets(afPrograms.where((p) => p.requiresAuth).length),
+      );
     });
   });
 

@@ -50,13 +50,24 @@ class AFGlassIcon extends StatefulWidget {
   /// `oklch(0.9 0.19 150)` — its stroke and glow.
   final Color tintBright;
 
+  /// The plate the glass is poured onto, `#08090D` on the board.
+  ///
+  /// An icon owns its background the way a home-screen icon does — without
+  /// this the white glass would simply tint whatever is behind it, which turns
+  /// the tile into a grey smudge on AF's light desk. Pass `transparent` for
+  /// true glass over rich content, and turn [frosted] on to go with it.
+  final Color ground;
+
   /// Blurs whatever sits behind the tile, which is what makes the pane read as
-  /// glass rather than as a grey box. Costs a saveLayer, and buys nothing over
-  /// a flat background — turn it off for icons sitting on a plain surface.
+  /// glass rather than as a grey box. Costs a saveLayer, and buys nothing
+  /// behind an opaque [ground] — leave it off unless the plate is see-through.
   final bool frosted;
 
   /// The board's `sweep` keyframe: a highlight raked across on pointer enter.
   final bool hoverSheen;
+
+  /// The board's hover state: a 6px lift on a deeper shadow.
+  final bool hoverLift;
 
   const AFGlassIcon({
     super.key,
@@ -64,8 +75,10 @@ class AFGlassIcon extends StatefulWidget {
     this.size = 212,
     this.tint = const Color(0xFF5CE483),
     this.tintBright = const Color(0xFF70FF98),
-    this.frosted = true,
+    this.ground = const Color(0xFF08090D),
+    this.frosted = false,
     this.hoverSheen = true,
+    this.hoverLift = true,
   });
 
   /// The board's tile is 212px with a 48px radius; every measurement below is
@@ -85,6 +98,8 @@ class _AFGlassIconState extends State<AFGlassIcon>
     duration: const Duration(milliseconds: 900),
   );
 
+  bool _hovered = false;
+
   @override
   void dispose() {
     _sheen.dispose();
@@ -99,6 +114,7 @@ class _AFGlassIconState extends State<AFGlassIcon>
     Widget tile = Stack(
       fit: StackFit.expand,
       children: [
+        ColoredBox(color: widget.ground),
         // linear-gradient(150deg, …) — CSS angles run clockwise from north, so
         // 150° points down and to the right.
         DecoratedBox(
@@ -160,7 +176,12 @@ class _AFGlassIconState extends State<AFGlassIcon>
       );
     }
 
-    Widget result = DecoratedBox(
+    final lifted = widget.hoverLift && _hovered;
+
+    Widget result = AnimatedContainer(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+      transform: Matrix4.translationValues(0, lifted ? -6 * k : 0, 0),
       decoration: BoxDecoration(
         borderRadius: radius,
         border: Border.all(
@@ -169,9 +190,9 @@ class _AFGlassIconState extends State<AFGlassIcon>
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xA6000000),
-            offset: Offset(0, 26 * k),
-            blurRadius: 50 * k,
+            color: lifted ? const Color(0xB3000000) : const Color(0xA6000000),
+            offset: Offset(0, (lifted ? 34 : 26) * k),
+            blurRadius: (lifted ? 60 : 50) * k,
             spreadRadius: -18 * k,
           ),
         ],
@@ -184,9 +205,15 @@ class _AFGlassIconState extends State<AFGlassIcon>
       ),
     );
 
-    if (widget.hoverSheen) {
+    if (widget.hoverSheen || widget.hoverLift) {
       result = MouseRegion(
-        onEnter: (_) => _sheen.forward(from: 0),
+        onEnter: (_) {
+          if (widget.hoverSheen) _sheen.forward(from: 0);
+          if (widget.hoverLift) setState(() => _hovered = true);
+        },
+        onExit: (_) {
+          if (widget.hoverLift) setState(() => _hovered = false);
+        },
         child: result,
       );
     }

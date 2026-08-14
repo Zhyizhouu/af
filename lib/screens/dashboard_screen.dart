@@ -87,6 +87,10 @@ class DashboardScreen extends ConsumerWidget {
 
 // ---- section 1: programs ----
 
+/// The launcher proper: a gallery of marks, the way a home screen presents
+/// apps. No taglines, no descriptions, no per-program read-outs — the mark and
+/// its name are the whole affordance, and the two panels underneath already
+/// answer "is there anything to do?".
 class _ProgramsSection extends StatelessWidget {
   final double width;
   final bool signedIn;
@@ -95,29 +99,26 @@ class _ProgramsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final columns = width >= 1300
-        ? 4
-        : width >= AFBreakpoints.desktop
-            ? 3
-            : width >= AFBreakpoints.twoColumn
-                ? 2
-                : 1;
-    final tileWidth =
-        (width - DashboardScreen._gap * (columns - 1)) / columns;
+    final compact = width < AFBreakpoints.twoColumn;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AFPanelLabel(label: 'Programs', count: '${afPrograms.length}'),
-        const SizedBox(height: 12),
+        const SizedBox(height: 20),
+        // Left-aligned and free-flowing rather than stretched to fill: a
+        // gallery reads as a shelf of apps, not as a row of panels.
+        // Sized so three marks still make one row on a 390px phone, which is
+        // what keeps it reading as a home screen rather than a wrapped list.
         Wrap(
-          spacing: DashboardScreen._gap,
-          runSpacing: DashboardScreen._gap,
+          spacing: compact ? 16 : 30,
+          runSpacing: 24,
           children: [
             for (final program in afPrograms)
-              SizedBox(
-                width: tileWidth,
-                child: _ProgramTile(program: program, signedIn: signedIn),
+              _ProgramTile(
+                program: program,
+                signedIn: signedIn,
+                size: compact ? 72 : 96,
               ),
           ],
         ),
@@ -126,128 +127,102 @@ class _ProgramsSection extends StatelessWidget {
   }
 }
 
+/// One app in the gallery: the mark, its name, and a corner badge when it
+/// cannot be opened.
 class _ProgramTile extends StatelessWidget {
   final AFProgram program;
   final bool signedIn;
+  final double size;
 
-  const _ProgramTile({required this.program, required this.signedIn});
+  const _ProgramTile({
+    required this.program,
+    required this.signedIn,
+    required this.size,
+  });
 
   @override
   Widget build(BuildContext context) {
     final t = context.af;
     final locked = program.requiresAuth && !signedIn;
-    final glyph = AFGlassGlyph.forProgram(program.id);
+    final dimmed = locked || !program.available;
+    final glyph = AFGlassGlyph.forProgram(program.id) ?? AFGlassGlyph.af;
 
-    return AFPanel(
-      label: program.name,
-      countWidget: AFChip(
-        label: locked
-            ? 'locked'
-            : (program.available ? 'ready' : 'soon'),
-        color: locked ? t.warn : (program.available ? t.ok : t.muted),
-      ),
-      // Locked tiles stay tappable on purpose: the tap is how someone
-      // discovers they need an account, so it routes to sign-in.
-      onTap: locked
-          ? () => context.go('/signin')
-          : (program.available ? () => context.go(program.route) : null),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              if (glyph != null) ...[
-                // The mark sits on the panel, which is flat — nothing behind it
-                // to refract, so the backdrop blur is dropped here.
-                AFGlassIcon(glyph: glyph, size: 46, frosted: false),
-                const SizedBox(width: 14),
+    return SizedBox(
+      width: size + 30,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          // Locked marks stay tappable on purpose: the tap is how someone
+          // discovers they need an account, so it routes to sign-in.
+          onTap: locked
+              ? () => context.go('/signin')
+              : (program.available ? () => context.go(program.route) : null),
+          borderRadius: t.borderRadius,
+          highlightColor: t.accentSoft,
+          splashColor: t.accentSoft,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // The mark is never faded. A dark plate dimmed against the
+                    // light desk goes muddy grey and reads as broken rather
+                    // than as unavailable; the badge and the muted name carry
+                    // that instead, which is how a home screen does it too.
+                    AFGlassIcon(glyph: glyph, size: size),
+                    if (dimmed)
+                      Positioned(
+                        right: -3,
+                        bottom: -3,
+                        child: _StateBadge(
+                          icon: locked ? Icons.lock_outline : Icons.schedule,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  program.name.toUpperCase(),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AFText.mono(
+                    size: 10.5,
+                    color: dimmed ? t.muted : t.ink,
+                    weight: FontWeight.w600,
+                    letterSpacing: 1.1,
+                  ),
+                ),
               ],
-              Expanded(
-                child: Text(
-                  program.tagline,
-                  style: AFText.meta(context, color: t.accent),
-                ),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 12),
-          Text(program.description, style: AFText.body(context)),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: locked
-                    ? Row(
-                        children: [
-                          Icon(Icons.lock_outline, size: 13, color: t.muted),
-                          const SizedBox(width: 5),
-                          Flexible(
-                            child: Text(
-                              'account required',
-                              style: AFText.meta(context),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      )
-                    : _ProgramStatus(programId: program.id),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                locked
-                    ? 'SIGN IN →'
-                    : (program.available ? 'OPEN →' : 'SOON'),
-                style: AFText.mono(
-                  size: 12,
-                  color: locked
-                      ? t.warn
-                      : (program.available ? t.accent : t.muted),
-                  weight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-/// A live read-out per program, in the spirit of the QR Generator's always-on
-/// counters. Programs without a meaningful one render nothing.
-class _ProgramStatus extends ConsumerWidget {
-  final String programId;
+/// The marker riding the corner of a mark that cannot be opened — locked
+/// behind an account, or not built yet.
+class _StateBadge extends StatelessWidget {
+  final IconData icon;
 
-  const _ProgramStatus({required this.programId});
+  const _StateBadge({required this.icon});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final entries = ref.watch(agendaProvider).valueOrNull;
-    if (entries == null) return const SizedBox.shrink();
-
-    final today = dayKey(DateTime.now());
-    final todays = entries.where((e) => isSameDay(e.start, today));
-
-    final String label;
-    switch (programId) {
-      case 'checklists':
-        final count =
-            todays.where((e) => e.kind == AgendaKind.session).length;
-        label = count == 0 ? 'nothing scheduled' : '$count today';
-      case 'calendar':
-        final count = todays.where((e) => e.kind == AgendaKind.event).length;
-        label = count == 0 ? 'no events today' : '$count event'
-            '${count == 1 ? '' : 's'} today';
-      default:
-        return const SizedBox.shrink();
-    }
-
-    return Text(
-      label,
-      style: AFText.meta(context),
-      overflow: TextOverflow.ellipsis,
+  Widget build(BuildContext context) {
+    final t = context.af;
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: t.panel,
+        borderRadius: t.borderRadius,
+        border: Border.all(color: t.lineStrong),
+      ),
+      child: Icon(icon, size: 11, color: t.muted),
     );
   }
 }
