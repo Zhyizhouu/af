@@ -81,7 +81,7 @@ func (f FFmpeg) Probe(ctx context.Context, path string) (convert.Media, error) {
 	return media, nil
 }
 
-func (f FFmpeg) ToMP3(
+func (f FFmpeg) Transcode(
 	ctx context.Context,
 	inPath, outPath string,
 	opt convert.Options,
@@ -95,23 +95,7 @@ func (f FFmpeg) ToMP3(
 		return err
 	}
 
-	cmd := exec.CommandContext(ctx, f.FFmpegPath,
-		"-hide_banner",
-		// Without this a prompt on a malformed file waits forever on a stdin
-		// nobody is attached to.
-		"-nostdin",
-		"-y",
-		"-i", inPath,
-		// Drops video and cover art alike: the output is an audio file, and a
-		// video stream in an MP3 container is what breaks fussy players.
-		"-vn",
-		"-c:a", "libmp3lame",
-		"-b:a", strconv.Itoa(opt.Bitrate)+"k",
-		"-map_metadata", "0",
-		"-progress", "pipe:1",
-		"-nostats",
-		outPath,
-	)
+	cmd := exec.CommandContext(ctx, f.FFmpegPath, arguments(inPath, outPath, opt)...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -131,6 +115,45 @@ func (f FFmpeg) ToMP3(
 		return fmt.Errorf("ffmpeg: %w: %s", err, tail(stderr.String()))
 	}
 	return nil
+}
+
+// arguments builds the command line for one conversion.
+//
+// Every value here comes from the format registry or from a bitrate the API
+// has already checked against a fixed list, so nothing a caller sends can
+// become an argument of its own.
+func arguments(inPath, outPath string, opt convert.Options) []string {
+	args := []string{
+		"-hide_banner",
+		// Without this a prompt on a malformed file waits forever on a stdin
+		// nobody is attached to.
+		"-nostdin",
+		"-y",
+		"-i", inPath,
+		// Drops video and cover art alike: the output is an audio file, and a
+		// stray video stream in an audio container is what breaks fussy
+		// players. It is also why a video upload converts fine — the audio
+		// track is simply the only one kept.
+		"-vn",
+		"-c:a", opt.Format.Codec,
+	}
+
+	// Lossless codecs reject -b:a outright rather than ignoring it, so the
+	// flag has to be absent, not zero.
+	if opt.Format.Lossy {
+		args = append(args, "-b:a", strconv.Itoa(opt.Bitrate)+"k")
+	}
+
+	args = append(args,
+		// Carries title, artist and the rest across where the target container
+		// has somewhere to put them. WAV has almost nowhere, which is fine —
+		// ffmpeg drops what will not fit rather than failing.
+		"-map_metadata", "0",
+		"-progress", "pipe:1",
+		"-nostats",
+		outPath,
+	)
+	return args
 }
 
 // readProgress consumes ffmpeg's `-progress` stream.

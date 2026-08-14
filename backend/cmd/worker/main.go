@@ -65,7 +65,7 @@ func run(log *slog.Logger) error {
 		MaxConcurrentActivityExecutionSize: cfg.WorkerMaxConcurrent,
 	})
 
-	w.RegisterWorkflow(convert.ToMP3)
+	w.RegisterWorkflow(convert.Audio)
 	w.RegisterActivity(&convert.Activities{
 		Blobs:      blobs,
 		Transcoder: media.New(os.Getenv("AF_FFMPEG_PATH"), os.Getenv("AF_FFPROBE_PATH")),

@@ -10,38 +10,43 @@ import '../../widgets/af_field.dart';
 import '../../widgets/af_panel.dart';
 import '../../widgets/af_scaffold.dart';
 import '../../widgets/af_segmented.dart';
-import 'mp3_api.dart';
-import 'mp3_job_panel.dart';
+import 'audio_api.dart';
+import 'audio_job_panel.dart';
 
-/// AF · MP3 — hand it a file, get an MP3 back.
+/// AF · Audio — hand it a file, get it back in another format.
 ///
 /// Unlike every other program in AF this one is not local: the conversion runs
 /// on a worker, orchestrated by Temporal, and this screen only uploads, polls
 /// and downloads. That is why it is the one page that can say "not reachable".
-class Mp3Screen extends StatefulWidget {
+class AudioScreen extends StatefulWidget {
   /// Injectable so tests can drive the whole flow without a container running.
-  final Mp3Api? api;
+  final AudioApi? api;
 
-  const Mp3Screen({super.key, this.api});
+  const AudioScreen({super.key, this.api});
 
   @override
-  State<Mp3Screen> createState() => _Mp3ScreenState();
+  State<AudioScreen> createState() => _AudioScreenState();
 }
 
-class _Mp3ScreenState extends State<Mp3Screen> {
+class _AudioScreenState extends State<AudioScreen> {
   /// Fast enough that a short file does not look stuck, slow enough that a
   /// long one is not a thousand requests.
   static const _pollEvery = Duration(milliseconds: 1200);
 
-  late final Mp3Api _api = widget.api ?? Mp3Api();
+  /// Formats per row in the picker. Six across is unreadable at 390px, and
+  /// letting the row scroll would hide options behind a gesture.
+  static const _perRow = 3;
 
-  Mp3Limits? _limits;
+  late final AudioApi _api = widget.api ?? AudioApi();
+
+  AudioLimits? _limits;
+  String _format = 'mp3';
   int _bitrate = 192;
 
   Uint8List? _bytes;
   String _fileName = '';
 
-  Mp3Job? _job;
+  AudioJob? _job;
   Timer? _poll;
 
   String? _error;
@@ -70,16 +75,21 @@ class _Mp3ScreenState extends State<Mp3Screen> {
       if (!mounted) return;
       setState(() {
         _limits = limits;
+        if (limits.formatById(limits.defaultFormat) != null) {
+          _format = limits.defaultFormat;
+        }
         if (limits.bitrates.contains(limits.defaultBitrate)) {
           _bitrate = limits.defaultBitrate;
         }
       });
-    } on Mp3Error catch (error) {
+    } on AudioError catch (error) {
       // Not fatal on its own — the converter may simply be down. Saying so up
       // front beats letting somebody pick a 200MB file and find out after.
       if (mounted) setState(() => _error = error.message);
     }
   }
+
+  AudioFormat? get _selected => _limits?.formatById(_format);
 
   // ---- actions ----
 
@@ -124,12 +134,13 @@ class _Mp3ScreenState extends State<Mp3Screen> {
       final job = await _api.submit(
         bytes: bytes,
         fileName: _fileName,
+        format: _format,
         bitrate: _bitrate,
       );
       if (!mounted) return;
       setState(() => _job = job);
       _startPolling(job.id);
-    } on Mp3Error catch (error) {
+    } on AudioError catch (error) {
       if (mounted) setState(() => _error = error.message);
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -145,7 +156,7 @@ class _Mp3ScreenState extends State<Mp3Screen> {
         if (!mounted) return timer.cancel();
         setState(() => _job = job);
         if (!job.running) timer.cancel();
-      } on Mp3Error catch (error) {
+      } on AudioError catch (error) {
         timer.cancel();
         if (!mounted) return;
         setState(() {
@@ -172,10 +183,12 @@ class _Mp3ScreenState extends State<Mp3Screen> {
       final note = await deliverFile(
         bytes: bytes,
         fileName: job.resultName,
-        mimeType: 'audio/mpeg',
+        mimeType: _limits?.formatById(job.format) == null
+            ? 'application/octet-stream'
+            : _mimeFor(job.format),
       );
       if (note != null && mounted) _showToast(note);
-    } on Mp3Error catch (error) {
+    } on AudioError catch (error) {
       if (mounted) {
         setState(() {
           _error = error.message;
@@ -187,6 +200,18 @@ class _Mp3ScreenState extends State<Mp3Screen> {
     }
   }
 
+  /// Only used for the share sheet on native builds; the browser reads the
+  /// server's own Content-Type on the download instead.
+  String _mimeFor(String format) => switch (format) {
+        'mp3' => 'audio/mpeg',
+        'wav' => 'audio/wav',
+        'flac' => 'audio/flac',
+        'm4a' => 'audio/mp4',
+        'ogg' => 'audio/ogg',
+        'opus' => 'audio/opus',
+        _ => 'application/octet-stream',
+      };
+
   Future<void> _cancel() async {
     final job = _job;
     if (job == null) return;
@@ -195,7 +220,7 @@ class _Mp3ScreenState extends State<Mp3Screen> {
     try {
       await _api.cancel(job.id);
       if (mounted) setState(() => _job = null);
-    } on Mp3Error catch (error) {
+    } on AudioError catch (error) {
       if (mounted) setState(() => _error = error.message);
     }
   }
@@ -216,8 +241,8 @@ class _Mp3ScreenState extends State<Mp3Screen> {
     final limits = _limits;
 
     return AFScaffold(
-      title: 'AF · MP3',
-      tagline: 'anything in, mp3 out',
+      title: 'AF · Audio',
+      tagline: 'anything in, any format out',
       onBack: () => Navigator.of(context).maybePop(),
       footer: AFFooter(
         limits == null
@@ -231,7 +256,7 @@ class _Mp3ScreenState extends State<Mp3Screen> {
           _sourcePanel(),
           if (job != null) ...[
             const SizedBox(height: 18),
-            Mp3JobPanel(
+            AudioJobPanel(
               job: job,
               busy: _busy,
               onDownload: _download,
@@ -247,7 +272,7 @@ class _Mp3ScreenState extends State<Mp3Screen> {
 
   Widget _sourcePanel() {
     final bytes = _bytes;
-    final rates = _limits?.bitrates ?? const [128, 192, 256, 320];
+    final selected = _selected;
 
     return AFPanel(
       label: 'Source',
@@ -267,25 +292,79 @@ class _Mp3ScreenState extends State<Mp3Screen> {
             ),
           ),
           AFField(
-            label: 'Bitrate',
-            value: '$_bitrate kbit/s',
-            child: AFSegmented<int>(
-              segments: [
-                for (final rate in rates) AFSegment(value: rate, label: '$rate'),
-              ],
-              value: _bitrate,
-              onChanged:
-                  _busy ? (_) {} : (rate) => setState(() => _bitrate = rate),
-            ),
+            label: 'Convert to',
+            value: selected?.label ?? _format.toUpperCase(),
+            child: _formatPicker(),
           ),
+          if (selected != null && selected.note.isNotEmpty)
+            AFHint(selected.note, tip: true),
+          // Hidden rather than disabled for the lossless formats: a bitrate
+          // control that changes nothing is worse than no control.
+          if (selected?.lossy ?? true)
+            AFField(
+              label: 'Bitrate',
+              value: '$_bitrate kbit/s',
+              child: AFSegmented<int>(
+                segments: [
+                  for (final rate in _limits?.bitrates ?? const [128, 192, 256, 320])
+                    AFSegment(value: rate, label: '$rate'),
+                ],
+                value: _bitrate,
+                onChanged:
+                    _busy ? (_) {} : (rate) => setState(() => _bitrate = rate),
+              ),
+            ),
           const SizedBox(height: 20),
           AFButton(
-            label: _busy ? 'Working…' : 'Convert to MP3',
+            label: _busy
+                ? 'Working…'
+                : 'Convert to ${selected?.label ?? _format.toUpperCase()}',
             expand: true,
             onPressed: bytes == null || _busy ? null : _convert,
           ),
         ],
       ),
+    );
+  }
+
+  /// The format list, chunked into rows.
+  ///
+  /// Two stacked [AFSegmented]s sharing one value read as a single control:
+  /// whichever row holds the selection lights up, and the other simply has
+  /// nothing selected.
+  Widget _formatPicker() {
+    final formats = _limits?.formats ?? const <AudioFormat>[];
+    if (formats.isEmpty) {
+      return AFSegmented<String>(
+        segments: [AFSegment(value: _format, label: _format.toUpperCase())],
+        value: _format,
+        onChanged: (_) {},
+      );
+    }
+
+    final rows = <Widget>[];
+    for (var start = 0; start < formats.length; start += _perRow) {
+      final slice = formats.sublist(
+        start,
+        (start + _perRow).clamp(0, formats.length),
+      );
+      if (rows.isNotEmpty) rows.add(const SizedBox(height: 6));
+      rows.add(
+        AFSegmented<String>(
+          segments: [
+            for (final format in slice)
+              AFSegment(value: format.id, label: format.label),
+          ],
+          value: _format,
+          onChanged: _busy ? (_) {} : (id) => setState(() => _format = id),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: rows,
     );
   }
 }

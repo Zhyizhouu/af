@@ -29,6 +29,7 @@ type jobResponse struct {
 	Percent      float64 `json:"percent"`
 	SourceName   string  `json:"sourceName"`
 	ResultName   string  `json:"resultName,omitempty"`
+	Format       string  `json:"format"`
 	Bitrate      int     `json:"bitrate"`
 	Seconds      float64 `json:"seconds"`
 	SizeBytes    int64   `json:"sizeBytes"`
@@ -37,20 +38,25 @@ type jobResponse struct {
 }
 
 // limitsResponse lets the UI describe the rules without holding a copy of
-// them. Same principle as the reset cooldown: the server owns the policy, the
-// client renders whatever it is told.
+// them — which formats exist, what they are called, which of them take a
+// bitrate. Same principle as the reset cooldown: the server owns the policy,
+// the client renders whatever it is told.
 type limitsResponse struct {
-	MaxUploadBytes   int64 `json:"maxUploadBytes"`
-	Bitrates         []int `json:"bitrates"`
-	DefaultBitrate   int   `json:"defaultBitrate"`
-	ResultTTLSeconds int   `json:"resultTtlSeconds"`
+	MaxUploadBytes   int64            `json:"maxUploadBytes"`
+	Formats          []convert.Format `json:"formats"`
+	DefaultFormat    string           `json:"defaultFormat"`
+	Bitrates         []int            `json:"bitrates"`
+	DefaultBitrate   int              `json:"defaultBitrate"`
+	ResultTTLSeconds int              `json:"resultTtlSeconds"`
 }
 
-func workflowID(jobID string) string { return "mp3-" + jobID }
+func workflowID(jobID string) string { return "audio-" + jobID }
 
 func (s *Server) handleLimits(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, limitsResponse{
 		MaxUploadBytes:   s.cfg.MaxUploadBytes,
+		Formats:          convert.Formats,
+		DefaultFormat:    convert.DefaultFormat,
 		Bitrates:         convert.Bitrates,
 		DefaultBitrate:   convert.DefaultBitrate,
 		ResultTTLSeconds: int(s.cfg.ResultTTL.Seconds()),
@@ -63,9 +69,15 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A query parameter rather than a form field, so the body can be streamed
+	// Query parameters rather than form fields, so the body can be streamed
 	// straight through to storage without first hunting for fields that may
 	// arrive after the file.
+	format, err := convert.FormatByID(r.URL.Query().Get("format"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "That is not a format this converter produces.")
+		return
+	}
+
 	bitrate := convert.DefaultBitrate
 	if raw := r.URL.Query().Get("bitrate"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
@@ -75,6 +87,12 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		bitrate = parsed
+	}
+	// Lossless output has no bitrate. Zeroing it here rather than carrying a
+	// default that was never applied is what lets the UI say "WAV" instead of
+	// "WAV at 192 kbit/s".
+	if !format.Lossy {
+		bitrate = 0
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, s.cfg.MaxUploadBytes)
@@ -124,6 +142,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		OwnerUID:   uid,
 		SourceKey:  sourceKey,
 		SourceName: sourceName,
+		Format:     format.ID,
 		Bitrate:    bitrate,
 		ResultTTL:  s.cfg.ResultTTL,
 	}
@@ -135,7 +154,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		// it owns the timer that deletes the file. Two hours of headroom on
 		// top is the encode budget.
 		WorkflowExecutionTimeout: s.cfg.ResultTTL + 2*time.Hour,
-	}, convert.ToMP3, request)
+	}, convert.Audio, request)
 	if err != nil {
 		s.log.Error("workflow start failed", "job", jobID, "error", err)
 		// Nothing will ever collect these bytes if no workflow owns them.
@@ -150,6 +169,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		ID:         jobID,
 		Stage:      string(convert.StageQueued),
 		SourceName: sourceName,
+		Format:     format.ID,
 		Bitrate:    bitrate,
 	})
 }
@@ -201,8 +221,13 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer body.Close()
 
+	contentType := "application/octet-stream"
+	if format, err := convert.FormatByID(status.Format); err == nil {
+		contentType = format.MIME
+	}
+
 	header := w.Header()
-	header.Set("Content-Type", "audio/mpeg")
+	header.Set("Content-Type", contentType)
 	if status.SizeBytes > 0 {
 		header.Set("Content-Length", strconv.FormatInt(status.SizeBytes, 10))
 	}
@@ -280,6 +305,7 @@ func (s *Server) present(ctx context.Context, status convert.Status) jobResponse
 		Stage:      string(status.Stage),
 		SourceName: status.SourceName,
 		ResultName: status.ResultName,
+		Format:     status.Format,
 		Bitrate:    status.Bitrate,
 		Seconds:    status.Seconds,
 		SizeBytes:  status.SizeBytes,

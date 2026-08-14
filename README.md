@@ -27,13 +27,32 @@ Instead of juggling printed checklists or memory, proctors can log each exam ses
 - **Local Storage**: Hive (NoSQL, offline-first)
 - **UI**: Material 3, custom glassmorphism components
 
-## MP3 Converter
+## Audio Converter
 
-The MP3 program is the one part of AF that is not local. Conversion runs on a
+The audio program is the one part of AF that is not local. Conversion runs on a
 Go worker with ffmpeg, orchestrated by [Temporal](https://temporal.io), with
 [SeaweedFS](https://github.com/seaweedfs/seaweedfs) holding the bytes. All of
 it lives in `backend/` and `docker-compose.yml`; none of it is involved in the
 Vercel build, which only ever produces `build/web`.
+
+Anything ffmpeg can decode goes in — including video, whose audio track is
+simply the only stream kept. Out comes **MP3, WAV, FLAC, M4A, OGG or Opus**.
+The format list is served from `GET /v1/limits` rather than written into the
+app, because which codecs exist is a property of the worker's ffmpeg build.
+Lossy formats take a bitrate; for the rest the control is hidden rather than
+shown doing nothing.
+
+### What happens to the file you uploaded
+
+It is deleted as soon as the conversion finishes — not when the result
+expires. The workflow drops it on every path out: converted, refused, failed
+or cancelled. Two details make that a guarantee rather than a hope. Cleanup
+runs on a *disconnected* Temporal context, because a cancelled context refuses
+to schedule anything and cancellation is exactly when a half-finished source
+gets left behind. And the delete retries without an attempt limit, so a
+storage outage postpones it instead of losing it. The converted file follows
+the same path when its lifetime is up. `backend/internal/convert/workflow_test.go`
+runs all four exits against Temporal's test environment.
 
 ```
 browser ──upload──▶ api ──▶ SeaweedFS (source)

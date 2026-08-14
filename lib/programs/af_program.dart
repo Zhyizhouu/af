@@ -77,14 +77,15 @@ const List<AFProgram> afPrograms = [
     route: '/habits',
   ),
   AFProgram(
-    id: 'mp3',
-    name: 'MP3 Converter',
-    shortName: 'MP3',
-    tagline: 'anything in, mp3 out',
+    id: 'audio',
+    name: 'Audio Converter',
+    shortName: 'Audio',
+    tagline: 'anything in, any format out',
     description:
-        'Upload audio or video and get an MP3 back. The conversion runs on a '
-        'worker rather than in the browser, so the tab is free while it works.',
-    route: '/mp3',
+        'Upload audio or video and get it back as MP3, WAV, FLAC, M4A, OGG or '
+        'Opus. The conversion runs on a worker rather than in the browser, so '
+        'the tab is free while it works.',
+    route: '/audio',
   ),
   AFProgram(
     id: 'qr',

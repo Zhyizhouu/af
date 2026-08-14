@@ -25,8 +25,8 @@ type Blobs interface {
 type Transcoder interface {
 	Probe(ctx context.Context, path string) (Media, error)
 
-	// ToMP3 writes an MP3 to outPath. progress is called with a fraction
-	// between 0 and 1 as ffmpeg reports it, and may be called many times a
-	// second — the caller decides how often that is worth forwarding.
-	ToMP3(ctx context.Context, inPath, outPath string, opt Options, progress func(float64)) error
+	// Transcode writes opt.Format to outPath. progress is called with a
+	// fraction between 0 and 1 as ffmpeg reports it, and may be called many
+	// times a second — the caller decides how often that is worth forwarding.
+	Transcode(ctx context.Context, inPath, outPath string, opt Options, progress func(float64)) error
 }

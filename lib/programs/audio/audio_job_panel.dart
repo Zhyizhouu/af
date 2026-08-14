@@ -6,20 +6,20 @@ import '../../widgets/af_button.dart';
 import '../../widgets/af_field.dart';
 import '../../widgets/af_panel.dart';
 import '../../widgets/af_progress.dart';
-import 'mp3_api.dart';
+import 'audio_api.dart';
 
 /// One conversion, as a panel.
 ///
 /// Split out from the screen because this is the part with five states —
 /// queued, working, ready, expired, failed — and each of them has to survive a
 /// long filename on a 390px phone.
-class Mp3JobPanel extends StatelessWidget {
-  final Mp3Job job;
+class AudioJobPanel extends StatelessWidget {
+  final AudioJob job;
   final bool busy;
   final VoidCallback? onDownload;
   final VoidCallback? onCancel;
 
-  const Mp3JobPanel({
+  const AudioJobPanel({
     super.key,
     required this.job,
     this.busy = false,
@@ -77,10 +77,15 @@ class Mp3JobPanel extends StatelessWidget {
 
   String _workingLine() {
     final percent = (job.percent * 100).round();
+    final target = job.format.toUpperCase();
     return switch (job.step) {
       'fetching' => 'Reading the upload — $percent%',
       'storing' => 'Storing the result',
-      'encoding' => 'Encoding at ${job.bitrate} kbit/s — $percent%',
+      // Bitrate only means something for the lossy formats; showing "WAV at
+      // 192 kbit/s" would describe a setting that was never applied.
+      'encoding' when job.bitrate > 0 =>
+        'Encoding $target at ${job.bitrate} kbit/s — $percent%',
+      'encoding' => 'Encoding $target — $percent%',
       // No heartbeat has landed yet: the activity is scheduled, not started.
       _ => 'Starting up',
     };

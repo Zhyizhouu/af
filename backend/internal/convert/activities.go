@@ -42,10 +42,19 @@ const heartbeatEvery = time.Second
 // store once per step, and a workflow cannot pass a temp file between
 // activities that may run on different workers.
 func (a *Activities) Convert(ctx context.Context, req Request) (Result, error) {
-	dir, err := os.MkdirTemp(a.TempDir, "af-mp3-")
+	format, err := FormatByID(req.Format)
+	if err != nil {
+		return Result{}, unsupported(err)
+	}
+
+	dir, err := os.MkdirTemp(a.TempDir, "af-audio-")
 	if err != nil {
 		return Result{}, fmt.Errorf("staging directory: %w", err)
 	}
+	// Removes the staged source and output together, on every path out of this
+	// function — including a panic or a cancellation mid-encode. The copies in
+	// the object store are the workflow's problem; these are this activity's,
+	// and they are the ones that would otherwise fill a worker's disk.
 	defer os.RemoveAll(dir)
 
 	// Keeping the original extension matters: ffmpeg picks a demuxer partly by
@@ -65,15 +74,24 @@ func (a *Activities) Convert(ctx context.Context, req Request) (Result, error) {
 		return Result{}, unsupported(errors.New("that file has no audio track to convert"))
 	}
 
-	output := filepath.Join(dir, "output.mp3")
+	output := filepath.Join(dir, "output."+format.Extension)
 	last := time.Now()
-	err = a.Transcoder.ToMP3(ctx, source, output, Options{Bitrate: req.Bitrate}, func(fraction float64) {
-		if time.Since(last) < heartbeatEvery {
-			return
-		}
-		last = time.Now()
-		activity.RecordHeartbeat(ctx, Progress{Step: StepEncoding, Percent: clamp(fraction)})
-	})
+	err = a.Transcoder.Transcode(
+		ctx,
+		source,
+		output,
+		Options{Format: format, Bitrate: req.Bitrate},
+		func(fraction float64) {
+			if time.Since(last) < heartbeatEvery {
+				return
+			}
+			last = time.Now()
+			activity.RecordHeartbeat(ctx, Progress{
+				Step:    StepEncoding,
+				Percent: clamp(fraction),
+			})
+		},
+	)
 	if err != nil {
 		if ctx.Err() != nil {
 			return Result{}, err
@@ -89,9 +107,9 @@ func (a *Activities) Convert(ctx context.Context, req Request) (Result, error) {
 	}
 	defer file.Close()
 
-	name := MP3Name(req.SourceName)
+	name := OutputName(req.SourceName, format)
 	key := ResultKey(req.JobID, name)
-	if err := a.Blobs.Put(ctx, key, file, "audio/mpeg"); err != nil {
+	if err := a.Blobs.Put(ctx, key, file, format.MIME); err != nil {
 		return Result{}, fmt.Errorf("storing the result: %w", err)
 	}
 
@@ -165,15 +183,16 @@ func (r *reporter) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// MP3Name is the download filename: the source's, with its extension swapped.
-func MP3Name(sourceName string) string {
+// OutputName is the download filename: the source's, with its extension
+// swapped for the target format's.
+func OutputName(sourceName string, format Format) string {
 	base := filepath.Base(strings.TrimSpace(sourceName))
 	base = strings.TrimSuffix(base, filepath.Ext(base))
 	base = sanitise(base)
 	if base == "" {
 		base = "audio"
 	}
-	return base + ".mp3"
+	return base + "." + format.Extension
 }
 
 // SafeName makes an uploaded filename safe to paste into an object key, with
@@ -190,20 +209,31 @@ func SafeName(sourceName string) string {
 // sanitise keeps the name recognisable but harmless: it becomes part of an
 // object key and of a Content-Disposition header, so separators and control
 // characters have to go.
+//
+// Runs of replacements collapse to one dash and the edges are trimmed, which
+// is mostly cosmetic — but it also makes the result the same on Windows and
+// Linux. `filepath.Base` treats a backslash as a separator on one and as an
+// ordinary character on the other, and without the collapse that difference
+// would show up in the filename people download.
 func sanitise(name string) string {
 	var b strings.Builder
 	for _, r := range name {
 		switch {
 		case r < 0x20 || r == 0x7f:
+			// Dropped outright — a control character is not standing in for
+			// anything a person typed.
 		case strings.ContainsRune(`/\:*?"<>|`, r):
-			b.WriteRune('-')
+			if !strings.HasSuffix(b.String(), "-") {
+				b.WriteRune('-')
+			}
 		default:
 			b.WriteRune(r)
 		}
 	}
-	trimmed := strings.Trim(b.String(), " .")
+
+	trimmed := strings.Trim(b.String(), " .-")
 	if len(trimmed) > 80 {
-		trimmed = trimmed[:80]
+		trimmed = strings.TrimRight(trimmed[:80], " .-")
 	}
 	return trimmed
 }

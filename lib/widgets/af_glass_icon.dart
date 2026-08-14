@@ -18,7 +18,7 @@ enum AFGlassGlyph {
   checklists,
   calendar,
   habits,
-  mp3,
+  audio,
   qr;
 
   /// The mark for an `AFProgram.id`, or null for a program without one.
@@ -26,7 +26,7 @@ enum AFGlassGlyph {
         'checklists' => AFGlassGlyph.checklists,
         'calendar' => AFGlassGlyph.calendar,
         'habits' => AFGlassGlyph.habits,
-        'mp3' => AFGlassGlyph.mp3,
+        'audio' => AFGlassGlyph.audio,
         'qr' => AFGlassGlyph.qr,
         _ => null,
       };
@@ -38,7 +38,7 @@ enum AFGlassGlyph {
         AFGlassGlyph.checklists => 128 / 212,
         AFGlassGlyph.calendar => 130 / 212,
         AFGlassGlyph.habits => 126 / 212,
-        AFGlassGlyph.mp3 => 126 / 212,
+        AFGlassGlyph.audio => 126 / 212,
         AFGlassGlyph.qr => 124 / 212,
       };
 }
@@ -393,8 +393,8 @@ class _GlyphPainter extends CustomPainter {
         _paintCalendar(canvas);
       case AFGlassGlyph.habits:
         _paintHabits(canvas);
-      case AFGlassGlyph.mp3:
-        _paintMp3(canvas);
+      case AFGlassGlyph.audio:
+        _paintAudio(canvas);
       case AFGlassGlyph.qr:
         _paintQr(canvas);
       case AFGlassGlyph.af:
@@ -486,7 +486,7 @@ class _GlyphPainter extends CustomPainter {
   /// Symmetric about the middle rather than standing on a baseline, which is
   /// what keeps it from reading as the habits chart at favicon size. A musical
   /// note was the other candidate and turns to mush at 32px.
-  void _paintMp3(Canvas canvas) {
+  void _paintAudio(Canvas canvas) {
     const centre = 50.0;
     const width = 9.0;
     const bars = [

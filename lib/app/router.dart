@@ -8,8 +8,8 @@ import '../auth/sign_in_screen.dart';
 import '../programs/calendar/calendar_screen.dart';
 import '../programs/checklist/checklist_detail_screen.dart';
 import '../programs/checklist/checklist_home_screen.dart';
+import '../programs/audio/audio_screen.dart';
 import '../programs/habits/habits_screen.dart';
-import '../programs/mp3/mp3_screen.dart';
 import '../programs/qr/qr_screen.dart';
 import '../screens/dashboard_screen.dart';
 import '../theme/af_tokens.dart';
@@ -104,8 +104,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const HabitsScreen(),
           ),
           GoRoute(
-            path: '/mp3',
-            builder: (context, state) => const Mp3Screen(),
+            path: '/audio',
+            builder: (context, state) => const AudioScreen(),
           ),
           GoRoute(
             path: '/qr',

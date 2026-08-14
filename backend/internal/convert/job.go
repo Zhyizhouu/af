@@ -1,4 +1,4 @@
-// Package convert holds the MP3 conversion use case: the job vocabulary, the
+// Package convert holds the audio conversion use case: the job vocabulary, the
 // ports it needs from the outside world, the Temporal workflow that sequences
 // it, and the activities that do the work.
 //
@@ -21,9 +21,7 @@ type Stage string
 
 const (
 	StageQueued      Stage = "queued"
-	StageProbing     Stage = "probing"
 	StageTranscoding Stage = "transcoding"
-	StageStoring     Stage = "storing"
 	StageReady       Stage = "ready"
 	StageExpired     Stage = "expired"
 	StageFailed      Stage = "failed"
@@ -32,9 +30,9 @@ const (
 // StatusQuery is the query name the gateway uses to read a running job.
 const StatusQuery = "status"
 
-// Bitrates the API will accept, in kbit/s. Anything else is rejected at the
-// edge rather than handed to ffmpeg, so a malformed request cannot become a
-// command-line argument.
+// Bitrates the API will accept, in kbit/s, for the formats that have one.
+// Anything else is rejected at the edge rather than handed to ffmpeg, so a
+// malformed request cannot become a command-line argument.
 var Bitrates = []int{128, 192, 256, 320}
 
 const DefaultBitrate = 192
@@ -57,9 +55,10 @@ type Request struct {
 	OwnerUID   string `json:"ownerUid"`
 	SourceKey  string `json:"sourceKey"`
 	SourceName string `json:"sourceName"`
+	Format     string `json:"format"`
 	Bitrate    int    `json:"bitrate"`
 
-	// How long the finished MP3 stays downloadable. Carried on the request
+	// How long the finished file stays downloadable. Carried on the request
 	// rather than read from config inside the workflow: workflow code has to
 	// replay identically forever, and a config change under a running job
 	// would rewrite history that has already happened.
@@ -67,12 +66,20 @@ type Request struct {
 }
 
 func (r Request) Validate() error {
-	switch {
-	case r.JobID == "":
+	if r.JobID == "" {
 		return fmt.Errorf("job id is required")
-	case r.SourceKey == "":
+	}
+	if r.SourceKey == "" {
 		return fmt.Errorf("source key is required")
-	case !ValidBitrate(r.Bitrate):
+	}
+
+	format, err := FormatByID(r.Format)
+	if err != nil {
+		return err
+	}
+	// A bitrate on a lossless format is ignored rather than rejected — it is a
+	// setting that does not apply, not a malformed request.
+	if format.Lossy && !ValidBitrate(r.Bitrate) {
 		return fmt.Errorf("bitrate %d is not one of %v", r.Bitrate, Bitrates)
 	}
 	return nil
@@ -89,14 +96,11 @@ type Status struct {
 	SourceName string  `json:"sourceName"`
 	ResultName string  `json:"resultName"`
 	ResultKey  string  `json:"resultKey"`
+	Format     string  `json:"format"`
 	Bitrate    int     `json:"bitrate"`
 	Seconds    float64 `json:"seconds"`
 	SizeBytes  int64   `json:"sizeBytes"`
 	Error      string  `json:"error,omitempty"`
-}
-
-func (s Status) Done() bool {
-	return s.Stage == StageReady || s.Stage == StageExpired || s.Stage == StageFailed
 }
 
 // Media is what ffprobe found in the source.
@@ -108,7 +112,8 @@ type Media struct {
 
 // Options are the knobs the transcoder exposes.
 type Options struct {
-	Bitrate int `json:"bitrate"`
+	Format  Format `json:"format"`
+	Bitrate int    `json:"bitrate"`
 }
 
 // SourceKey and ResultKey keep the object layout in one place, so the gateway

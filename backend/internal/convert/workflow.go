@@ -37,19 +37,20 @@ const (
 	StepStoring  = "storing"
 )
 
-// ToMP3 is the workflow. Four steps, each durable: convert, drop the source,
-// wait out the result's lifetime, drop the result.
+// Audio is the workflow: convert, drop the source, wait out the result's
+// lifetime, drop the result.
 //
 // The wait is a real Temporal timer rather than a cleanup cron. That keeps the
 // deletion exactly as reliable as the conversion was, and it means a job stays
 // queryable for precisely as long as it stays downloadable — one object's
 // lifetime, one workflow, no reconciliation between them.
-func ToMP3(ctx workflow.Context, req Request) (Status, error) {
+func Audio(ctx workflow.Context, req Request) (Status, error) {
 	status := Status{
 		JobID:      req.JobID,
 		OwnerUID:   req.OwnerUID,
 		Stage:      StageQueued,
 		SourceName: req.SourceName,
+		Format:     req.Format,
 		Bitrate:    req.Bitrate,
 	}
 
@@ -59,13 +60,6 @@ func ToMP3(ctx workflow.Context, req Request) (Status, error) {
 		return status, nil
 	}); err != nil {
 		return status, err
-	}
-
-	if err := req.Validate(); err != nil {
-		status.Stage = StageFailed
-		status.Error = err.Error()
-		return status, temporal.NewNonRetryableApplicationError(
-			err.Error(), ErrUnsupportedMedia, err)
 	}
 
 	options := workflow.ActivityOptions{
@@ -82,18 +76,32 @@ func ToMP3(ctx workflow.Context, req Request) (Status, error) {
 			NonRetryableErrorTypes: []string{ErrUnsupportedMedia},
 		},
 	}
-	ctx = workflow.WithActivityOptions(ctx, options)
+
+	if err := req.Validate(); err != nil {
+		status.Stage = StageFailed
+		status.Error = err.Error()
+		// Nothing else will ever collect the upload if the job stops here.
+		discard(ctx, req.SourceKey)
+		return status, temporal.NewNonRetryableApplicationError(
+			err.Error(), ErrUnsupportedMedia, err)
+	}
 
 	var a *Activities
+	activityCtx := workflow.WithActivityOptions(ctx, options)
 
 	status.Stage = StageTranscoding
 	var result Result
-	if err := workflow.ExecuteActivity(ctx, a.Convert, req).Get(ctx, &result); err != nil {
+	convertErr := workflow.ExecuteActivity(activityCtx, a.Convert, req).Get(activityCtx, &result)
+
+	// The source is finished with either way, and it is the larger of the two
+	// files. Dropped here rather than at the end of the workflow so it does
+	// not sit in the store for the whole of the result's lifetime.
+	discard(ctx, req.SourceKey)
+
+	if convertErr != nil {
 		status.Stage = StageFailed
-		status.Error = describe(err)
-		// The source is the only thing on disk if the encode never finished.
-		discard(ctx, options, req.SourceKey)
-		return status, err
+		status.Error = describe(convertErr)
+		return status, convertErr
 	}
 
 	status.ResultKey = result.Key
@@ -102,38 +110,51 @@ func ToMP3(ctx workflow.Context, req Request) (Status, error) {
 	status.Seconds = result.Seconds
 	status.Stage = StageReady
 
-	// Dead weight the moment the MP3 exists. Not fatal if it lingers — the
-	// result is what the caller is waiting on, so a failed cleanup is logged
-	// rather than allowed to fail the job.
-	if err := workflow.ExecuteActivity(ctx, a.Discard, req.SourceKey).Get(ctx, nil); err != nil {
-		workflow.GetLogger(ctx).Warn("source not removed", "key", req.SourceKey, "error", err)
-	}
-
 	if err := workflow.Sleep(ctx, req.ResultTTL); err != nil {
-		// Cancelled. The result still has to go, and a cancelled context will
-		// refuse to schedule anything — hence the disconnected one.
-		cleanup, cancel := workflow.NewDisconnectedContext(ctx)
-		defer cancel()
-		discard(cleanup, options, result.Key)
+		// Cancelled part-way through the wait. The result still has to go.
+		discard(ctx, result.Key)
 		status.Stage = StageExpired
 		return status, err
 	}
 
-	if err := workflow.ExecuteActivity(ctx, a.Discard, result.Key).Get(ctx, nil); err != nil {
-		workflow.GetLogger(ctx).Warn("result not removed", "key", result.Key, "error", err)
-	}
+	discard(ctx, result.Key)
 	status.Stage = StageExpired
 	return status, nil
 }
 
-func discard(ctx workflow.Context, options workflow.ActivityOptions, key string) {
+// discard removes one object, and keeps trying until it is gone.
+//
+// Two things make this a guarantee rather than a best effort. It runs on a
+// disconnected context, because cancellation is exactly the moment a
+// half-finished source gets left behind and a cancelled context refuses to
+// schedule anything. And it retries without an attempt limit, bounded only by
+// the workflow's own execution timeout — a delete that failed because the
+// object store was briefly down should be retried, not logged and forgotten.
+//
+// Deleting an object that is already gone counts as success, so a retry after
+// a partial failure cannot fail on its own previous work.
+func discard(ctx workflow.Context, key string) {
 	if key == "" {
 		return
 	}
+
+	cleanup, cancel := workflow.NewDisconnectedContext(ctx)
+	defer cancel()
+
+	cleanup = workflow.WithActivityOptions(cleanup, workflow.ActivityOptions{
+		StartToCloseTimeout: time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: time.Second,
+			MaximumInterval: time.Minute,
+			MaximumAttempts: 0,
+		},
+	})
+
 	var a *Activities
-	ctx = workflow.WithActivityOptions(ctx, options)
-	if err := workflow.ExecuteActivity(ctx, a.Discard, key).Get(ctx, nil); err != nil {
-		workflow.GetLogger(ctx).Warn("object not removed", "key", key, "error", err)
+	if err := workflow.ExecuteActivity(cleanup, a.Discard, key).Get(cleanup, nil); err != nil {
+		// Only reachable once the workflow itself is out of time, which means
+		// the object store has been unreachable for hours.
+		workflow.GetLogger(ctx).Error("object left behind", "key", key, "error", err)
 	}
 }
 
@@ -146,6 +167,9 @@ func describe(err error) string {
 	var applicationErr *temporal.ApplicationError
 	if errors.As(err, &applicationErr) {
 		return applicationErr.Message()
+	}
+	if errors.Is(err, workflow.ErrCanceled) {
+		return "Cancelled."
 	}
 	return "Conversion failed."
 }
