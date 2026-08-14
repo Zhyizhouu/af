@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +12,7 @@ import '../widgets/af_panel.dart';
 import '../widgets/af_text_field.dart';
 import 'auth_controller.dart';
 import 'auth_page_scaffold.dart';
+import 'password_reset_throttle.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
@@ -26,8 +29,14 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   String? _notice;
   bool _busy = false;
 
+  /// Ticks down only to show the wait. The server holds the real one, so a
+  /// refresh clearing this changes nothing about when the next link can go.
+  Duration? _cooldownLeft;
+  Timer? _tick;
+
   @override
   void dispose() {
+    _tick?.cancel();
     _email.dispose();
     _password.dispose();
     super.dispose();
@@ -65,18 +74,71 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     );
   }
 
+  /// Runs [remaining] down a second at a time. A null or elapsed duration
+  /// leaves the link enabled — the server will say no again if it disagrees.
+  void _startCooldown(Duration? remaining) {
+    _tick?.cancel();
+    if (remaining == null || remaining <= Duration.zero) {
+      setState(() => _cooldownLeft = null);
+      return;
+    }
+
+    setState(() => _cooldownLeft = remaining);
+    _tick = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return timer.cancel();
+      final left = (_cooldownLeft ?? Duration.zero) - const Duration(seconds: 1);
+      setState(() => _cooldownLeft = left > Duration.zero ? left : null);
+      if (_cooldownLeft == null) timer.cancel();
+    });
+  }
+
+  /// Claiming the send burns the window even if the email then bounces, so a
+  /// typo is worth catching here rather than costing somebody two minutes.
+  static final _emailShape = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
   Future<void> _resetPassword() async {
-    if (_email.text.trim().isEmpty) {
+    final email = _email.text.trim();
+    if (email.isEmpty) {
       setState(() => _error = 'Enter your email first, then tap reset.');
       return;
     }
-    await _run(() async {
-      await ref.read(authControllerProvider).sendPasswordReset(_email.text);
-      if (mounted) {
-        setState(() => _notice = 'Reset link sent to ${_email.text.trim()}.');
-      }
+    if (!_emailShape.hasMatch(email)) {
+      setState(() => _error = 'That email address is not valid.');
+      return;
+    }
+    if (_busy) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
     });
+
+    final auth = ref.read(authControllerProvider);
+    try {
+      await auth.sendPasswordReset(email);
+      if (!mounted) return;
+      setState(() => _notice = 'Reset link sent to $email.');
+      // Seeded from the server's own policy, so the countdown matches what the
+      // rules will actually enforce on the next attempt.
+      _startCooldown(await auth.passwordResetCooldown());
+    } on PasswordResetCooldown catch (cooldown) {
+      if (!mounted) return;
+      final left = cooldown.remaining;
+      setState(() => _error = left == null || left <= Duration.zero
+          ? 'A reset link went out recently. Try again shortly.'
+          : 'A reset link went out recently. '
+              'Try again in ${left.inSeconds + 1}s.');
+      _startCooldown(left);
+    } catch (error) {
+      if (mounted) setState(() => _error = describeAuthError(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
+
+  bool get _waiting =>
+      _cooldownLeft != null && _cooldownLeft! > Duration.zero;
 
   @override
   Widget build(BuildContext context) {
@@ -115,11 +177,14 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             AFField(
               label: 'Password',
               valueWidget: GestureDetector(
-                onTap: _busy ? null : _resetPassword,
+                onTap: _busy || _waiting ? null : _resetPassword,
                 child: Text(
-                  'forgot?',
+                  _waiting ? 'wait ${_cooldownLeft!.inSeconds + 1}s' : 'forgot?',
                   textAlign: TextAlign.right,
-                  style: AFText.mono(size: 12, color: t.accent),
+                  style: AFText.mono(
+                    size: 12,
+                    color: _waiting ? t.muted : t.accent,
+                  ),
                 ),
               ),
               child: _PasswordField(

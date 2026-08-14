@@ -1,0 +1,6 @@
+# The build only needs the module and its sources.
+.git
+.gitignore
+*.md
+Dockerfile*
+.dockerignore

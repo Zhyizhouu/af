@@ -3,7 +3,7 @@ import 'dart:js_interop';
 import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
 
-/// Browser implementation of [deliverFile]. See `qr_export.dart`.
+/// Browser implementation of [deliverFile]. See `file_delivery.dart`.
 ///
 /// Goes straight to a download rather than the Web Share API: sharing files
 /// from the browser needs a secure context, a user gesture and per-browser

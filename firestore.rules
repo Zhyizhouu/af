@@ -1,0 +1,81 @@
+rules_version = '2';
+
+// Security rules for the `af-main` Firestore database.
+//
+// These are the only thing protecting the data: the API keys committed in
+// `lib/firebase_options.dart` are public identifiers by design, so anybody can
+// point a client at this project. Assume every request is hostile and written
+// by hand.
+//
+// Publish with:
+//   firebase deploy --only firestore:rules
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- policy ----
+
+    // Server-owned settings the client is allowed to read but never write.
+    // Today this is only the password-reset cooldown; the app reads it so the
+    // countdown it shows is the server's number rather than a guess.
+    function policyPath() {
+      return /databases/$(database)/documents/config/authPolicy;
+    }
+
+    // Falls back to two minutes when the policy document is absent, so a
+    // missing config never locks people out of their own password reset.
+    function cooldownSeconds() {
+      return exists(policyPath())
+          && 'passwordResetCooldownSeconds' in get(policyPath()).data
+        ? get(policyPath()).data.passwordResetCooldownSeconds
+        : 120;
+    }
+
+    // `request.time` is the server's clock. Pinning the stored value to it is
+    // what stops a client backdating its own last-sent time to skip the wait —
+    // the only value that satisfies this is the `serverTimestamp()` sentinel.
+    function isServerStamped() {
+      return request.resource.data.keys().hasOnly(['lastSentAt'])
+          && request.resource.data.lastSentAt == request.time;
+    }
+
+    function cooledDown() {
+      return resource.data.lastSentAt
+          + duration.value(cooldownSeconds(), 's') < request.time;
+    }
+
+    // ---- per-account data ----
+
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ---- read-only policy documents ----
+
+    match /config/{document} {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    // ---- password reset rate limit ----
+
+    // Somebody who has forgotten their password is signed out by definition,
+    // so this collection has to accept unauthenticated writes. What keeps it
+    // safe is that the only writable shape is a single server-stamped
+    // timestamp, and an existing stamp cannot be moved until the cooldown has
+    // elapsed. The write is a compare-and-set against the server clock, so two
+    // tabs racing still produce one send.
+    //
+    // Document ids are the SHA-256 of the lowercased address, so this is not a
+    // harvestable list of real emails. A document existing means only that
+    // somebody typed that address into the reset form — never that an account
+    // exists — so `get` leaks nothing the sign-in form does not already. `list`
+    // stays closed so the collection cannot be swept.
+    match /passwordResetThrottle/{emailHash} {
+      allow get: if true;
+      allow list, delete: if false;
+      allow create: if isServerStamped();
+      allow update: if isServerStamped() && cooledDown();
+    }
+  }
+}

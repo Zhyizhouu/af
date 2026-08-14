@@ -5,6 +5,9 @@
 /// *compiles* but throws at runtime, so the split has to happen here at
 /// import time rather than behind a `kIsWeb` check.
 ///
+/// Shared by every program that produces a file — the QR Generator's PNG and
+/// SVG exports, and the MP3 converter's finished audio.
+///
 /// Returns a short status line for the toast, or null if the user backed out.
 ///
 /// ```dart
@@ -17,5 +20,5 @@
 /// ```
 library;
 
-export 'qr_export_io.dart'
-    if (dart.library.js_interop) 'qr_export_web.dart';
+export 'file_delivery_io.dart'
+    if (dart.library.js_interop) 'file_delivery_web.dart';

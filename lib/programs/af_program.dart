@@ -77,6 +77,16 @@ const List<AFProgram> afPrograms = [
     route: '/habits',
   ),
   AFProgram(
+    id: 'mp3',
+    name: 'MP3 Converter',
+    shortName: 'MP3',
+    tagline: 'anything in, mp3 out',
+    description:
+        'Upload audio or video and get an MP3 back. The conversion runs on a '
+        'worker rather than in the browser, so the tab is free while it works.',
+    route: '/mp3',
+  ),
+  AFProgram(
     id: 'qr',
     name: 'QR Generator',
     shortName: 'QR',

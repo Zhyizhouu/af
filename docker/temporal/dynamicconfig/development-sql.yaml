@@ -1,0 +1,17 @@
+# Temporal's dynamic config for local development.
+#
+# Without the visibility overrides, list-and-filter queries in the UI are
+# rejected on a SQL-backed cluster — Temporal expects Elasticsearch for those
+# and refuses rather than running something slow by surprise. This stack has no
+# Elasticsearch, so they are enabled deliberately: the workflow counts here are
+# tiny and the UI is the point of running it.
+
+limit.maxIDLength:
+  - value: 255
+
+system.forceSearchAttributesCacheRefreshOnRead:
+  - value: true
+    constraints: {}
+
+frontend.enableUpdateWorkflowExecution:
+  - value: true

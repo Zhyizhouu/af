@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:qr/qr.dart';
 
+import '../../app/file_delivery.dart';
 import '../../theme/af_text.dart';
 import '../../theme/af_tokens.dart';
 import '../../widgets/af_button.dart';
@@ -18,7 +19,6 @@ import '../../widgets/af_segmented.dart';
 import '../../widgets/af_text_field.dart';
 import '../../widgets/af_theme_toggle.dart';
 import 'qr_color_field.dart';
-import 'qr_export.dart';
 import 'qr_render.dart';
 import 'qr_viewport.dart';
 

@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-/// Native implementation of [deliverFile]. See `qr_export.dart`.
+/// Native implementation of [deliverFile]. See `file_delivery.dart`.
 ///
 /// Desktop gets a real save dialog; mobile has no writable user-visible
 /// filesystem to target, so the file goes through the share sheet, which is

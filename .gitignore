@@ -41,6 +41,9 @@ migrate_working_dir/
 .claude/
 CLAUDE.md
 
+# MP3 converter stack: local credentials and limits. .env.example is tracked.
+.env
+
 # Symbolication related
 app.*.symbols
 

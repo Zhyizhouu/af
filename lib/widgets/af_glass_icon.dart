@@ -18,6 +18,7 @@ enum AFGlassGlyph {
   checklists,
   calendar,
   habits,
+  mp3,
   qr;
 
   /// The mark for an `AFProgram.id`, or null for a program without one.
@@ -25,6 +26,7 @@ enum AFGlassGlyph {
         'checklists' => AFGlassGlyph.checklists,
         'calendar' => AFGlassGlyph.calendar,
         'habits' => AFGlassGlyph.habits,
+        'mp3' => AFGlassGlyph.mp3,
         'qr' => AFGlassGlyph.qr,
         _ => null,
       };
@@ -36,6 +38,7 @@ enum AFGlassGlyph {
         AFGlassGlyph.checklists => 128 / 212,
         AFGlassGlyph.calendar => 130 / 212,
         AFGlassGlyph.habits => 126 / 212,
+        AFGlassGlyph.mp3 => 126 / 212,
         AFGlassGlyph.qr => 124 / 212,
       };
 }
@@ -390,6 +393,8 @@ class _GlyphPainter extends CustomPainter {
         _paintCalendar(canvas);
       case AFGlassGlyph.habits:
         _paintHabits(canvas);
+      case AFGlassGlyph.mp3:
+        _paintMp3(canvas);
       case AFGlassGlyph.qr:
         _paintQr(canvas);
       case AFGlassGlyph.af:
@@ -474,6 +479,61 @@ class _GlyphPainter extends CustomPainter {
         ..strokeWidth = 1.2
         ..color = const Color(0xB8FFFFFF),
     );
+  }
+
+  /// A waveform: five capsules about a centre line, the middle one lit.
+  ///
+  /// Symmetric about the middle rather than standing on a baseline, which is
+  /// what keeps it from reading as the habits chart at favicon size. A musical
+  /// note was the other candidate and turns to mush at 32px.
+  void _paintMp3(Canvas canvas) {
+    const centre = 50.0;
+    const width = 9.0;
+    const bars = [
+      (x: 13.5, half: 12.0),
+      (x: 29.5, half: 24.0),
+      (x: 45.5, half: 34.0),
+      (x: 61.5, half: 21.0),
+      (x: 77.5, half: 14.0),
+    ];
+
+    final quiet = Path();
+    for (final bar in bars) {
+      if (bar.x == 45.5) continue;
+      quiet.addRRect(
+        RRect.fromLTRBR(
+          bar.x,
+          centre - bar.half,
+          bar.x + width,
+          centre + bar.half,
+          const Radius.circular(4.5),
+        ),
+      );
+    }
+
+    _dropShadow(canvas, quiet);
+    canvas.drawPath(quiet, Paint()..color = const Color(0x28FFFFFF));
+    canvas.drawPath(
+      quiet,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..color = const Color(0xB8FFFFFF),
+    );
+
+    final peak = Path()
+      ..addRRect(
+        RRect.fromLTRBR(
+          45.5,
+          centre - 34,
+          45.5 + width,
+          centre + 34,
+          const Radius.circular(4.5),
+        ),
+      );
+
+    _glow(canvas, peak, tint.withValues(alpha: 0.8), 8);
+    canvas.drawPath(peak, Paint()..color = tint.withValues(alpha: 0.9));
   }
 
   /// Three climbing bars over a baseline — the completion chart, in miniature.

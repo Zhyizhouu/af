@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/firebase_init.dart';
+import 'password_reset_throttle.dart';
 
 /// The signed-in user, or null. Emits a single null when Firebase is
 /// unavailable so callers never have to special-case that.
@@ -22,7 +23,10 @@ final isSignedInProvider = Provider<bool>((ref) {
 });
 
 class AuthController {
-  const AuthController();
+  final PasswordResetThrottle _resetThrottle;
+
+  AuthController({PasswordResetThrottle? resetThrottle})
+      : _resetThrottle = resetThrottle ?? PasswordResetThrottle();
 
   void _requireFirebase() {
     if (afFirebaseReady) return;
@@ -80,10 +84,20 @@ class AuthController {
     }
   }
 
+  /// Sends a reset link, subject to the server's rate limit.
+  ///
+  /// Throws [PasswordResetCooldown] if the previous link is still inside the
+  /// window. The wait is held by the Firestore rules rather than this app, so
+  /// it survives a refresh, a new tab and a different browser alike.
   Future<void> sendPasswordReset(String email) async {
     _requireFirebase();
+    await _resetThrottle.claim(email);
     await FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
   }
+
+  /// How long the server makes people wait between reset links, or null if the
+  /// policy cannot be read. For display only.
+  Future<Duration?> passwordResetCooldown() => _resetThrottle.cooldown();
 
   Future<void> signOut() async {
     if (!afFirebaseReady) return;
@@ -91,7 +105,7 @@ class AuthController {
   }
 }
 
-final authControllerProvider = Provider((ref) => const AuthController());
+final authControllerProvider = Provider((ref) => AuthController());
 
 /// Turns Firebase's error codes into something worth showing a person.
 String describeAuthError(Object error) {

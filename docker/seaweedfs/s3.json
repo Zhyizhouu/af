@@ -1,0 +1,15 @@
+{
+  "_comment": "SeaweedFS S3 gateway identities. These are development credentials and are safe only because compose publishes 8333 on localhost. Change both before putting this on a host, and set the matching AF_S3_ACCESS_KEY / AF_S3_SECRET_KEY in .env.",
+  "identities": [
+    {
+      "name": "af",
+      "credentials": [
+        {
+          "accessKey": "af-local",
+          "secretKey": "af-local-secret"
+        }
+      ],
+      "actions": ["Read", "Write", "List", "Tagging", "Admin"]
+    }
+  ]
+}

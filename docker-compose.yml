@@ -1,0 +1,153 @@
+# The MP3 converter's backend. Nothing here is needed to build or serve the
+# Flutter app — Vercel only ever sees build/web — so `docker compose up` is
+# opt-in, for working on the converter.
+#
+#   docker compose up --build
+#
+# Then: API on :8080, Temporal's UI on :8088, SeaweedFS's master UI on :9333.
+
+name: af-mp3
+
+services:
+  # ---- Temporal's own storage ----
+  postgresql:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # ---- the workflow engine ----
+  # auto-setup creates the schema and the default namespace on first boot. It
+  # is a development convenience: a real deployment runs the schema tool once
+  # and then uses the plain `temporalio/server` image.
+  temporal:
+    image: temporalio/auto-setup:1.29.7
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: postgresql
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+    volumes:
+      - ./docker/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+    ports:
+      - "7233:7233"
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  # ---- watching the workflows ----
+  temporal-ui:
+    image: temporalio/ui:2.53.3
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:8088
+    ports:
+      - "8088:8080"
+
+  # ---- the object store ----
+  # One binary running master, volume, filer and the S3 gateway together. That
+  # is SeaweedFS in its smallest useful shape; the distributed part it is
+  # actually built for is not needed here, but nothing has to change to reach
+  # it later beyond running the roles separately.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.41
+    command: >
+      server
+      -dir=/data
+      -master.volumeSizeLimitMB=1024
+      -volume.max=20
+      -filer
+      -s3
+      -s3.config=/etc/seaweedfs/s3.json
+    volumes:
+      - seaweed:/data
+      - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    ports:
+      - "8333:8333"
+      - "9333:9333"
+      - "8888:8888"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:9333/cluster/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  # ---- the gateway the browser talks to ----
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.api
+    depends_on:
+      temporal:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      AF_HTTP_ADDR: ":8080"
+      AF_TEMPORAL_HOSTPORT: temporal:7233
+      AF_S3_ENDPOINT: http://seaweedfs:8333
+      AF_S3_ACCESS_KEY: ${AF_S3_ACCESS_KEY:-af-local}
+      AF_S3_SECRET_KEY: ${AF_S3_SECRET_KEY:-af-local-secret}
+      AF_FIREBASE_PROJECT_ID: ${AF_FIREBASE_PROJECT_ID:-af-main}
+      AF_ALLOWED_ORIGINS: ${AF_ALLOWED_ORIGINS:-http://localhost:*,https://*.vercel.app}
+      AF_MAX_UPLOAD_BYTES: ${AF_MAX_UPLOAD_BYTES:-536870912}
+      AF_RESULT_TTL: ${AF_RESULT_TTL:-2h}
+      # Leave unset to require a real Firebase ID token. See .env.example.
+      AF_AUTH_DISABLED: ${AF_AUTH_DISABLED:-false}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  # ---- the converters ----
+  # Two replicas polling one task queue. Temporal hands each task to exactly
+  # one of them, so this is the whole of the load balancing; `--scale worker=N`
+  # is the whole of the scaling.
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    depends_on:
+      temporal:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      AF_TEMPORAL_HOSTPORT: temporal:7233
+      AF_S3_ENDPOINT: http://seaweedfs:8333
+      AF_S3_ACCESS_KEY: ${AF_S3_ACCESS_KEY:-af-local}
+      AF_S3_SECRET_KEY: ${AF_S3_SECRET_KEY:-af-local-secret}
+      # ffmpeg will use every core it is given, so one file at a time per
+      # replica keeps each conversion fast. Add replicas, not concurrency.
+      AF_WORKER_MAX_CONCURRENT: ${AF_WORKER_MAX_CONCURRENT:-1}
+    volumes:
+      - scratch:/work
+    deploy:
+      replicas: 2
+    restart: unless-stopped
+
+volumes:
+  postgres:
+  seaweed:
+  # Sources are staged here mid-conversion and deleted straight after. Shared
+  # between replicas is fine: every job works in its own temp directory.
+  scratch:

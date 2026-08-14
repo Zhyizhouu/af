@@ -49,6 +49,12 @@ dependencies:
   firebase_core: ^4.13.0
   firebase_auth: ^6.5.7
   cloud_firestore: ^6.8.0
+  # Hashes the email that keys a password-reset cooldown, so the collection
+  # holding them is not a harvestable list of real addresses.
+  crypto: ^3.0.6
+  # Talks to the MP3 converter's Go API. Every other program is local; that one
+  # is a service, so it is the only thing in AF that needs an HTTP client.
+  http: ^1.2.2
 
 flutter_launcher_icons:
   android: true
