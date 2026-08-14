@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
 import 'package:af/db/database_helper.dart';
+import 'package:af/db/seed_habits.dart';
 import 'package:af/app/af_shell.dart';
 import 'package:af/auth/register_screen.dart';
 import 'package:af/auth/sign_in_screen.dart';
@@ -15,11 +16,15 @@ import 'package:af/models/checklist_item.dart';
 import 'package:af/models/custom_category.dart';
 import 'package:af/models/checklist_template_item.dart';
 import 'package:af/models/frequent_course.dart';
+import 'package:af/models/habit.dart';
+import 'package:af/models/habit_day.dart';
 import 'package:af/models/proctor_session.dart';
 import 'package:af/programs/calendar/calendar_provider.dart';
 import 'package:af/programs/calendar/calendar_screen.dart';
 import 'package:af/programs/checklist/checklist_detail_screen.dart';
 import 'package:af/programs/checklist/checklist_home_screen.dart';
+import 'package:af/programs/habits/habit_range.dart';
+import 'package:af/programs/habits/habits_screen.dart';
 import 'package:af/programs/qr/qr_screen.dart';
 import 'package:af/programs/af_program.dart';
 import 'package:af/screens/dashboard_screen.dart';
@@ -215,18 +220,59 @@ void main() {
 
     testWidgets('every mark paints at tile size', (tester) async {
       await _pump(tester, board(212), size: _desktop, inShell: false);
-      expect(find.byType(AFGlassIcon), findsNWidgets(4));
+      expect(
+        find.byType(AFGlassIcon),
+        findsNWidgets(AFGlassGlyph.values.length),
+      );
     });
 
     testWidgets('every mark paints at favicon size', (tester) async {
       await _pump(tester, board(32), size: _phone, inShell: false);
-      expect(find.byType(AFGlassIcon), findsNWidgets(4));
+      expect(
+        find.byType(AFGlassIcon),
+        findsNWidgets(AFGlassGlyph.values.length),
+      );
     });
 
     testWidgets('the dashboard carries one mark per program', (tester) async {
       await _pump(tester, const DashboardScreen(), size: _desktop);
       expect(find.byType(AFGlassIcon), findsNWidgets(afPrograms.length));
     });
+  });
+
+  group('habits', () {
+    testWidgets('page renders on a phone', (tester) async {
+      await _pump(tester, const HabitsScreen(), size: _phone,
+          location: '/habits');
+    });
+
+    testWidgets('page renders on a desktop', (tester) async {
+      await _pump(tester, const HabitsScreen(), size: _desktop,
+          location: '/habits');
+      expect(find.text('@Today'), findsOneWidget);
+      expect(find.text('@Yesterday'), findsOneWidget);
+    });
+
+    testWidgets('page renders in dark mode', (tester) async {
+      await _pump(tester, const HabitsScreen(), size: _desktop,
+          location: '/habits', mode: ThemeMode.dark);
+    });
+
+    // Every range has to survive being drawn — Year is 12 monthly buckets and
+    // 365 table rows, Day drops the chart for a stat tile.
+    for (final range in HabitRange.values) {
+      testWidgets('page renders at ${range.label} range', (tester) async {
+        await _pump(
+          tester,
+          const HabitsScreen(),
+          size: _desktop,
+          location: '/habits',
+          overrides: [
+            habitRangeProvider.overrideWith((ref) => range),
+          ],
+        );
+      });
+    }
   });
 
   group('qr generator', () {
@@ -325,8 +371,15 @@ Future<void> _openBoxes() async {
   Hive.registerAdapter(FrequentCourseAdapter());
   Hive.registerAdapter(CalendarEventAdapter());
   Hive.registerAdapter(CustomCategoryAdapter());
+  Hive.registerAdapter(HabitAdapter());
+  Hive.registerAdapter(HabitDayAdapter());
 
   final db = DatabaseHelper.instance;
+  db.habitsBox = await Hive.openBox<Habit>('habits');
+  db.habitDaysBox = await Hive.openBox<HabitDay>('habit_days');
+  // Matches a real launch, where main() seeds the starter habit — without it
+  // every habit surface renders its empty state instead of its real one.
+  await seedHabitsIfEmpty();
   db.sessionsBox = await Hive.openBox<ProctorSession>('proctor_sessions');
   db.checklistItemsBox = await Hive.openBox<ChecklistItem>('checklist_items');
   db.templateBox =

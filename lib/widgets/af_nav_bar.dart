@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../programs/af_program.dart';
 import '../theme/af_text.dart';
 import '../theme/af_tokens.dart';
 import 'af_account_button.dart';
@@ -13,11 +14,13 @@ class AFNavDestination {
   const AFNavDestination({required this.label, required this.route});
 }
 
-const List<AFNavDestination> afNavDestinations = [
-  AFNavDestination(label: 'Dashboard', route: '/dashboard'),
-  AFNavDestination(label: 'Checklists', route: '/checklists'),
-  AFNavDestination(label: 'Calendar', route: '/calendar'),
-  AFNavDestination(label: 'QR', route: '/qr'),
+/// Derived from [afPrograms] rather than listed again here, so adding a program
+/// really does reach the nav bar from one edit. The dashboard leads because it
+/// is the shell itself, not a program.
+final List<AFNavDestination> afNavDestinations = [
+  const AFNavDestination(label: 'Dashboard', route: '/dashboard'),
+  for (final program in afPrograms)
+    AFNavDestination(label: program.navLabel, route: program.route),
 ];
 
 /// Persistent top navigation, shown only on desktop widths.

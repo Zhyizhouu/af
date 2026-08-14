@@ -11,6 +11,8 @@ import 'package:af/models/checklist_item.dart';
 import 'package:af/models/custom_category.dart';
 import 'package:af/models/checklist_template_item.dart';
 import 'package:af/models/frequent_course.dart';
+import 'package:af/models/habit.dart';
+import 'package:af/models/habit_day.dart';
 import 'package:af/models/proctor_session.dart';
 import 'package:af/programs/calendar/calendar_provider.dart';
 import 'package:af/providers/session_provider.dart';
@@ -29,7 +31,9 @@ void main() {
     Hive.registerAdapter(ChecklistTemplateItemAdapter());
     Hive.registerAdapter(FrequentCourseAdapter());
     Hive.registerAdapter(CalendarEventAdapter());
-  Hive.registerAdapter(CustomCategoryAdapter());
+    Hive.registerAdapter(CustomCategoryAdapter());
+    Hive.registerAdapter(HabitAdapter());
+    Hive.registerAdapter(HabitDayAdapter());
 
     final db = DatabaseHelper.instance;
     db.sessionsBox = await Hive.openBox<ProctorSession>('proctor_sessions');
@@ -43,6 +47,8 @@ void main() {
     db.customCategoriesBox =
         await Hive.openBox<CustomCategory>('event_categories');
     db.settingsBox = await Hive.openBox('af_settings');
+    db.habitsBox = await Hive.openBox<Habit>('habits');
+    db.habitDaysBox = await Hive.openBox<HabitDay>('habit_days');
   });
 
   setUp(() async {

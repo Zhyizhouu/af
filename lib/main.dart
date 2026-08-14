@@ -6,6 +6,7 @@ import 'app/router.dart';
 import 'app/url_strategy.dart';
 import 'auth/auth_controller.dart';
 import 'db/database_helper.dart';
+import 'db/seed_habits.dart';
 import 'db/seed_template.dart';
 import 'db/sync_migration.dart';
 import 'providers/theme_provider.dart';
@@ -21,6 +22,7 @@ void main() async {
 
   await DatabaseHelper.instance.init();
   await seedTemplateIfEmpty();
+  await seedHabitsIfEmpty();
   await runSyncMigration();
 
   runApp(const ProviderScope(child: AFApp()));

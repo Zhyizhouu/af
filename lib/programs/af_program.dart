@@ -11,6 +11,10 @@ class AFProgram {
   /// Shown as the tile's panel label, uppercased.
   final String name;
 
+  /// Shorter label for the nav bar, where five full names crowd the row.
+  /// Defaults to [name].
+  final String? shortName;
+
   /// Mono one-liner, in the same voice as the QR Generator's tagline.
   final String tagline;
 
@@ -33,12 +37,15 @@ class AFProgram {
   const AFProgram({
     required this.id,
     required this.name,
+    this.shortName,
     required this.tagline,
     required this.description,
     required this.route,
     this.available = true,
     this.requiresAuth = true,
   });
+
+  String get navLabel => shortName ?? name;
 }
 
 const List<AFProgram> afPrograms = [
@@ -61,8 +68,18 @@ const List<AFProgram> afPrograms = [
     route: '/calendar',
   ),
   AFProgram(
+    id: 'habits',
+    name: 'Habits',
+    tagline: 'one tick a day',
+    description:
+        'Track daily habits against a checklist and watch the completion '
+        'trend. Days start at midnight Jakarta time, wherever you are.',
+    route: '/habits',
+  ),
+  AFProgram(
     id: 'qr',
     name: 'QR Generator',
+    shortName: 'QR',
     tagline: 'make anything scannable — offline',
     description:
         'Turn a URL, Wi-Fi string or any text into a QR code. Tune error '

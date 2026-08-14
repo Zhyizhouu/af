@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_controller.dart';
 import '../programs/calendar/calendar_provider.dart';
 import '../programs/calendar/category_provider.dart';
+import '../programs/habits/habit_provider.dart';
 import '../providers/session_provider.dart';
 import 'sync_service.dart';
 
@@ -77,7 +78,9 @@ class SyncController extends StateNotifier<SyncState> {
         ..invalidate(archivedSessionsProvider)
         ..invalidate(sessionChecklistProvider)
         ..invalidate(calendarEventsProvider)
-        ..invalidate(categoriesProvider);
+        ..invalidate(categoriesProvider)
+        ..invalidate(habitsProvider)
+        ..invalidate(habitDaysProvider);
 
       state = SyncState(
         status: SyncStatus.synced,

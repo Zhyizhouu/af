@@ -17,12 +17,14 @@ enum AFGlassGlyph {
   af,
   checklists,
   calendar,
+  habits,
   qr;
 
   /// The mark for an `AFProgram.id`, or null for a program without one.
   static AFGlassGlyph? forProgram(String id) => switch (id) {
         'checklists' => AFGlassGlyph.checklists,
         'calendar' => AFGlassGlyph.calendar,
+        'habits' => AFGlassGlyph.habits,
         'qr' => AFGlassGlyph.qr,
         _ => null,
       };
@@ -33,6 +35,7 @@ enum AFGlassGlyph {
         AFGlassGlyph.af => 118 / 212,
         AFGlassGlyph.checklists => 128 / 212,
         AFGlassGlyph.calendar => 130 / 212,
+        AFGlassGlyph.habits => 126 / 212,
         AFGlassGlyph.qr => 124 / 212,
       };
 }
@@ -385,6 +388,8 @@ class _GlyphPainter extends CustomPainter {
         _paintCheck(canvas);
       case AFGlassGlyph.calendar:
         _paintCalendar(canvas);
+      case AFGlassGlyph.habits:
+        _paintHabits(canvas);
       case AFGlassGlyph.qr:
         _paintQr(canvas);
       case AFGlassGlyph.af:
@@ -468,6 +473,59 @@ class _GlyphPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2
         ..color = const Color(0xB8FFFFFF),
+    );
+  }
+
+  /// Three climbing bars over a baseline — the completion chart, in miniature.
+  /// The tallest is lit, the way the chart lights the day you are on.
+  void _paintHabits(Canvas canvas) {
+    const base = 84.0;
+
+    final rising = Path();
+    for (final bar in const [
+      (x: 18.0, top: 58.0),
+      (x: 42.0, top: 40.0),
+    ]) {
+      rising.addRRect(
+        RRect.fromLTRBAndCorners(
+          bar.x,
+          bar.top,
+          bar.x + 20,
+          base,
+          topLeft: const Radius.circular(4),
+          topRight: const Radius.circular(4),
+        ),
+      );
+    }
+
+    _dropShadow(canvas, rising);
+    canvas.drawPath(rising, Paint()..color = const Color(0x28FFFFFF));
+    canvas.drawPath(
+      rising,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..color = const Color(0xB8FFFFFF),
+    );
+
+    final peak = Path()
+      ..addRRect(
+        RRect.fromLTRBAndCorners(
+          66,
+          20,
+          86,
+          base,
+          topLeft: const Radius.circular(4),
+          topRight: const Radius.circular(4),
+        ),
+      );
+
+    _glow(canvas, peak, tint.withValues(alpha: 0.8), 8);
+    canvas.drawPath(peak, Paint()..color = tint.withValues(alpha: 0.9));
+
+    canvas.drawRRect(
+      RRect.fromLTRBR(14, base, 90, base + 3, const Radius.circular(1.5)),
+      Paint()..color = const Color(0xB8FFFFFF),
     );
   }
 

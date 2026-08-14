@@ -4,8 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../auth/auth_controller.dart';
+import '../models/habit.dart';
 import '../programs/af_program.dart';
 import '../programs/calendar/calendar_provider.dart';
+import '../programs/calendar/event_category.dart';
+import '../programs/habits/habit_chart.dart';
+import '../programs/habits/habit_provider.dart';
+import '../programs/habits/habit_time.dart';
 import '../theme/af_breakpoints.dart';
 import '../theme/af_text.dart';
 import '../theme/af_tokens.dart';
@@ -59,6 +64,23 @@ class DashboardScreen extends ConsumerWidget {
               children: [
                 _ProgramsSection(width: width, signedIn: signedIn),
                 const SizedBox(height: 28),
+                if (desktop)
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: const [
+                        Expanded(flex: 2, child: _HabitsSection()),
+                        SizedBox(width: _gap),
+                        Expanded(flex: 3, child: _HabitChartSection()),
+                      ],
+                    ),
+                  )
+                else ...const [
+                  _HabitsSection(),
+                  SizedBox(height: _gap),
+                  _HabitChartSection(),
+                ],
+                const SizedBox(height: _gap),
                 if (desktop)
                   IntrinsicHeight(
                     child: Row(
@@ -227,7 +249,129 @@ class _StateBadge extends StatelessWidget {
   }
 }
 
-// ---- section 2: today ----
+// ---- section 2: habits ----
+
+/// Today's habits, tickable in place. The dashboard is where the ticking
+/// actually happens; the Habits page is for history and for managing the list.
+class _HabitsSection extends ConsumerWidget {
+  const _HabitsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = context.af;
+    final habits = ref.watch(habitsProvider).valueOrNull ?? const <Habit>[];
+    final marks = ref.watch(todayMarksProvider).valueOrNull ?? const <String>{};
+    final today = jakartaDayKey();
+
+    return AFPanel(
+      label: 'Habits today',
+      count: habits.isEmpty ? '—' : '${marks.length}/${habits.length}',
+      onTap: () => context.go('/habits'),
+      child: habits.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: AFEmptyState(
+                glyph: '',
+                message: 'No habits yet. Open Habits to add one.',
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < habits.length; i++) ...[
+                  if (i > 0) Divider(height: 1, color: t.line),
+                  _HabitCheckRow(
+                    habit: habits[i],
+                    checked: marks.contains(habits[i].id),
+                    onTap: () => ref
+                        .read(habitControllerProvider)
+                        .toggle(habits[i].id, today),
+                  ),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+class _HabitCheckRow extends StatelessWidget {
+  final Habit habit;
+  final bool checked;
+  final VoidCallback onTap;
+
+  const _HabitCheckRow({
+    required this.habit,
+    required this.checked,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.af;
+    final tone = toneAt(habit.toneIndex).resolve(context);
+
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        highlightColor: t.accentSoft,
+        splashColor: t.accentSoft,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
+          child: Row(
+            children: [
+              Container(
+                margin: const EdgeInsets.only(right: 12),
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: checked ? tone : t.sunken,
+                  borderRadius: BorderRadius.circular(2),
+                  border: Border.all(
+                    color: checked ? tone : t.lineStrong,
+                    width: 1.5,
+                  ),
+                ),
+                child: checked
+                    ? const Icon(Icons.check, size: 13, color: Colors.white)
+                    : null,
+              ),
+              Expanded(
+                child: Text(
+                  habit.name,
+                  style: AFText.body(
+                    context,
+                    color: checked ? t.muted : t.ink,
+                    decoration:
+                        checked ? TextDecoration.lineThrough : null,
+                  ).copyWith(decorationColor: t.muted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HabitChartSection extends ConsumerWidget {
+  const _HabitChartSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return AFPanel(
+      label: 'Completion',
+      // The range scopes this panel and nothing else on the page, so the
+      // control sits in its header rather than floating over the plot.
+      countWidget: const HabitRangeBar(),
+      child: const SizedBox(height: 148, child: HabitChart(height: 148)),
+    );
+  }
+}
+
+// ---- section 3: today ----
 
 class _TodaySection extends ConsumerWidget {
   const _TodaySection();

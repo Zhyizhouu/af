@@ -4,6 +4,8 @@ import '../db/database_helper.dart';
 import '../models/calendar_event.dart';
 import '../models/checklist_item.dart';
 import '../models/custom_category.dart';
+import '../models/habit.dart';
+import '../models/habit_day.dart';
 import '../models/proctor_session.dart';
 
 /// Two-way sync between the local Hive boxes and Firestore.
@@ -25,6 +27,8 @@ class SyncService {
   static const _items = 'checklistItems';
   static const _events = 'events';
   static const _categories = 'categories';
+  static const _habits = 'habits';
+  static const _habitDays = 'habitDays';
 
   CollectionReference<Map<String, dynamic>> _collection(
     String uid,
@@ -41,6 +45,8 @@ class SyncService {
     // category, so pulling events first would show them all as "Other".
     await _syncCategories(uid);
     await _syncEvents(uid);
+    await _syncHabits(uid);
+    await _syncHabitDays(uid);
   }
 
   // ---- sessions ----
@@ -293,6 +299,95 @@ class SyncService {
             createdAt: _date(data['createdAt']),
             updatedAt: _date(data['updatedAt']),
             deleted: data['deleted'] as bool? ?? false,
+          ),
+        );
+      }
+    }
+
+    await batch.commit();
+  }
+
+  // ---- habits ----
+
+  Future<void> _syncHabits(String uid) async {
+    final db = DatabaseHelper.instance;
+    final collection = _collection(uid, _habits);
+    final remote = await collection.get();
+
+    final remoteDocs = {for (final doc in remote.docs) doc.id: doc.data()};
+    final batch = _firestore.batch();
+
+    for (final habit in db.habitsBox.values) {
+      final data = remoteDocs[habit.id];
+      if (data == null || _localWins(habit.updatedAt, data)) {
+        batch.set(collection.doc(habit.id), {
+          'name': habit.name,
+          'toneIndex': habit.toneIndex,
+          'sortOrder': habit.sortOrder,
+          'createdAt': Timestamp.fromDate(habit.createdAt),
+          'updatedAt': Timestamp.fromDate(habit.updatedAt),
+          'deleted': habit.deleted,
+        });
+      }
+    }
+
+    for (final entry in remoteDocs.entries) {
+      final local = db.habitsBox.get(entry.key);
+      final data = entry.value;
+
+      if (local == null || !_localWins(local.updatedAt, data)) {
+        // Box is keyed by the habit id, so put() inserts and updates alike.
+        await db.habitsBox.put(
+          entry.key,
+          Habit(
+            id: entry.key,
+            name: data['name'] as String? ?? 'Untitled',
+            toneIndex: (data['toneIndex'] as num?)?.toInt() ?? 0,
+            sortOrder: (data['sortOrder'] as num?)?.toInt() ?? 0,
+            createdAt: _date(data['createdAt']),
+            updatedAt: _date(data['updatedAt']),
+            deleted: data['deleted'] as bool? ?? false,
+          ),
+        );
+      }
+    }
+
+    await batch.commit();
+  }
+
+  /// Day records: one document per day, keyed by `YYYY-MM-DD` in Jakarta.
+  ///
+  /// No tombstones — a day is never deleted, only emptied — so this is the one
+  /// collection where the pull has nothing to skip.
+  Future<void> _syncHabitDays(String uid) async {
+    final db = DatabaseHelper.instance;
+    final collection = _collection(uid, _habitDays);
+    final remote = await collection.get();
+
+    final remoteDocs = {for (final doc in remote.docs) doc.id: doc.data()};
+    final batch = _firestore.batch();
+
+    for (final day in db.habitDaysBox.values) {
+      final data = remoteDocs[day.day];
+      if (data == null || _localWins(day.updatedAt, data)) {
+        batch.set(collection.doc(day.day), {
+          'completed': day.completed,
+          'updatedAt': Timestamp.fromDate(day.updatedAt),
+        });
+      }
+    }
+
+    for (final entry in remoteDocs.entries) {
+      final local = db.habitDaysBox.get(entry.key);
+      final data = entry.value;
+
+      if (local == null || !_localWins(local.updatedAt, data)) {
+        await db.habitDaysBox.put(
+          entry.key,
+          HabitDay(
+            day: entry.key,
+            completed: (data['completed'] as List?)?.cast<String>() ?? const [],
+            updatedAt: _date(data['updatedAt']),
           ),
         );
       }

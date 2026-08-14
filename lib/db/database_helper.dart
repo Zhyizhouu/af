@@ -5,6 +5,8 @@ import '../models/checklist_item.dart';
 import '../models/custom_category.dart';
 import '../models/checklist_template_item.dart';
 import '../models/frequent_course.dart';
+import '../models/habit.dart';
+import '../models/habit_day.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -18,6 +20,11 @@ class DatabaseHelper {
   late Box<CalendarEvent> calendarEventsBox;
   late Box<CustomCategory> customCategoriesBox;
 
+  late Box<Habit> habitsBox;
+
+  /// Keyed by `YYYY-MM-DD` in Jakarta — see [HabitDay].
+  late Box<HabitDay> habitDaysBox;
+
   /// App-wide preferences shared by every program (theme mode, QR defaults).
   late Box settingsBox;
 
@@ -30,7 +37,11 @@ class DatabaseHelper {
     Hive.registerAdapter(FrequentCourseAdapter());
     Hive.registerAdapter(CalendarEventAdapter());
     Hive.registerAdapter(CustomCategoryAdapter());
+    Hive.registerAdapter(HabitAdapter());
+    Hive.registerAdapter(HabitDayAdapter());
 
+    habitsBox = await Hive.openBox<Habit>('habits');
+    habitDaysBox = await Hive.openBox<HabitDay>('habit_days');
     calendarEventsBox = await Hive.openBox<CalendarEvent>('calendar_events');
     customCategoriesBox =
         await Hive.openBox<CustomCategory>('event_categories');
@@ -90,6 +101,40 @@ class DatabaseHelper {
     category.updatedAt = DateTime.now();
     await category.save();
   }
+
+  // ---- Habits ----
+
+  /// Live habits, tombstones excluded, in display order.
+  List<Habit> getHabits() {
+    final habits = habitsBox.values.where((h) => !h.deleted).toList();
+    habits.sort((a, b) {
+      final order = a.sortOrder.compareTo(b.sortOrder);
+      // Same slot after a reorder race: fall back to creation so the list is
+      // never non-deterministic between two devices.
+      return order != 0 ? order : a.createdAt.compareTo(b.createdAt);
+    });
+    return habits;
+  }
+
+  Future<void> putHabit(Habit habit) => habitsBox.put(habit.id, habit);
+
+  /// Tombstones the habit. Its marks are left in place on each [HabitDay] —
+  /// see the note there on why they are filtered rather than swept.
+  Future<void> deleteHabit(String id) async {
+    final habit = habitsBox.get(id);
+    if (habit == null || habit.deleted) return;
+    habit
+      ..deleted = true
+      ..updatedAt = DateTime.now();
+    await habit.save();
+  }
+
+  /// The marks for one Jakarta day, or null if nothing was ever ticked on it.
+  HabitDay? getHabitDay(String day) => habitDaysBox.get(day);
+
+  List<HabitDay> getHabitDays() => habitDaysBox.values.toList();
+
+  Future<void> putHabitDay(HabitDay day) => habitDaysBox.put(day.day, day);
 
   // ---- Settings ----
   T? getSetting<T>(String key) => settingsBox.get(key) as T?;
