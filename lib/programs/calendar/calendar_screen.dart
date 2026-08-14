@@ -18,7 +18,7 @@ import 'event_category.dart';
 import 'calendar_time_grid.dart';
 import 'event_editor_dialog.dart';
 
-/// AF · Calendar — the program's own events plus proctor sessions from
+/// reAFresh · Calendar — the program's own events plus proctor sessions from
 /// Checklists, at five zoom levels.
 class CalendarScreen extends ConsumerWidget {
   const CalendarScreen({super.key});
@@ -33,7 +33,7 @@ class CalendarScreen extends ConsumerWidget {
     final anchor = ref.watch(calendarAnchorProvider);
 
     return AFScaffold(
-      title: 'AF · Calendar',
+      title: 'reAFresh · Calendar',
       tagline: 'everything on one grid',
       onBack: () => context.go('/dashboard'),
       actions: const [AFThemeToggle()],

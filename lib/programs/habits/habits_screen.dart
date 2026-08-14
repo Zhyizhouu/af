@@ -29,7 +29,7 @@ class HabitsScreen extends ConsumerWidget {
     final compact = !AFBreakpoints.isDesktop(context);
 
     return AFScaffold(
-      title: 'AF · Habits',
+      title: 'reAFresh · Habits',
       tagline: 'daily marks · Jakarta time',
       maxWidth: AFScaffold.maxWideWidth,
       actions: const [AFThemeToggle()],

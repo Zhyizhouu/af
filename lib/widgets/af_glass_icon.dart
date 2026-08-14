@@ -19,7 +19,7 @@ enum AFGlassGlyph {
   calendar,
   habits,
   audio,
-  captions,
+  ai,
   qr;
 
   /// The mark for an `AFProgram.id`, or null for a program without one.
@@ -28,7 +28,7 @@ enum AFGlassGlyph {
         'calendar' => AFGlassGlyph.calendar,
         'habits' => AFGlassGlyph.habits,
         'audio' => AFGlassGlyph.audio,
-        'captions' => AFGlassGlyph.captions,
+        'ai' => AFGlassGlyph.ai,
         'qr' => AFGlassGlyph.qr,
         _ => null,
       };
@@ -41,7 +41,7 @@ enum AFGlassGlyph {
         AFGlassGlyph.calendar => 130 / 212,
         AFGlassGlyph.habits => 126 / 212,
         AFGlassGlyph.audio => 126 / 212,
-        AFGlassGlyph.captions => 128 / 212,
+        AFGlassGlyph.ai => 128 / 212,
         AFGlassGlyph.qr => 124 / 212,
       };
 }
@@ -304,61 +304,6 @@ class _Glyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (glyph == AFGlassGlyph.af) {
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          final fontSize = constraints.maxWidth;
-          // The board sets Archivo Black, which is not bundled here; the
-          // heaviest system sans is the closest stand-in. Bundling the real
-          // face is a font asset plus a fontFamily on this style.
-          final base = TextStyle(
-            fontSize: fontSize,
-            height: 1,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -0.16 * fontSize,
-          );
-
-          // Negative tracking is applied after the final glyph too, so the pair
-          // sits half that distance right of centre. The board corrects with
-          // `padding-right: 0.08em`; this is the same nudge.
-          return Transform.translate(
-            offset: Offset(-0.08 * fontSize, 0),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Text(
-                  'AF',
-                  style: base.copyWith(
-                    color: tint.withValues(alpha: 0.32),
-                    shadows: [
-                      Shadow(
-                        color: tint.withValues(alpha: 0.7),
-                        blurRadius: 12 * fontSize / 118,
-                      ),
-                      Shadow(
-                        color: const Color(0x66000000),
-                        offset: Offset(0, 3 * fontSize / 118),
-                        blurRadius: 10 * fontSize / 118,
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  'AF',
-                  style: base.copyWith(
-                    foreground: Paint()
-                      ..style = PaintingStyle.stroke
-                      ..strokeWidth = 1.5 * fontSize / 118
-                      ..color = tintBright.withValues(alpha: 0.95),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
-    }
-
     return CustomPaint(
       painter: _GlyphPainter(
         glyph: glyph,
@@ -398,12 +343,12 @@ class _GlyphPainter extends CustomPainter {
         _paintHabits(canvas);
       case AFGlassGlyph.audio:
         _paintAudio(canvas);
-      case AFGlassGlyph.captions:
-        _paintCaptions(canvas);
+      case AFGlassGlyph.ai:
+        _paintAi(canvas);
       case AFGlassGlyph.qr:
         _paintQr(canvas);
       case AFGlassGlyph.af:
-        break;
+        _paintBrand(canvas);
     }
 
     canvas.restore();
@@ -493,30 +438,106 @@ class _GlyphPainter extends CustomPainter {
   /// note was the other candidate and turns to mush at 32px.
   /// A frame with two caption lines across its lower half — the shape a
   /// subtitled still has, which reads faster than the letters "CC".
-  void _paintCaptions(Canvas canvas) {
-    final frame = Path()
-      ..addRRect(RRect.fromLTRBR(12, 20, 88, 80, const Radius.circular(5)))
-      ..addRRect(RRect.fromLTRBR(18, 26, 82, 74, const Radius.circular(3)))
-      ..fillType = PathFillType.evenOdd;
+  /// The reAFresh mark: a square refresh cycle around the masthead's tick.
+  ///
+  /// Two ideas, both already in the app. The square accent tick is what sits
+  /// at the left of every masthead, so it is the thing already associated with
+  /// this app; the cycle around it is the "re" of the name. Built from
+  /// rectangles and triangles because the design has no curves in it anywhere
+  /// else — a round arrow would be the only circle in the whole product.
+  ///
+  /// Drawn rather than typeset. The old mark set the letters "AF" in the
+  /// heaviest system sans, which meant the logo rendered differently on every
+  /// platform; paths render identically everywhere and at every size.
+  void _paintBrand(Canvas canvas) {
+    const t = 9.0; // arm thickness
+    const outer = 20.0;
+    const far = 80.0;
 
-    _dropShadow(canvas, frame);
-    canvas.drawPath(frame, Paint()..color = const Color(0x28FFFFFF));
+    // Each arm is two sides of a square, so the pair reads as one loop with
+    // two gaps rather than as a broken box.
+    final arms = Path()
+      // Top arm, running left to right, then down the left side.
+      ..addRect(const Rect.fromLTRB(outer, outer, 63, outer + t))
+      ..addRect(const Rect.fromLTRB(outer, outer, outer + t, 63))
+      // Bottom arm, mirrored.
+      ..addRect(const Rect.fromLTRB(37, far - t, far, far))
+      ..addRect(const Rect.fromLTRB(far - t, 37, far, far))
+      // Arrowheads: the loop has a direction, which is what separates a cycle
+      // from a broken frame.
+      ..addPolygon(const [Offset(58, 12), Offset(80, 24.5), Offset(58, 37)], true)
+      ..addPolygon(const [Offset(42, 88), Offset(20, 75.5), Offset(42, 63)], true);
+
+    _dropShadow(canvas, arms);
+    canvas.drawPath(arms, Paint()..color = const Color(0x2EFFFFFF));
     canvas.drawPath(
-      frame,
+      arms,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4
+        ..strokeWidth = 1.3
+        ..strokeJoin = StrokeJoin.round
+        ..color = const Color(0xC4FFFFFF),
+    );
+
+    // The tick itself, lit — the same 2px-radius square the masthead draws,
+    // scaled up.
+    final tick = Path()
+      ..addRRect(RRect.fromLTRBR(41, 41, 59, 59, const Radius.circular(3)));
+
+    _glow(canvas, tick, tint.withValues(alpha: 0.9), 9);
+    canvas.drawPath(tick, Paint()..color = tint);
+  }
+
+  /// Two four-pointed sparks, the larger lit.
+  ///
+  /// The concave star is the one shape that reads as "this was generated"
+  /// across every platform, and it is built from straight lines, which suits a
+  /// design that has no curves in it anywhere else.
+  void _paintAi(Canvas canvas) {
+    // Drawn under the bright one so the pair reads as near and far rather than
+    // as two of the same thing.
+    final small = _spark(72, 26, 15, 4);
+    _dropShadow(canvas, small);
+    canvas.drawPath(small, Paint()..color = const Color(0x3DFFFFFF));
+    canvas.drawPath(
+      small,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..strokeJoin = StrokeJoin.round
         ..color = const Color(0xB8FFFFFF),
     );
 
-    // The lit part is the caption itself: a long line over a short one, the
-    // way two lines of subtitle actually sit.
-    final lines = Path()
-      ..addRRect(RRect.fromLTRBR(26, 52, 74, 58, const Radius.circular(3)))
-      ..addRRect(RRect.fromLTRBR(26, 63, 58, 69, const Radius.circular(3)));
+    final large = _spark(43, 55, 33, 9);
+    _dropShadow(canvas, large);
+    _glow(canvas, large, tint.withValues(alpha: 0.85), 8);
 
-    _glow(canvas, lines, tint.withValues(alpha: 0.85), 7);
-    canvas.drawPath(lines, Paint()..color = tint.withValues(alpha: 0.9));
+    canvas.drawPath(large, Paint()..color = tint.withValues(alpha: 0.55));
+    canvas.drawPath(
+      large,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..strokeJoin = StrokeJoin.round
+        ..color = tintBright.withValues(alpha: 0.95),
+    );
+  }
+
+  /// A four-pointed star: points on the axes at [outer], waists on the
+  /// diagonals at [inner].
+  Path _spark(double cx, double cy, double outer, double inner) {
+    // 0.7071 is cos 45°, which is where the waists sit.
+    final waist = inner * 0.7071;
+    return Path()
+      ..moveTo(cx, cy - outer)
+      ..lineTo(cx + waist, cy - waist)
+      ..lineTo(cx + outer, cy)
+      ..lineTo(cx + waist, cy + waist)
+      ..lineTo(cx, cy + outer)
+      ..lineTo(cx - waist, cy + waist)
+      ..lineTo(cx - outer, cy)
+      ..lineTo(cx - waist, cy - waist)
+      ..close();
   }
 
   void _paintAudio(Canvas canvas) {

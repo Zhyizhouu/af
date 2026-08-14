@@ -110,7 +110,7 @@ class _Brand extends StatelessWidget {
               ),
             ),
             Text(
-              'AF',
+              'reAFresh',
               style: AFText.mono(
                 size: 16,
                 color: t.ink,

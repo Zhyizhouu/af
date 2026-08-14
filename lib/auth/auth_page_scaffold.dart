@@ -54,7 +54,7 @@ class AuthPageScaffold extends StatelessWidget {
                           ],
                         ),
                       ),
-                      Text('AF', style: AFText.brand(context)),
+                      Text('reAFresh', style: AFText.brand(context)),
                     ],
                   ),
                   const SizedBox(height: 8),

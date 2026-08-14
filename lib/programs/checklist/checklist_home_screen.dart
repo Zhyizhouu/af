@@ -16,7 +16,7 @@ import '../../widgets/af_segmented.dart';
 import '../../widgets/af_theme_toggle.dart';
 import 'add_session_dialog.dart';
 
-/// AF · Checklists — the proctor session list.
+/// reAFresh · Checklists — the proctor session list.
 class ChecklistHomeScreen extends ConsumerWidget {
   const ChecklistHomeScreen({super.key});
 
@@ -28,7 +28,7 @@ class ChecklistHomeScreen extends ConsumerWidget {
     final filter = ref.watch(sessionFilterProvider);
 
     return AFScaffold(
-      title: 'AF · Checklists',
+      title: 'reAFresh · Checklists',
       tagline: 'proctor sessions, start to finish',
       onBack: () => context.go('/dashboard'),
       actions: const [AFThemeToggle()],

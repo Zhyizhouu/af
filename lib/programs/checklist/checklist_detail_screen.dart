@@ -30,7 +30,7 @@ class ChecklistDetailScreen extends ConsumerWidget {
 
     if (session == null) {
       return AFScaffold(
-        title: 'AF · Checklists',
+        title: 'reAFresh · Checklists',
         onBack: () => context.go('/checklists'),
         actions: const [AFThemeToggle()],
         child: AFEmptyState(

@@ -38,7 +38,7 @@ class DashboardScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
 
     return AFScaffold(
-      title: 'AF',
+      title: 'reAFresh',
       tagline: signedIn
           ? 'field tools — synced to your account'
           : 'field tools — sign in to sync',

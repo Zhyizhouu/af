@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
+import '../../app/upload.dart';
+
 /// Where the converter lives.
 ///
 /// Overridden at build time, because the API is a container somewhere and the
@@ -187,6 +189,7 @@ class AudioApi {
   final String base;
   final http.Client _client;
   final Future<String?> Function() _token;
+  final Uploader _upload;
 
   AudioApi({
     String? base,
@@ -195,9 +198,14 @@ class AudioApi {
     /// Where the bearer token comes from. Overridden in tests; in the app it
     /// is whatever Firebase currently holds.
     Future<String?> Function()? token,
+
+    /// Injectable so tests can drive an upload without a network, and so the
+    /// browser can use XMLHttpRequest while native builds use `package:http`.
+    Uploader? uploader,
   })  : base = (base ?? kConvertApiBase).replaceAll(RegExp(r'/+$'), ''),
         _client = client ?? http.Client(),
-        _token = token ?? _firebaseToken;
+        _token = token ?? _firebaseToken,
+        _upload = uploader ?? uploadMultipart;
 
   void close() => _client.close();
 
@@ -229,24 +237,40 @@ class AudioApi {
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
+  /// Uploads the file and starts a job.
+  ///
+  /// [onProgress] reports how much of the upload has left the browser, 0 to 1.
+  /// For a large file this is the longest part of the whole job, and the only
+  /// part whose duration is knowable in advance.
   Future<AudioJob> submit({
     required Uint8List bytes,
     required String fileName,
     required String format,
     required int bitrate,
+    void Function(double fraction)? onProgress,
   }) async {
-    final request = http.MultipartRequest(
-      'POST',
-      _uri('/v1/jobs', {'format': format, 'bitrate': '$bitrate'}),
-    )
-      ..headers.addAll(await _headers())
-      ..files
-          .add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+    final UploadResponse response;
+    try {
+      response = await _upload(
+        url: _uri('/v1/jobs', {'format': format, 'bitrate': '$bitrate'}),
+        headers: await _headers(),
+        bytes: bytes,
+        fileName: fileName,
+        fieldName: 'file',
+        onProgress: onProgress ?? (_) {},
+      );
+    } on AudioError {
+      rethrow;
+    } catch (_) {
+      throw AudioError('The converter at $base is not reachable.');
+    }
 
-    final response = await _send(() async {
-      final streamed = await _client.send(request);
-      return http.Response.fromStream(streamed);
-    });
+    if (!response.ok) {
+      throw AudioError(
+        _messageOfBody(response.body, response.statusCode),
+        gone: response.statusCode == 404 || response.statusCode == 410,
+      );
+    }
     return AudioJob.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
@@ -302,17 +326,22 @@ class AudioApi {
     );
   }
 
-  String _messageOf(http.Response response) {
+  String _messageOf(http.Response response) =>
+      _messageOfBody(response.body, response.statusCode);
+
+  String _messageOfBody(String body, int statusCode) {
     try {
-      final body = jsonDecode(response.body);
-      if (body is Map && body['error'] is String) return body['error'] as String;
+      final parsed = jsonDecode(body);
+      if (parsed is Map && parsed['error'] is String) {
+        return parsed['error'] as String;
+      }
     } catch (_) {
       // A proxy in front of the API answers HTML, not the JSON shape.
     }
-    return switch (response.statusCode) {
+    return switch (statusCode) {
       401 => 'Sign in to convert files.',
       413 => 'That file is too large.',
-      _ => 'The converter returned ${response.statusCode}.',
+      _ => 'The converter returned $statusCode.',
     };
   }
 }

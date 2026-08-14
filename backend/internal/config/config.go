@@ -39,15 +39,10 @@ type Config struct {
 	ResultTTL           time.Duration
 	WorkerMaxConcurrent int
 
-	// Gemini, for captioning. Empty disables the caption program rather than
-	// letting it accept an upload and fail a minute later.
-	GeminiAPIKey       string
-	GeminiModel        string
-	CaptionChunkSecond float64
-
-	// How long a caption job waits for somebody to edit its transcript before
-	// muxing what the model produced.
-	ReviewTTL time.Duration
+	// Gemini, for the assistant. Empty disables it rather than letting the
+	// page offer a button that cannot work.
+	GeminiAPIKey string
+	GeminiModel  string
 }
 
 func Load() (Config, error) {
@@ -68,7 +63,6 @@ func Load() (Config, error) {
 		WorkerMaxConcurrent: number("AF_WORKER_MAX_CONCURRENT", 2),
 		GeminiAPIKey:        env("AF_GEMINI_API_KEY", ""),
 		GeminiModel:         env("AF_GEMINI_MODEL", ""),
-		CaptionChunkSecond:  float64(number("AF_CAPTION_CHUNK_SECONDS", 600)),
 	}
 
 	var err error
@@ -76,9 +70,6 @@ func Load() (Config, error) {
 		return c, err
 	}
 	if c.ResultTTL, err = duration("AF_RESULT_TTL", 2*time.Hour); err != nil {
-		return c, err
-	}
-	if c.ReviewTTL, err = duration("AF_REVIEW_TTL", time.Hour); err != nil {
 		return c, err
 	}
 	return c, nil

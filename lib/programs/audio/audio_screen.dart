@@ -13,9 +13,9 @@ import '../../widgets/af_segmented.dart';
 import 'audio_api.dart';
 import 'audio_job_panel.dart';
 
-/// AF · Audio — hand it a file, get it back in another format.
+/// reAFresh · Audio — hand it a file, get it back in another format.
 ///
-/// Unlike every other program in AF this one is not local: the conversion runs
+/// Unlike every other program in reAFresh this one is not local: the conversion runs
 /// on a worker, orchestrated by Temporal, and this screen only uploads, polls
 /// and downloads. That is why it is the one page that can say "not reachable".
 class AudioScreen extends StatefulWidget {
@@ -48,6 +48,9 @@ class _AudioScreenState extends State<AudioScreen> {
 
   AudioJob? _job;
   Timer? _poll;
+
+  /// Fraction of the upload sent, or null when nothing is going up.
+  double? _uploaded;
 
   String? _error;
   String _toast = '';
@@ -147,6 +150,10 @@ class _AudioScreenState extends State<AudioScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _job = null;
+      // Non-null is what puts the panel on screen in its uploading state,
+      // before any job exists to describe.
+      _uploaded = 0;
     });
 
     try {
@@ -155,12 +162,29 @@ class _AudioScreenState extends State<AudioScreen> {
         fileName: _fileName,
         format: _format,
         bitrate: _bitrate,
+        onProgress: (fraction) {
+          // Fires many times a second on a fast connection; a whole-percent
+          // gate keeps it from rebuilding the tree on every packet.
+          if (!mounted) return;
+          if ((fraction * 100).floor() == ((_uploaded ?? 0) * 100).floor()) {
+            return;
+          }
+          setState(() => _uploaded = fraction);
+        },
       );
       if (!mounted) return;
-      setState(() => _job = job);
+      setState(() {
+        _job = job;
+        _uploaded = null;
+      });
       _startPolling(job.id);
     } on AudioError catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _uploaded = null;
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -256,11 +280,23 @@ class _AudioScreenState extends State<AudioScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final job = _job;
     final limits = _limits;
+    final uploading = _uploaded != null;
+    // While the upload runs there is no job yet, so the panel is fed a
+    // placeholder carrying the one thing that is known: which file.
+    final job = _job ??
+        (uploading
+            ? AudioJob(
+                id: '',
+                stage: 'uploading',
+                sourceName: _fileName,
+                format: _format,
+                bitrate: _selected?.lossy ?? true ? _bitrate : 0,
+              )
+            : null);
 
     return AFScaffold(
-      title: 'AF · Audio',
+      title: 'reAFresh · Audio',
       tagline: 'anything in, any format out',
       onBack: () => Navigator.of(context).maybePop(),
       footer: AFFooter(
@@ -278,6 +314,7 @@ class _AudioScreenState extends State<AudioScreen> {
             AudioJobPanel(
               job: job,
               busy: _busy,
+              uploadFraction: _uploaded,
               onDownload: _download,
               onCancel: _cancel,
             ),

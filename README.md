@@ -1,6 +1,6 @@
-# AF — Assignment / Final Exam Fixed Checklist
+# reAFresh
 
-AF is a Flutter-based proctoring companion app built to streamline the repetitive, high-stakes checklist process required before, during, and after Assignment or Final Exam sessions in a university computer lab setting.
+reAFresh is a Flutter-based proctoring companion app built to streamline the repetitive, high-stakes checklist process required before, during, and after Assignment or Final Exam sessions in a university computer lab setting.
 
 Instead of juggling printed checklists or memory, proctors can log each exam session with its date, time, room, and course details, then work through a structured, section-by-section checklist that automatically archives the session once everything is complete.
 
@@ -29,7 +29,7 @@ Instead of juggling printed checklists or memory, proctors can log each exam ses
 
 ## Audio Converter
 
-The audio program is the one part of AF that is not local. Conversion runs on a
+The audio program is the one part of reAFresh that is not local. Conversion runs on a
 Go worker with ffmpeg, orchestrated by [Temporal](https://temporal.io), with
 [SeaweedFS](https://github.com/seaweedfs/seaweedfs) holding the bytes. All of
 it lives in `backend/` and `docker-compose.yml`; none of it is involved in the
@@ -88,50 +88,52 @@ before a conversion will. To try the stack before the Firebase console work is
 finished, set `AF_AUTH_DISABLED=true` in `.env` — localhost only; it accepts
 every request as one shared user.
 
-## Captions
+## AI
 
-The same stack, a second workflow. Transcription goes through Gemini; the
-timings do not go anywhere near a player until somebody has looked at them.
+Describe what you need scheduled; it proposes the entries and you confirm them.
 
 ```
-mp4 → ffmpeg: 16kHz mono → split into 10-min chunks → Gemini (JSON schema)
-    → offset + normalise → ⏸ REVIEW ⏸ → ffmpeg: mux -c copy → mp4 + srt
+"UAS Basis Data COMP6100 class BBA2 on 20 August at 1pm in room 305,
+ lunch with Dina Wednesday noon, and gym Thursday 6pm"
+
+  → UAS session  20 Aug 13:00  room 305  COMP6100 · Basis Data  BBA2
+  → Lunch with Dina   19 Aug 12:00–13:00   social
+  → Gym               20 Aug 18:00–19:00   health
+  → "Assumed one-hour durations for lunch and gym."
 ```
 
-**The pause is the feature.** Segment timings from a language model are close
-rather than exact, and a caption that is close is a caption that is wrong. So
-the workflow stops, holds the transcript, and waits for you to fix it on a
-timeline in AF. Temporal makes that ordinary to write: the workflow blocks on
-a signal channel for up to an hour, survives a worker restart while it waits,
-and needs no job table or state machine of its own to remember where it got to.
-Leave it alone and it muxes as transcribed — an imperfect track beats nothing.
+A session created this way goes through the same controller the add-session
+dialog uses, so it arrives with its checklist seeded and its course remembered.
 
-Three things fight the drift:
+**It never writes anything.** The model proposes, every entry is shown for
+checking, and one button commits. A calendar you cannot trust is worse than no
+calendar, so the confirm step is the feature rather than an obstacle in front
+of it.
 
-- **Chunking.** Ten minutes at a time, with each chunk's offset added back.
-  The offset is exact because ffmpeg chose the cut. `AF_CAPTION_CHUNK_SECONDS`
-  is the accuracy dial — lower is tighter and more API calls.
-- **Normalisation.** Overlaps pushed apart, out-of-order segments sorted,
-  anything past the real duration clamped or dropped, flash-frames stretched.
-  Applied to the model's output *and* to what comes back from the editor.
-- **The editor.** Blocks on a timeline at three zoom levels, editable text and
-  in/out times, half-second nudges for the constant-offset case.
+Three things stand between the model and your calendar:
 
-Out comes a **captioned MP4** with a `mov_text` track (`-c copy`, so not a
-frame is re-encoded) and the **SRT** alongside it — the sidecar is what
-actually imports into a Premiere timeline as an editable caption track.
+- **A schema**, so the answer parses by construction rather than hopefully.
+- **Normalisation**, because a schema constrains shape and never sense: an
+  invented category falls back to `other`, an end before its start becomes an
+  hour, a date years from now is dropped, and one sentence cannot propose forty
+  entries. `backend/internal/plan/normalise_test.go` covers each case.
+- **You**, reading the cards. Fields the model could not fill are shown as
+  *not given* in the warn colour rather than left blank, because a missing room
+  is exactly what is worth catching before pressing the button.
+
+The whole feature is one synchronous endpoint — no Temporal, no queue, no job
+id. It writes nothing and holds nothing, so reaching for the machinery next
+door because it is there would only buy a worse version of a plain handler.
 
 Setting it up needs one key:
 
 ```bash
-# .env — the worker's environment, never the Flutter bundle
+# .env — the API's environment, never the Flutter bundle
 AF_GEMINI_API_KEY=...   # https://aistudio.google.com/apikey
 ```
 
-Without it the caption page says so on arrival instead of accepting an upload
-it cannot process. Note that captioning is the one part of AF where a file
-leaves your machine: the extracted audio is uploaded to Google, transcribed,
-and deleted again by the same job.
+Without it the page says so on arrival instead of offering a button that
+cannot work.
 
 ### Scaling
 

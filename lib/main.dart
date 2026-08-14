@@ -71,7 +71,7 @@ class _AFAppState extends ConsumerState<AFApp> with WidgetsBindingObserver {
     });
 
     return MaterialApp.router(
-      title: 'AF',
+      title: 'reAFresh',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,

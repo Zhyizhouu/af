@@ -8,8 +8,8 @@ import '../auth/sign_in_screen.dart';
 import '../programs/calendar/calendar_screen.dart';
 import '../programs/checklist/checklist_detail_screen.dart';
 import '../programs/checklist/checklist_home_screen.dart';
+import '../programs/ai/ai_screen.dart';
 import '../programs/audio/audio_screen.dart';
-import '../programs/captions/captions_screen.dart';
 import '../programs/habits/habits_screen.dart';
 import '../programs/qr/qr_screen.dart';
 import '../screens/dashboard_screen.dart';
@@ -58,7 +58,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     errorBuilder: (context, state) => AFShell(
       location: state.uri.path,
       child: AFScaffold(
-        title: 'AF',
+        title: 'reAFresh',
         onBack: () => context.go('/dashboard'),
         child: AFEmptyState(
           glyph: '404',
@@ -109,8 +109,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const AudioScreen(),
           ),
           GoRoute(
-            path: '/captions',
-            builder: (context, state) => const CaptionsScreen(),
+            path: '/ai',
+            builder: (context, state) => const AiScreen(),
           ),
           GoRoute(
             path: '/qr',

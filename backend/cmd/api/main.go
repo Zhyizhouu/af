@@ -19,6 +19,7 @@ import (
 
 	"github.com/Zhyizhouu/af/backend/internal/auth"
 	"github.com/Zhyizhouu/af/backend/internal/config"
+	"github.com/Zhyizhouu/af/backend/internal/gemini"
 	"github.com/Zhyizhouu/af/backend/internal/httpapi"
 	"github.com/Zhyizhouu/af/backend/internal/storage"
 )
@@ -67,9 +68,28 @@ func run(log *slog.Logger) error {
 	}
 	defer temporalClient.Close()
 
+	// The assistant is the one feature that lives entirely in the gateway —
+	// one synchronous call, nothing stored, no worker involved. Nil without a
+	// key, and the page says so rather than offering a button that fails.
+	var planner httpapi.Planner
+	if cfg.GeminiAPIKey == "" {
+		log.Warn("AF_GEMINI_API_KEY is unset: the assistant is unavailable")
+	} else {
+		client, err := gemini.New(gemini.Options{
+			APIKey: cfg.GeminiAPIKey,
+			Model:  cfg.GeminiModel,
+			Logger: log,
+		})
+		if err != nil {
+			return err
+		}
+		planner = client
+		log.Info("assistant ready", "model", client.Model())
+	}
+
 	server := &http.Server{
 		Addr:    cfg.HTTPAddr,
-		Handler: httpapi.New(cfg, temporalClient, blobs, verifier, log).Handler(),
+		Handler: httpapi.New(cfg, temporalClient, blobs, verifier, planner, log).Handler(),
 		// Generous: the write timeout has to cover streaming a finished MP3 to
 		// a phone on a bad connection, and the read timeout an upload of up to
 		// AF_MAX_UPLOAD_BYTES.

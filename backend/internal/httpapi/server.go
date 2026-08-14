@@ -8,6 +8,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -21,11 +22,24 @@ import (
 	"github.com/Zhyizhouu/af/backend/internal/convert"
 )
 
+// Planner is the model the assistant asks. An interface so the endpoint can be
+// tested without a network, and nil when no API key is configured — which the
+// page checks before offering to do anything.
+type Planner interface {
+	GenerateJSON(
+		ctx context.Context,
+		instructions, input string,
+		schema map[string]any,
+		into any,
+	) error
+}
+
 type Server struct {
 	cfg      config.Config
 	temporal client.Client
 	blobs    convert.Blobs
 	verifier auth.Verifier
+	planner  Planner
 	log      *slog.Logger
 }
 
@@ -34,6 +48,7 @@ func New(
 	temporalClient client.Client,
 	blobs convert.Blobs,
 	verifier auth.Verifier,
+	planner Planner,
 	log *slog.Logger,
 ) *Server {
 	return &Server{
@@ -41,6 +56,7 @@ func New(
 		temporal: temporalClient,
 		blobs:    blobs,
 		verifier: verifier,
+		planner:  planner,
 		log:      log,
 	}
 }
@@ -57,13 +73,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/jobs/{id}/result", s.handleDownload)
 	mux.HandleFunc("DELETE /v1/jobs/{id}", s.handleCancel)
 
-	mux.HandleFunc("GET /v1/captions/limits", s.handleCaptionLimits)
-	mux.HandleFunc("POST /v1/captions", s.handleCaptionCreate)
-	mux.HandleFunc("GET /v1/captions/{id}", s.handleCaptionStatus)
-	mux.HandleFunc("GET /v1/captions/{id}/segments", s.handleCaptionSegments)
-	mux.HandleFunc("POST /v1/captions/{id}/approve", s.handleCaptionApprove)
-	mux.HandleFunc("GET /v1/captions/{id}/result/{artefact}", s.handleCaptionDownload)
-	mux.HandleFunc("DELETE /v1/captions/{id}", s.handleCaptionCancel)
+	mux.HandleFunc("GET /v1/ai/limits", s.handlePlanLimits)
+	mux.HandleFunc("POST /v1/ai/plan", s.handlePlan)
 
 	return s.withCORS(s.withLogging(mux))
 }

@@ -6,7 +6,7 @@
 #
 # Then: API on :8080, Temporal's UI on :8088, SeaweedFS's master UI on :9333.
 
-name: af-mp3
+name: reafresh
 
 services:
   # ---- Temporal's own storage ----
@@ -123,10 +123,11 @@ services:
       AF_ALLOWED_ORIGINS: ${AF_ALLOWED_ORIGINS:-http://localhost:*,https://*.vercel.app}
       AF_MAX_UPLOAD_BYTES: ${AF_MAX_UPLOAD_BYTES:-536870912}
       AF_RESULT_TTL: ${AF_RESULT_TTL:-2h}
-      AF_REVIEW_TTL: ${AF_REVIEW_TTL:-1h}
-      # The gateway only needs to know whether captioning is possible, so it
-      # can say so before somebody uploads. The worker is what actually calls.
+      # The assistant lives entirely in the gateway: one synchronous call, no
+      # worker involved. Unset means the AI page says so instead of offering a
+      # button that cannot work.
       AF_GEMINI_API_KEY: ${AF_GEMINI_API_KEY:-}
+      AF_GEMINI_MODEL: ${AF_GEMINI_MODEL:-}
       # Leave unset to require a real Firebase ID token. See .env.example.
       AF_AUTH_DISABLED: ${AF_AUTH_DISABLED:-false}
     ports:
@@ -154,10 +155,6 @@ services:
       # ffmpeg will use every core it is given, so one file at a time per
       # replica keeps each conversion fast. Add replicas, not concurrency.
       AF_WORKER_MAX_CONCURRENT: ${AF_WORKER_MAX_CONCURRENT:-1}
-      # Unset means this worker transcodes audio but does not caption video.
-      AF_GEMINI_API_KEY: ${AF_GEMINI_API_KEY:-}
-      AF_GEMINI_MODEL: ${AF_GEMINI_MODEL:-}
-      AF_CAPTION_CHUNK_SECONDS: ${AF_CAPTION_CHUNK_SECONDS:-600}
     volumes:
       - scratch:/work
     deploy:

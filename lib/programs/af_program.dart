@@ -88,14 +88,14 @@ const List<AFProgram> afPrograms = [
     route: '/audio',
   ),
   AFProgram(
-    id: 'captions',
-    name: 'Captions',
-    tagline: 'transcribe, retime, write back in',
+    id: 'ai',
+    name: 'AI',
+    tagline: 'say it, check it, keep it',
     description:
-        'Transcribe a video, correct the timings on a timeline, then write the '
-        'captions back into it as a track. Downloads as a captioned MP4 or as '
-        'an SRT to drop on an editing timeline.',
-    route: '/captions',
+        'Describe what you need scheduled and it proposes the entries — '
+        'proctoring sessions with their checklist, or calendar events with a '
+        'category. Nothing is saved until you confirm it.',
+    route: '/ai',
   ),
   AFProgram(
     id: 'qr',

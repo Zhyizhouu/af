@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:af/app/upload.dart';
 import 'package:af/programs/audio/audio_api.dart';
 import 'package:af/programs/audio/audio_job_panel.dart';
 import 'package:af/programs/audio/audio_screen.dart';
@@ -87,16 +88,25 @@ void main() {
 
     test('sends the chosen format and bitrate as query parameters', () async {
       late Uri seen;
+      late String seenAuth;
       final api = AudioApi(
         base: 'http://converter.test',
         token: () async => 'id-token',
-        client: MockClient((request) async {
-          seen = request.url;
-          return http.Response(
-            jsonEncode({'id': 'job-1', 'stage': 'queued', 'format': 'flac'}),
+        uploader: ({
+          required url,
+          required headers,
+          required bytes,
+          required fileName,
+          required fieldName,
+          required onProgress,
+        }) async {
+          seen = url;
+          seenAuth = headers['Authorization'] ?? '';
+          return UploadResponse(
             202,
+            jsonEncode({'id': 'job-1', 'stage': 'queued', 'format': 'flac'}),
           );
-        }),
+        },
       );
 
       final job = await api.submit(
@@ -108,7 +118,74 @@ void main() {
 
       expect(seen.queryParameters['format'], 'flac');
       expect(seen.queryParameters['bitrate'], '256');
+      expect(seenAuth, 'Bearer id-token');
       expect(job.format, 'flac');
+    });
+
+    // The upload is the longest phase for a large file, and the only one whose
+    // duration is knowable while it happens.
+    test('reports upload progress to the caller', () async {
+      final seen = <double>[];
+      final api = AudioApi(
+        base: 'http://converter.test',
+        token: () async => 'id-token',
+        uploader: ({
+          required url,
+          required headers,
+          required bytes,
+          required fileName,
+          required fieldName,
+          required onProgress,
+        }) async {
+          for (final fraction in [0.0, 0.25, 0.5, 0.75, 1.0]) {
+            onProgress(fraction);
+          }
+          return UploadResponse(
+            202, jsonEncode({'id': 'job-1', 'stage': 'queued'}));
+        },
+      );
+
+      await api.submit(
+        bytes: Uint8List.fromList([1, 2, 3]),
+        fileName: 'lecture.m4a',
+        format: 'mp3',
+        bitrate: 192,
+        onProgress: seen.add,
+      );
+
+      expect(seen, [0.0, 0.25, 0.5, 0.75, 1.0]);
+    });
+
+    // A refusal during upload has to read the same as one from any other
+    // call — the uploader is a different code path but not a different API.
+    test('an upload refusal carries the server\'s message', () async {
+      final api = AudioApi(
+        base: 'http://converter.test',
+        token: () async => 'id-token',
+        uploader: ({
+          required url,
+          required headers,
+          required bytes,
+          required fileName,
+          required fieldName,
+          required onProgress,
+        }) async =>
+            UploadResponse(413, jsonEncode({'error': 'Files are limited to 512 MB.'})),
+      );
+
+      await expectLater(
+        api.submit(
+          bytes: Uint8List.fromList([1]),
+          fileName: 'huge.mkv',
+          format: 'mp3',
+          bitrate: 192,
+        ),
+        throwsA(isA<AudioError>().having(
+          (e) => e.message,
+          'message',
+          'Files are limited to 512 MB.',
+        )),
+      );
     });
 
     test('surfaces the server\'s own wording for a refusal', () async {
@@ -200,7 +277,12 @@ void main() {
     // deliberately absurd: it is the value most likely to overflow the row.
     const longName = 'UAS-Semester-Ganjil-2026-Rekaman-Ruang-401-Sesi-Pagi.mkv';
 
-    Future<void> pump(WidgetTester tester, AudioJob job, {ThemeMode? mode}) async {
+    Future<void> pump(
+      WidgetTester tester,
+      AudioJob job, {
+      ThemeMode? mode,
+      double? uploadFraction,
+    }) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -210,7 +292,9 @@ void main() {
         darkTheme: AppTheme.dark,
         themeMode: mode ?? ThemeMode.light,
         home: Scaffold(
-          body: SingleChildScrollView(child: AudioJobPanel(job: job)),
+          body: SingleChildScrollView(
+            child: AudioJobPanel(job: job, uploadFraction: uploadFraction),
+          ),
         ),
       ));
       await tester.pumpAndSettle();
@@ -226,6 +310,19 @@ void main() {
       expect(find.text('Cancel'), findsOneWidget);
     });
 
+    // The job does not exist server-side yet, so the panel runs off the
+    // upload fraction alone.
+    testWidgets('uploading shows its own phase', (tester) async {
+      await pump(
+        tester,
+        const AudioJob(id: '', stage: 'uploading', sourceName: longName),
+        uploadFraction: 0.4,
+      );
+      expect(find.text('Uploading'), findsOneWidget);
+      expect(find.textContaining('Sending your file'), findsOneWidget);
+      expect(find.text('1/5'), findsOneWidget);
+    });
+
     testWidgets('encoding a lossy format names the bitrate', (tester) async {
       await pump(
         tester,
@@ -239,7 +336,10 @@ void main() {
           sourceName: longName,
         ),
       );
-      expect(find.textContaining('Encoding MP3 at 192 kbit/s — 42%'), findsOneWidget);
+      expect(find.text('Encoding'), findsOneWidget);
+      expect(find.textContaining('encoding MP3 at 192 kbit/s'), findsOneWidget);
+      // Fourth of five phases.
+      expect(find.text('4/5'), findsOneWidget);
     });
 
     // The gateway zeroes the bitrate for lossless output, so there is no
@@ -257,16 +357,21 @@ void main() {
           sourceName: longName,
         ),
       );
-      expect(find.text('Encoding WAV — 60%'), findsOneWidget);
+      expect(find.text('Encoding'), findsOneWidget);
       expect(find.textContaining('kbit/s'), findsNothing);
     });
 
-    testWidgets('transcoding without a heartbeat says so', (tester) async {
+    // No heartbeat has landed, so the activity is scheduled but not started —
+    // still the reading step from anybody's point of view.
+    testWidgets('transcoding without a heartbeat shows the reading phase',
+        (tester) async {
       await pump(
         tester,
         const AudioJob(id: 'a', stage: 'transcoding', sourceName: longName),
       );
-      expect(find.text('Starting up'), findsOneWidget);
+      expect(find.text('Reading'), findsOneWidget);
+      expect(find.textContaining('pulling your file out of storage'),
+          findsOneWidget);
     });
 
     testWidgets('ready offers the download', (tester) async {
@@ -284,7 +389,11 @@ void main() {
           downloadable: true,
         ),
       );
-      expect(find.textContaining('Ready — 7.0 MB'), findsOneWidget);
+      expect(find.text('Done'), findsOneWidget);
+      expect(find.textContaining('Converted to FLAC'), findsOneWidget);
+      expect(find.textContaining('7.0 MB'), findsOneWidget);
+      // Says plainly what became of the upload.
+      expect(find.textContaining('has been deleted'), findsOneWidget);
       expect(find.textContaining('.flac'), findsWidgets);
       // The source's running time, not the conversion's.
       expect(find.text('12:34'), findsOneWidget);
@@ -305,13 +414,17 @@ void main() {
       expect(find.textContaining('Download'), findsNothing);
     });
 
+    // Neither working nor done, so it must say neither.
     testWidgets('expired in dark mode', (tester) async {
       await pump(
         tester,
         const AudioJob(id: 'a', stage: 'expired', sourceName: longName),
         mode: ThemeMode.dark,
       );
-      expect(find.textContaining('Expired'), findsOneWidget);
+      expect(find.text('Expired'), findsOneWidget);
+      expect(find.text('Working'), findsNothing);
+      expect(find.text('Done'), findsNothing);
+      expect(find.textContaining('Convert the file again'), findsOneWidget);
     });
   });
 

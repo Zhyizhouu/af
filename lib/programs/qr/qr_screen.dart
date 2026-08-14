@@ -22,7 +22,7 @@ import 'qr_color_field.dart';
 import 'qr_render.dart';
 import 'qr_viewport.dart';
 
-/// AF · QR Generator — a native port of `AF-QRgenerator.html`.
+/// reAFresh · QR Generator — a native port of `AF-QRgenerator.html`.
 class QrScreen extends StatefulWidget {
   const QrScreen({super.key});
 
@@ -288,7 +288,7 @@ class _QrScreenState extends State<QrScreen> {
   @override
   Widget build(BuildContext context) {
     return AFScaffold(
-      title: 'AF · QR Generator',
+      title: 'reAFresh · QR Generator',
       tagline: 'make anything scannable — offline',
       onBack: () => Navigator.of(context).pop(),
       actions: const [AFThemeToggle()],
