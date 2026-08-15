@@ -11,8 +11,12 @@ import '../calendar/calendar_provider.dart';
 import '../calendar/category_provider.dart';
 import '../calendar/event_category.dart';
 import '../../models/proctor_session.dart';
+import '../../models/ai_conversation.dart';
 import '../../providers/session_provider.dart';
 import 'ai_api.dart';
+import 'ai_conversation_store.dart';
+import 'ai_history_dialog.dart';
+import 'ai_message.dart';
 import 'ai_proposal_card.dart';
 
 /// reAFresh · AI — talk about what you need scheduled, and confirm what it
@@ -46,111 +50,18 @@ const _lookBack = Duration(days: 1);
 const _lookAhead = Duration(days: 60);
 const _maxExisting = 120;
 
-/// One turn as it sits on screen.
-///
-/// Mutable, unlike most state in AF, because the two things that change after
-/// a turn arrives — which proposals were dropped, and whether the rest were
-/// carried out — belong to that turn rather than to the page.
-class _Message {
-  final String role;
-  final String text;
-  final List<SessionProposal> sessions;
-  final List<EventProposal> events;
-
-  /// Entries the assistant offered to delete, resolved to this app's own
-  /// records the moment the answer arrived. Snapshotted rather than looked up
-  /// at paint time: committing the deletion removes them from the calendar,
-  /// and the transcript still has to show what was done.
-  final List<AgendaEntry> removals;
-
-  /// Indices the person dropped. Held as index sets rather than by rebuilding
-  /// the lists, so dropping one cannot renumber the rest mid-review.
-  final Set<int> droppedSessions = {};
-  final Set<int> droppedEvents = {};
-  final Set<int> droppedRemovals = {};
-
-  /// Set once this turn was carried out. The cards stay on screen afterwards —
-  /// the transcript is a record of what happened — but nothing about them can
-  /// be changed or run twice.
-  bool committed = false;
-
-  /// A failure, rendered in place rather than as a banner over the page. An
-  /// error that scrolls away with the turn it belongs to stays attached to the
-  /// thing that caused it.
-  final bool failed;
-
-  _Message.user(this.text)
-      : role = AiTurn.roleUser,
-        sessions = const [],
-        events = const [],
-        removals = const [],
-        failed = false;
-
-  _Message.assistant(AiAnswer answer, List<AgendaEntry> agenda)
-      : role = AiTurn.roleAssistant,
-        text = answer.reply,
-        sessions = answer.sessions,
-        events = answer.events,
-        // An id that resolves to nothing is dropped rather than drawn as a
-        // placeholder: a delete card that cannot say what it deletes is not
-        // something anybody can confirm.
-        removals = [
-          for (final id in answer.removals)
-            ?agenda.where((entry) => entry.id == id).firstOrNull,
-        ],
-        failed = false;
-
-  _Message.error(this.text)
-      : role = AiTurn.roleAssistant,
-        sessions = const [],
-        events = const [],
-        removals = const [],
-        failed = true;
-
-  bool get isUser => role == AiTurn.roleUser;
-
-  bool get hasProposals =>
-      sessions.isNotEmpty || events.isNotEmpty || removals.isNotEmpty;
-
-  int get keptCount =>
-      keptSessions.length + keptEvents.length + keptRemovals.length;
-
-  List<SessionProposal> get keptSessions => [
-        for (var i = 0; i < sessions.length; i++)
-          if (!droppedSessions.contains(i)) sessions[i],
-      ];
-
-  List<EventProposal> get keptEvents => [
-        for (var i = 0; i < events.length; i++)
-          if (!droppedEvents.contains(i)) events[i],
-      ];
-
-  List<AgendaEntry> get keptRemovals => [
-        for (var i = 0; i < removals.length; i++)
-          if (!droppedRemovals.contains(i)) removals[i],
-      ];
-
-  /// What the server is told about this turn next time.
-  ///
-  /// Only what survived review is sent: the assistant should be working from
-  /// what is still on the table, not from what was thrown out.
-  AiTurn toTurn() => AiTurn(
-        role: role,
-        text: text,
-        sessions: keptSessions,
-        events: keptEvents,
-        removals: [for (final entry in keptRemovals) entry.id],
-        committed: committed,
-      );
-}
-
 class _AiScreenState extends ConsumerState<AiScreen> {
   late final AiApi _api = widget.api ?? AiApi();
   final _prompt = TextEditingController();
   final _scroll = ScrollController();
   final _promptFocus = FocusNode();
 
-  final _messages = <_Message>[];
+  final _messages = <AiMessage>[];
+
+  /// The conversation being written to. Allocated up front rather than on the
+  /// first message, so every save in a session lands on the same record
+  /// instead of scattering one-message conversations through the history.
+  String _conversationId = AiConversationController.newId();
 
   AiLimits? _limits;
   String? _limitsError;
@@ -242,7 +153,7 @@ class _AiScreenState extends ConsumerState<AiScreen> {
     final categories = ref.read(categoriesProvider).valueOrNull ?? const [];
     if (categories.isEmpty) {
       setState(() => _messages.add(
-          _Message.error('Categories are still loading. Try again.')));
+          AiMessage.error('Categories are still loading. Try again.')));
       _scrollToEnd();
       return;
     }
@@ -259,7 +170,7 @@ class _AiScreenState extends ConsumerState<AiScreen> {
     ];
 
     setState(() {
-      _messages.add(_Message.user(message));
+      _messages.add(AiMessage.user(message));
       _prompt.clear();
       _busy = true;
     });
@@ -276,19 +187,32 @@ class _AiScreenState extends ConsumerState<AiScreen> {
         categories: [for (final c in categories) c.slug],
       );
       if (mounted) {
-        setState(() => _messages.add(_Message.assistant(answer, agenda)));
+        setState(() => _messages.add(AiMessage.assistant(answer, agenda)));
       }
     } on AiError catch (error) {
-      if (mounted) setState(() => _messages.add(_Message.error(error.message)));
+      if (mounted) setState(() => _messages.add(AiMessage.error(error.message)));
     } finally {
       if (mounted) setState(() => _busy = false);
       _scrollToEnd();
+      await _persist();
     }
+  }
+
+  /// Writes the conversation down.
+  ///
+  /// Called after anything that changes it rather than on a timer: this is the
+  /// only copy that exists — the assistant's API remembers nothing — so a turn
+  /// that is not saved is a turn lost the moment the tab closes.
+  Future<void> _persist() async {
+    if (_messages.isEmpty) return;
+    await ref
+        .read(aiConversationControllerProvider)
+        .save(id: _conversationId, messages: _messages);
   }
 
   /// Carries out one turn. This is the only thing in the program that changes
   /// anything.
-  Future<void> _commit(_Message message) async {
+  Future<void> _commit(AiMessage message) async {
     if (_busy || message.committed) return;
 
     final sessions = message.keptSessions;
@@ -342,11 +266,14 @@ class _AiScreenState extends ConsumerState<AiScreen> {
     } catch (error) {
       if (mounted) {
         setState(() => _messages
-            .add(_Message.error('Some changes could not be applied: $error')));
+            .add(AiMessage.error('Some changes could not be applied: $error')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
       _scrollToEnd();
+      // Saved here too: whether a turn was carried out is the one piece of
+      // state that must survive, or reopening it offers to do it all again.
+      await _persist();
     }
   }
 
@@ -354,7 +281,32 @@ class _AiScreenState extends ConsumerState<AiScreen> {
     setState(() {
       _messages.clear();
       _prompt.clear();
+      _conversationId = AiConversationController.newId();
     });
+  }
+
+  /// Opens a saved conversation in place of the current one.
+  ///
+  /// Nothing is lost by doing so: the current one has been written down after
+  /// every turn, so it is already in the list this was chosen from.
+  void _open(AiConversation conversation) {
+    final messages = ref.read(aiConversationControllerProvider).load(conversation);
+    setState(() {
+      _messages
+        ..clear()
+        ..addAll(messages);
+      _conversationId = conversation.id;
+      _prompt.clear();
+    });
+    _scrollToEnd();
+  }
+
+  Future<void> _showHistory() async {
+    final chosen = await showDialog<AiConversation>(
+      context: context,
+      builder: (_) => AiHistoryDialog(currentId: _conversationId),
+    );
+    if (chosen != null && mounted) _open(chosen);
   }
 
   /// Keeps the newest turn in view.
@@ -382,7 +334,7 @@ class _AiScreenState extends ConsumerState<AiScreen> {
   /// Spelled out rather than counted whenever a deletion is involved: "Apply 3
   /// changes" is not something anybody should have to decode before pressing a
   /// button that destroys one of them.
-  String _actionLabel(_Message message) {
+  String _actionLabel(AiMessage message) {
     final adding = message.keptSessions.length + message.keptEvents.length;
     final deleting = message.keptRemovals.length;
 
@@ -393,7 +345,7 @@ class _AiScreenState extends ConsumerState<AiScreen> {
   }
 
   /// What was done, once it has been.
-  String _summarise(_Message message) {
+  String _summarise(AiMessage message) {
     final sessions = message.keptSessions.length;
     final events = message.keptEvents.length;
     final removals = message.keptRemovals.length;
@@ -497,13 +449,13 @@ class _AiScreenState extends ConsumerState<AiScreen> {
     );
   }
 
-  Widget _bubble(_Message message, List<EventCategory> categories) {
+  Widget _bubble(AiMessage message, List<EventCategory> categories) {
     if (message.isUser) return _userBubble(message);
     if (message.failed) return _errorBubble(message);
     return _assistantBubble(message, categories);
   }
 
-  Widget _userBubble(_Message message) {
+  Widget _userBubble(AiMessage message) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
       child: Align(
@@ -520,7 +472,7 @@ class _AiScreenState extends ConsumerState<AiScreen> {
     );
   }
 
-  Widget _errorBubble(_Message message) {
+  Widget _errorBubble(AiMessage message) {
     final t = context.af;
     return AFPanel(
       label: 'Problem',
@@ -532,7 +484,7 @@ class _AiScreenState extends ConsumerState<AiScreen> {
     );
   }
 
-  Widget _assistantBubble(_Message message, List<EventCategory> categories) {
+  Widget _assistantBubble(AiMessage message, List<EventCategory> categories) {
     final t = context.af;
 
     EventCategory categoryFor(String slug) => categories.firstWhere(
@@ -598,7 +550,7 @@ class _AiScreenState extends ConsumerState<AiScreen> {
     );
   }
 
-  Widget _commitControl(_Message message) {
+  Widget _commitControl(AiMessage message) {
     if (message.committed) {
       return AFHint(_summarise(message), tip: true);
     }
@@ -675,6 +627,12 @@ class _AiScreenState extends ConsumerState<AiScreen> {
                 tooltip: 'New chat',
                 bordered: false,
                 onPressed: _busy || _messages.isEmpty ? null : _reset,
+              ),
+              AFIconButton(
+                icon: Icons.history,
+                tooltip: 'History',
+                bordered: false,
+                onPressed: _busy ? null : _showHistory,
               ),
               const Spacer(),
               if (_messages.isNotEmpty) ...[

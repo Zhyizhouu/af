@@ -6,6 +6,7 @@ import '../models/custom_category.dart';
 import '../models/checklist_template_item.dart';
 import '../models/frequent_course.dart';
 import '../models/habit.dart';
+import '../models/ai_conversation.dart';
 import '../models/habit_day.dart';
 
 /// Local storage, scoped to whoever is signed in.
@@ -60,6 +61,9 @@ class DatabaseHelper {
   /// Keyed by `YYYY-MM-DD` in Jakarta — see [HabitDay].
   late Box<HabitDay> habitDaysBox;
 
+  /// Saved conversations with the assistant, keyed by their own id.
+  late Box<AiConversation> aiConversationsBox;
+
   /// App-wide preferences shared by every program (theme mode, QR defaults).
   late Box settingsBox;
 
@@ -74,6 +78,7 @@ class DatabaseHelper {
     Hive.registerAdapter(CustomCategoryAdapter());
     Hive.registerAdapter(HabitAdapter());
     Hive.registerAdapter(HabitDayAdapter());
+    Hive.registerAdapter(AiConversationAdapter());
 
     templateBox = await Hive.openBox<ChecklistTemplateItem>(
       'checklist_template',
@@ -105,6 +110,8 @@ class DatabaseHelper {
         await Hive.openBox<CustomCategory>(name('event_categories'));
     final habits = await Hive.openBox<Habit>(name('habits'));
     final habitDays = await Hive.openBox<HabitDay>(name('habit_days'));
+    final conversations =
+        await Hive.openBox<AiConversation>(name('ai_conversations'));
 
     final previous = _open
         ? <Box>[
@@ -115,6 +122,7 @@ class DatabaseHelper {
             customCategoriesBox,
             habitsBox,
             habitDaysBox,
+            aiConversationsBox,
           ]
         : const <Box>[];
 
@@ -125,6 +133,7 @@ class DatabaseHelper {
     customCategoriesBox = categories;
     habitsBox = habits;
     habitDaysBox = habitDays;
+    aiConversationsBox = conversations;
     _scope = scope;
     _open = true;
 
@@ -342,5 +351,32 @@ class DatabaseHelper {
 
   Future<void> deleteFrequentCourse(dynamic key) async {
     await frequentCoursesBox.delete(key);
+  }
+
+  // ---- AI conversations ----
+
+  /// Live conversations, tombstones excluded, most recently used first.
+  List<AiConversation> getAiConversations() {
+    final conversations =
+        aiConversationsBox.values.where((c) => !c.deleted).toList();
+    conversations.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return conversations;
+  }
+
+  AiConversation? getAiConversation(String id) => aiConversationsBox.get(id);
+
+  Future<void> putAiConversation(AiConversation conversation) =>
+      aiConversationsBox.put(conversation.id, conversation);
+
+  /// Tombstones the conversation, so deleting it on one device does not have
+  /// it pushed back by the next device to sync.
+  Future<void> deleteAiConversation(String id) async {
+    final conversation = aiConversationsBox.get(id);
+    if (conversation == null || conversation.deleted) return;
+    conversation
+      ..deleted = true
+      ..turns = const []
+      ..updatedAt = DateTime.now();
+    await conversation.save();
   }
 }

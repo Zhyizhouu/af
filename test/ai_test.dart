@@ -6,7 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:af/models/ai_conversation.dart';
 import 'package:af/programs/ai/ai_api.dart';
+import 'package:af/programs/ai/ai_conversation_store.dart';
+import 'package:af/programs/ai/ai_message.dart';
 import 'package:af/programs/ai/ai_proposal_card.dart';
 import 'package:af/programs/ai/ai_screen.dart';
 import 'package:af/programs/calendar/calendar_provider.dart';
@@ -427,6 +430,10 @@ void main() {
       );
     }
 
+    late _Recorded log;
+
+    setUp(() => log = _Recorded());
+
     Future<void> pump(
       WidgetTester tester,
       MockClient client, {
@@ -441,6 +448,12 @@ void main() {
         overrides: [
           categoriesProvider.overrideWith((ref) async => builtInCategories),
           agendaProvider.overrideWith((ref) async => agenda),
+          // The screen saves after every turn, and the real store writes to
+          // Hive. Swapped for one that records instead, so these tests can
+          // assert that it saved without standing up a database.
+          aiConversationControllerProvider
+              .overrideWith((ref) => _RecordingStore(ref, log)),
+          aiConversationsProvider.overrideWith((ref) async => log.listed),
         ],
         child: MaterialApp(
           theme: AppTheme.light,
@@ -776,9 +789,261 @@ void main() {
       await pump(tester, MockClient((_) async => throw const _Unreachable()));
       expect(find.textContaining('is not reachable'), findsOneWidget);
     });
+
+    // The assistant's API remembers nothing, so a turn that is not written
+    // down here is a turn lost the moment the tab closes.
+    testWidgets('every turn is saved as it happens', (tester) async {
+      await pump(tester, scripted([], [answerBody(reply: 'Noted.')]));
+
+      expect(log.saves, isEmpty);
+      await say(tester, 'lunch on Wednesday');
+
+      expect(log.saves, hasLength(1));
+      final saved = log.saves.values.single;
+      expect(saved.map((m) => m.text),
+          containsAll(['lunch on Wednesday', 'Noted.']));
+    });
+
+    // Every save in one sitting has to land on the same record, or the history
+    // fills up with one-message conversations.
+    testWidgets('a conversation keeps one id across its turns', (tester) async {
+      await pump(
+        tester,
+        scripted([], [answerBody(reply: 'One.'), answerBody(reply: 'Two.')]),
+      );
+
+      await say(tester, 'first');
+      await say(tester, 'second');
+
+      expect(log.saves, hasLength(1));
+      expect(log.saves.values.single, hasLength(4));
+    });
+
+    testWidgets('a new chat starts a separate record', (tester) async {
+      await pump(
+        tester,
+        scripted([], [answerBody(reply: 'One.'), answerBody(reply: 'Two.')]),
+      );
+
+      await say(tester, 'first');
+      await tester.tap(find.byTooltip('New chat'));
+      await tester.pumpAndSettle();
+      await say(tester, 'second');
+
+      expect(log.saves, hasLength(2));
+    });
+
+    testWidgets('opening a saved conversation restores the transcript',
+        (tester) async {
+      await pump(tester, scripted([], [answerBody(reply: 'Noted.')]));
+
+      // A conversation from another device, as it would arrive off a sync.
+      log.listed = [
+        AiConversation(
+          id: 'from-my-phone',
+          title: 'exam next week',
+          turns: [
+            jsonEncode(AiMessage.user('exam next week').toJson()),
+            jsonEncode(AiMessage(
+              role: AiTurn.roleAssistant,
+              text: 'Booked it.',
+              events: [
+                EventProposal(
+                  title: 'Revision',
+                  notes: '',
+                  start: DateTime(2026, 8, 19, 12),
+                  end: DateTime(2026, 8, 19, 13),
+                  allDay: false,
+                  category: 'study',
+                ),
+              ],
+              committed: true,
+            ).toJson()),
+          ],
+          createdAt: DateTime(2026, 8, 14),
+          updatedAt: DateTime(2026, 8, 14),
+        ),
+      ];
+
+      await tester.tap(find.byTooltip('History'));
+      await tester.pumpAndSettle();
+      expect(find.text('exam next week'), findsOneWidget);
+
+      await tester.tap(find.text('exam next week'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Booked it.'), findsOneWidget);
+      expect(find.text('Revision'), findsOneWidget);
+      // Already carried out — it must not offer to do it a second time.
+      expect(find.textContaining('Add 1'), findsNothing);
+      expect(find.textContaining('Added 1 event'), findsOneWidget);
+    });
+
+    testWidgets('history says so when there is none', (tester) async {
+      await pump(tester, scripted([], [answerBody()]));
+
+      await tester.tap(find.byTooltip('History'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Nothing saved yet'), findsOneWidget);
+    });
+  });
+
+  // A conversation is stored as text and comes back through Hive and
+  // Firestore, so the round trip is the thing worth pinning down: anything it
+  // loses is something the person wrote and cannot get back.
+  group('stored conversations', () {
+    test('a turn survives being written down and read back', () {
+      final original = AiMessage(
+        role: AiTurn.roleAssistant,
+        text: 'Two things, then.',
+        sessions: [
+          SessionProposal(
+            type: 'UAP',
+            start: DateTime(2026, 8, 17, 9),
+            room: '401',
+            courseCode: 'COMP6047',
+            courseName: 'Algorithm',
+            courseClass: 'BAA1',
+          ),
+        ],
+        events: [
+          EventProposal(
+            title: 'Lunch',
+            notes: 'At the canteen',
+            start: DateTime(2026, 8, 19, 12),
+            end: DateTime(2026, 8, 19, 13),
+            allDay: false,
+            category: 'social',
+          ),
+        ],
+        droppedEvents: {0},
+        committed: true,
+      );
+
+      final restored =
+          AiMessage.fromJson(jsonDecode(jsonEncode(original.toJson())));
+
+      expect(restored, isNotNull);
+      expect(restored!.text, 'Two things, then.');
+      expect(restored.sessions.single.courseCode, 'COMP6047');
+      expect(restored.sessions.single.start, DateTime(2026, 8, 17, 9));
+      expect(restored.events.single.notes, 'At the canteen');
+      // The two flags that must survive: one stops it being offered again,
+      // the other keeps a dropped proposal dropped.
+      expect(restored.committed, isTrue);
+      expect(restored.droppedEvents, {0});
+      expect(restored.keptEvents, isEmpty);
+    });
+
+    // The entry may well have been deleted by the time this is reopened —
+    // which is exactly why the card is drawn from a snapshot.
+    test('a deletion is stored with enough to still draw it', () {
+      final entry = AgendaEntry(
+        kind: AgendaKind.session,
+        id: 'sess-9',
+        title: 'UAS · Room 401',
+        subtitle: 'COMP6047 · Algorithm',
+        start: DateTime(2026, 8, 18, 9),
+        end: DateTime(2026, 8, 18, 11),
+        allDay: false,
+        category: null,
+      );
+
+      final restored = AiMessage.fromJson(jsonDecode(jsonEncode(AiMessage(
+        role: AiTurn.roleAssistant,
+        text: 'Cancelling that.',
+        removals: [entry],
+      ).toJson())));
+
+      expect(restored!.removals, hasLength(1));
+      final back = restored.removals.single;
+      expect(back.id, 'sess-9');
+      expect(back.kind, AgendaKind.session);
+      expect(back.title, 'UAS · Room 401');
+      expect(back.subtitle, 'COMP6047 · Algorithm');
+      expect(back.start, DateTime(2026, 8, 18, 9));
+    });
+
+    // One unreadable turn should cost one turn, not the conversation around
+    // it — this data may have been written by an older build of the app.
+    test('an unreadable turn is skipped, not fatal', () {
+      final controller = ProviderContainer();
+      addTearDown(controller.dispose);
+
+      final messages =
+          controller.read(aiConversationControllerProvider).load(AiConversation(
+                id: 'c1',
+                title: 'x',
+                turns: [
+                  jsonEncode(AiMessage.user('first').toJson()),
+                  'not json at all',
+                  jsonEncode({'role': 'wizard', 'text': 'nope'}),
+                  jsonEncode(AiMessage.user('last').toJson()),
+                ],
+                createdAt: DateTime(2026, 8, 14),
+                updatedAt: DateTime(2026, 8, 14),
+              ));
+
+      expect(messages.map((m) => m.text), ['first', 'last']);
+    });
+
+    test('a conversation is named after the first thing asked', () {
+      expect(
+        AiConversationController.titleFor([
+          AiMessage.error('some failure'),
+          AiMessage.user('  UAP  Algoritma   next Monday  '),
+          AiMessage.user('and lunch'),
+        ]),
+        'UAP Algoritma next Monday',
+      );
+
+      expect(AiConversationController.titleFor([]), 'New conversation');
+
+      final long = AiConversationController.titleFor(
+        [AiMessage.user('word ' * 60)],
+      );
+      expect(long.length, lessThanOrEqualTo(60));
+      expect(long, endsWith('…'));
+    });
   });
 }
 
 class _Unreachable implements Exception {
   const _Unreachable();
+}
+
+/// What the screen asked the store to do.
+class _Recorded {
+  final saves = <String, List<AiMessage>>{};
+  final deleted = <String>[];
+  List<AiConversation> listed = const [];
+}
+
+/// The store with its database taken out.
+///
+/// [AiConversationController.load] is left alone deliberately — it is pure,
+/// and it is half of the round trip these tests are checking.
+class _RecordingStore extends AiConversationController {
+  final _Recorded log;
+
+  _RecordingStore(super.ref, this.log);
+
+  @override
+  Future<AiConversation> save({
+    required String id,
+    required List<AiMessage> messages,
+  }) async {
+    log.saves[id] = List.of(messages);
+    return AiConversation(
+      id: id,
+      title: AiConversationController.titleFor(messages),
+      turns: [for (final m in messages) jsonEncode(m.toJson())],
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+  }
+
+  @override
+  Future<void> delete(String id) async => log.deleted.add(id);
 }

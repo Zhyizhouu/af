@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../programs/ai/ai_conversation_store.dart';
 import '../programs/calendar/calendar_provider.dart';
 import '../programs/calendar/category_provider.dart';
 import '../programs/habits/habit_provider.dart';
@@ -19,5 +20,6 @@ void refreshAllData(Ref ref) {
     ..invalidate(calendarEventsProvider)
     ..invalidate(categoriesProvider)
     ..invalidate(habitsProvider)
-    ..invalidate(habitDaysProvider);
+    ..invalidate(habitDaysProvider)
+    ..invalidate(aiConversationsProvider);
 }

@@ -247,13 +247,20 @@ class AiAnswer {
 
   factory AiAnswer.fromJson(Map<String, dynamic> json) => AiAnswer(
         reply: json['reply'] as String? ?? '',
+        // Pattern-matched rather than written as null-aware elements: the Hive
+        // generator's analyzer does not know that syntax, and a `?element`
+        // anywhere in this file stops every adapter in the app regenerating.
         sessions: [
           for (final s in (json['sessions'] as List? ?? const []))
-            ?SessionProposal.fromJson(s as Map<String, dynamic>),
+            if (SessionProposal.fromJson(s as Map<String, dynamic>)
+                case final proposal?)
+              proposal,
         ],
         events: [
           for (final e in (json['events'] as List? ?? const []))
-            ?EventProposal.fromJson(e as Map<String, dynamic>),
+            if (EventProposal.fromJson(e as Map<String, dynamic>)
+                case final proposal?)
+              proposal,
         ],
         removals: [
           for (final id in (json['removals'] as List? ?? const []))

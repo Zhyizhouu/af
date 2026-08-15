@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../db/database_helper.dart';
+import '../models/ai_conversation.dart';
 import '../models/calendar_event.dart';
 import '../models/checklist_item.dart';
 import '../models/custom_category.dart';
@@ -29,6 +30,7 @@ class SyncService {
   static const _categories = 'categories';
   static const _habits = 'habits';
   static const _habitDays = 'habitDays';
+  static const _conversations = 'aiConversations';
 
   CollectionReference<Map<String, dynamic>> _collection(
     String uid,
@@ -47,6 +49,7 @@ class SyncService {
     await _syncEvents(uid);
     await _syncHabits(uid);
     await _syncHabitDays(uid);
+    await _syncAiConversations(uid);
   }
 
   // ---- sessions ----
@@ -388,6 +391,60 @@ class SyncService {
             day: entry.key,
             completed: (data['completed'] as List?)?.cast<String>() ?? const [],
             updatedAt: _date(data['updatedAt']),
+          ),
+        );
+      }
+    }
+
+    await batch.commit();
+  }
+
+  // ---- AI conversations ----
+
+  /// The assistant's history.
+  ///
+  /// It syncs here, through AF's own subtree, rather than through the
+  /// converter's API — that service holds nothing between calls and gains
+  /// nothing by holding this. Which also means the transcript is protected by
+  /// exactly the rule everything else is: `users/{uid}` and no further.
+  ///
+  /// Same shape as habits: the box is keyed by the conversation's own id, so
+  /// put() covers insert and update alike.
+  Future<void> _syncAiConversations(String uid) async {
+    final db = DatabaseHelper.instance;
+    final collection = _collection(uid, _conversations);
+    final remote = await collection.get();
+
+    final remoteDocs = {for (final doc in remote.docs) doc.id: doc.data()};
+    final batch = _firestore.batch();
+
+    for (final conversation in db.aiConversationsBox.values) {
+      final data = remoteDocs[conversation.id];
+      if (data == null || _localWins(conversation.updatedAt, data)) {
+        batch.set(collection.doc(conversation.id), {
+          'title': conversation.title,
+          'turns': conversation.turns,
+          'createdAt': Timestamp.fromDate(conversation.createdAt),
+          'updatedAt': Timestamp.fromDate(conversation.updatedAt),
+          'deleted': conversation.deleted,
+        });
+      }
+    }
+
+    for (final entry in remoteDocs.entries) {
+      final local = db.aiConversationsBox.get(entry.key);
+      final data = entry.value;
+
+      if (local == null || !_localWins(local.updatedAt, data)) {
+        await db.aiConversationsBox.put(
+          entry.key,
+          AiConversation(
+            id: entry.key,
+            title: data['title'] as String? ?? 'Untitled',
+            turns: (data['turns'] as List?)?.cast<String>() ?? const [],
+            createdAt: _date(data['createdAt']),
+            updatedAt: _date(data['updatedAt']),
+            deleted: data['deleted'] as bool? ?? false,
           ),
         );
       }
