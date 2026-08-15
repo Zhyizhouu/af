@@ -1,0 +1,30 @@
+# Dependencies. Restored by `npm ci` from package-lock.json, which *is*
+# committed — 227 MB and ~14,000 files do not belong in git, and the lockfile
+# reproduces them exactly.
+node_modules/
+
+# Build output. Vercel builds this itself from source.
+dist/
+dist-ssr/
+
+# Vite's caches
+.vite/
+*.tsbuildinfo
+
+# Local environment. AF_CONVERT_API is set in the Vercel dashboard, not here.
+.env
+.env.*
+!.env.example
+*.local
+
+# Test and tooling output
+coverage/
+playwright-report/
+test-results/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

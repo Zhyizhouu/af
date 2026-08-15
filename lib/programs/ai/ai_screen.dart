@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../theme/af_text.dart';
@@ -593,29 +594,52 @@ class _AiScreenState extends ConsumerState<AiScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            controller: _prompt,
-            focusNode: _promptFocus,
-            enabled: enabled,
-            minLines: 2,
-            maxLines: 7,
-            // Sans, not mono: this is the one field in AF that takes a
-            // sentence rather than a value.
-            style: AFText.body(context),
-            cursorColor: t.accent,
-            cursorWidth: 1.5,
-            decoration: InputDecoration(
-              isDense: true,
-              filled: false,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              disabledBorder: InputBorder.none,
-              contentPadding: EdgeInsets.zero,
-              hintText: 'Write a message…',
-              hintStyle: AFText.body(
-                context,
-                color: t.muted.withValues(alpha: 0.75),
+          // Enter sends, Shift+Enter breaks the line.
+          //
+          // Intercepted above the field rather than through `onSubmitted`,
+          // which a multi-line TextField never fires. Returning `handled` is
+          // what stops the newline being inserted as well as the message going
+          // — without it you send and are left holding a blank second line.
+          Focus(
+            onKeyEvent: (node, event) {
+              if (event is! KeyDownEvent) return KeyEventResult.ignored;
+              if (event.logicalKey != LogicalKeyboardKey.enter &&
+                  event.logicalKey != LogicalKeyboardKey.numpadEnter) {
+                return KeyEventResult.ignored;
+              }
+              // Shift is the "I meant a paragraph" modifier; let the field have
+              // it. So is a disabled composer — mid-request, Enter should do
+              // nothing rather than queue a second message.
+              if (HardwareKeyboard.instance.isShiftPressed || !enabled) {
+                return KeyEventResult.ignored;
+              }
+              _send();
+              return KeyEventResult.handled;
+            },
+            child: TextField(
+              controller: _prompt,
+              focusNode: _promptFocus,
+              enabled: enabled,
+              minLines: 2,
+              maxLines: 7,
+              // Sans, not mono: this is the one field in AF that takes a
+              // sentence rather than a value.
+              style: AFText.body(context),
+              cursorColor: t.accent,
+              cursorWidth: 1.5,
+              decoration: InputDecoration(
+                isDense: true,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                hintText: 'Write a message…',
+                hintStyle: AFText.body(
+                  context,
+                  color: t.muted.withValues(alpha: 0.75),
+                ),
               ),
             ),
           ),

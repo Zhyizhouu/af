@@ -59,6 +59,33 @@ var Schema = map[string]any{
 				"required": []string{"title", "notes", "start", "end", "allDay", "category"},
 			},
 		},
+		"qrCodes": map[string]any{
+			"type":        "array",
+			"description": "QR codes to generate and show in the conversation. Empty unless they asked for one.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"text": map[string]any{
+						"type":        "string",
+						"description": "Exactly what the code should encode — the URL or text they gave you, unchanged.",
+					},
+					"label": map[string]any{
+						"type":        "string",
+						"description": "A short name for the card, two or three words. Not the encoded text.",
+					},
+					"ecc": map[string]any{
+						"type":        "string",
+						"enum":        ECCLevels,
+						"description": "Error correction. Use M normally and H whenever useLogo is true.",
+					},
+					"useLogo": map[string]any{
+						"type":        "boolean",
+						"description": "Knock their attached image into the middle. Only true when they attached one and want it used.",
+					},
+				},
+				"required": []string{"text", "label", "ecc", "useLogo"},
+			},
+		},
 		"removals": map[string]any{
 			"type":        "array",
 			"description": "Ids of entries already in their calendar that you are offering to delete. Copy an id exactly as it was given to you. Empty unless they asked to cancel, remove or delete something.",
@@ -69,7 +96,7 @@ var Schema = map[string]any{
 			"description": "What you say back, in one or two short plain sentences. Name anything you assumed. No markdown, no lists — the entries are shown as cards beside this.",
 		},
 	},
-	"required": []string{"sessions", "events", "removals", "reply"},
+	"required": []string{"sessions", "events", "removals", "qrCodes", "reply"},
 }
 
 // Instructions is the system half of the request.
@@ -77,10 +104,15 @@ var Schema = map[string]any{
 // Written to be read by somebody debugging a wrong answer, which is why the
 // rules are numbered rather than prose: when a proposal comes back wrong, the
 // question is always "which rule did it break".
-func Instructions(now time.Time, categories []string, existing []Entry) string {
+func Instructions(
+	now time.Time,
+	categories []string,
+	existing []Entry,
+	attachments []Attachment,
+) string {
 	var b strings.Builder
 
-	b.WriteString(`You are the scheduling assistant inside reAFresh, talking with a university proctor. You hold a conversation, and you propose changes to their calendar; they confirm every one. You never save or delete anything yourself.
+	b.WriteString(`You are the assistant inside reAFresh, talking with a university proctor. You hold a conversation, you propose changes to their calendar, and you can generate QR codes for them. They confirm every change; you never save or delete anything yourself.
 
 Rules:
 1. Right now it is `)
@@ -105,16 +137,44 @@ What is already scheduled:
 14. Do not propose creating something already on the list. Say it is there.
 15. The list is a window around today, not the whole calendar. If they ask about something outside it, say what you can see rather than claiming nothing exists.
 
+QR codes:
+16. When they ask for a QR code, put it in "qrCodes". It is generated straight away and appears in the conversation — it is not a change to anything, so there is nothing for them to confirm and you should not ask.
+17. Encode exactly what they gave you. Do not tidy a URL, add a scheme they did not write, or shorten anything.
+18. Set useLogo only when they have attached an image and want it on the code. When useLogo is true, set ecc to "H" — the logo covers part of the code, and only the highest correction level survives that. Otherwise "M".
+19. If they ask for a logo on a code but have attached nothing, say so and generate the plain code anyway.
+
 How the conversation works:
-16. Always return the complete set of changes currently under discussion, not just the newest one. When the person corrects something — "make that 10am", "it is room 402", "drop the lunch" — repeat every entry that still stands, with the correction applied. The cards on screen are replaced by what you return, so an entry you leave out is an entry they lose.
-17. A turn marked confirmed has already been carried out. Never offer those again, even while restating the rest.
-18. When the person is asking a question, thinking aloud, or saying something that is not about scheduling, return empty lists and just answer them in "reply". An empty proposal list is a perfectly good turn.
-19. "reply" is one or two short sentences of plain prose. Say what you did and name what you assumed. Do not list the entries back — they are shown as cards next to what you say. No markdown.
-20. Ask a question when a request is genuinely ambiguous rather than guessing at it, and return nothing on that turn.
+20. Always return the complete set of changes currently under discussion, not just the newest one. When the person corrects something — "make that 10am", "it is room 402", "drop the lunch" — repeat every entry that still stands, with the correction applied. The cards on screen are replaced by what you return, so an entry you leave out is an entry they lose.
+21. A turn marked confirmed has already been carried out. Never offer those again, even while restating the rest.
+22. When the person is asking a question, thinking aloud, or saying something that is not about scheduling, return empty lists and just answer them in "reply". An empty proposal list is a perfectly good turn.
+23. "reply" is one or two short sentences of plain prose. Say what you did and name what you assumed. Do not list the entries back — they are shown as cards next to what you say. No markdown.
+24. Ask a question when a request is genuinely ambiguous rather than guessing at it, and return nothing on that turn.
 
 `)
 
+	b.WriteString(RenderAttachments(attachments))
+	b.WriteString("\n")
 	b.WriteString(RenderExisting(existing))
+	return b.String()
+}
+
+// RenderAttachments tells the model what is attached, without sending any of it.
+//
+// Names and kinds only. The model has no reason to see a logo in order to
+// decide whether the request wants one used, and sending the bytes would cost
+// tokens and latency and leave a copy of somebody's file on Google's side for
+// nothing.
+func RenderAttachments(attachments []Attachment) string {
+	if len(attachments) == 0 {
+		return "They have attached nothing to this conversation."
+	}
+
+	var b strings.Builder
+	b.WriteString("Attached to this conversation. You cannot see the contents, " +
+		"only that these exist:\n")
+	for _, attachment := range attachments {
+		fmt.Fprintf(&b, "- %s (%s)\n", orDash(attachment.Name), orDash(attachment.Kind))
+	}
 	return b.String()
 }
 

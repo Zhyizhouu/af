@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
@@ -29,6 +30,7 @@ func Normalise(p Plan, categories []string, now time.Time, known map[string]bool
 		Sessions: []Session{},
 		Events:   []Event{},
 		Removals: []string{},
+		QRCodes:  []QR{},
 	}
 
 	// Deletion is the one thing here that destroys something, so a removal is
@@ -63,6 +65,18 @@ func Normalise(p Plan, categories []string, now time.Time, known map[string]bool
 		}
 		if cleaned, ok := cleanEvent(event, allowed, now); ok {
 			out.Events = append(out.Events, cleaned)
+		}
+	}
+
+	// A QR is generated rather than confirmed, so nothing downstream is going
+	// to look at it before it renders. Whatever is wrong with it has to be
+	// caught here or it reaches the person as a broken picture.
+	for _, code := range p.QRCodes {
+		if len(out.QRCodes) >= MaxQRCodes {
+			break
+		}
+		if cleaned, ok := cleanQR(code); ok {
+			out.QRCodes = append(out.QRCodes, cleaned)
 		}
 	}
 
@@ -147,6 +161,45 @@ func cleanEvent(e Event, allowed map[string]bool, now time.Time) (Event, bool) {
 		e.Category = "other"
 	}
 	return e, true
+}
+
+// cleanQR makes a proposed code renderable, or drops it.
+//
+// Nothing here is repaired optimistically. A code encoding the wrong thing
+// scans as the wrong thing, and a person who has already put it on a poster has
+// no way of knowing — so anything questionable is refused rather than guessed
+// at. The one exception is the correction level, which affects only how much
+// damage the code survives.
+func cleanQR(q QR) (QR, bool) {
+	// Not TrimSpace'd into oblivion: leading and trailing whitespace in a URL
+	// is a mistake, but the text itself is encoded verbatim otherwise.
+	q.Text = strings.TrimSpace(q.Text)
+	if q.Text == "" {
+		return QR{}, false
+	}
+	// Version 40 at level L tops out around 2,953 bytes, and every lower
+	// combination is smaller. Past this there is no code to make.
+	if len(q.Text) > MaxQRBytes {
+		return QR{}, false
+	}
+
+	q.Label = strings.TrimSpace(q.Label)
+	if q.Label == "" {
+		q.Label = "QR code"
+	}
+
+	q.ECC = strings.ToUpper(strings.TrimSpace(q.ECC))
+	if !slices.Contains(ECCLevels, q.ECC) {
+		q.ECC = "M"
+	}
+	// A logo covers the middle of the code, which is damage; only the highest
+	// correction level reliably survives it. The model is told this too, and
+	// this is what happens when it does not listen.
+	if q.UseLogo {
+		q.ECC = "H"
+	}
+
+	return q, true
 }
 
 // plausible rejects dates far enough from now to be a misread year rather than

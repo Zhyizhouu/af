@@ -1,0 +1,53 @@
+.signin {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+}
+
+.signin__column {
+  width: 100%;
+  max-width: 420px;
+}
+
+.signin__rule {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.signin__rule::before,
+.signin__rule::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--af-line);
+}
+
+.signin__form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.signin__form .af-input {
+  margin-bottom: 8px;
+}
+
+.signin__form .af-btn {
+  margin-top: 6px;
+}
+
+.signin__switch {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.signin__switch .af-btn {
+  flex: 1;
+  min-width: 140px;
+}

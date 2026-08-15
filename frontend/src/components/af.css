@@ -1,0 +1,246 @@
+/*
+ * The AF widget kit.
+ *
+ * A port of `lib/widgets/` — panel, button, text field, chip, masthead, empty
+ * state. Same rules as the Flutter kit: hairline borders, 4px radius and no
+ * rounder, mono on every control, and one accent used for focus and live state.
+ */
+
+/* ---- panel ---- */
+
+.af-panel {
+  background: var(--af-panel);
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Drawn as a strip rather than a thicker left border: the Flutter kit had to
+   do this because a rounded box asserts on uneven sides, and matching it keeps
+   the two looking identical while both exist. */
+.af-panel--accented::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--af-accent);
+}
+
+.af-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.af-panel__head > :first-child {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- button ---- */
+
+.af-btn {
+  font-family: var(--af-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: var(--af-radius);
+  border: 1px solid var(--af-ink);
+  background: var(--af-ink);
+  color: var(--af-on-ink);
+  padding: 10px 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 90ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+/* The 1px nudge downward while held, from the QR Generator's `.btn:active`. */
+.af-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.af-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.af-btn--ghost {
+  background: transparent;
+  color: var(--af-ink);
+  border-color: var(--af-line-strong);
+}
+
+.af-btn--quiet {
+  background: transparent;
+  color: var(--af-muted);
+  border-color: var(--af-line);
+}
+
+.af-btn--danger {
+  background: var(--af-warn);
+  border-color: var(--af-warn);
+  color: #fff;
+}
+
+.af-btn--expand {
+  width: 100%;
+}
+
+.af-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--af-radius);
+  border: 1px solid var(--af-line-strong);
+  background: transparent;
+  color: var(--af-ink);
+  cursor: pointer;
+  padding: 0;
+}
+
+.af-icon-btn--bare {
+  border-color: transparent;
+}
+
+.af-icon-btn:hover:not(:disabled) {
+  background: var(--af-accent-soft);
+}
+
+.af-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ---- field ---- */
+
+.af-input {
+  background: var(--af-sunken);
+  border: 1px solid var(--af-line-strong);
+  border-radius: var(--af-radius);
+  color: var(--af-ink);
+  font-family: var(--af-mono);
+  font-size: 14px;
+  line-height: 1.55;
+  padding: 12px 13px;
+  width: 100%;
+  outline: none;
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.af-input--prose {
+  font-family: var(--af-sans);
+}
+
+/* The QR page brightens the fill on focus and blooms a 3px accent ring. */
+.af-input:focus {
+  background: var(--af-panel);
+  border-color: var(--af-accent);
+  box-shadow: 0 0 0 3px var(--af-accent-soft);
+}
+
+.af-input::placeholder {
+  color: var(--af-muted);
+  opacity: 0.75;
+}
+
+.af-hint {
+  font-family: var(--af-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--af-muted);
+  margin-top: 10px;
+}
+
+.af-hint--tip {
+  color: var(--af-accent);
+}
+
+/* ---- chip ---- */
+
+.af-chip {
+  font-family: var(--af-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  border-radius: var(--af-radius);
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+/* ---- masthead ---- */
+
+.af-masthead {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  margin-bottom: 22px;
+  border-bottom: 1.5px solid var(--af-ink);
+}
+
+.af-masthead__tick {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--af-accent);
+  box-shadow: 0 0 0 3px var(--af-accent-soft);
+  flex: none;
+}
+
+.af-masthead__tagline {
+  margin-left: auto;
+  font-family: var(--af-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--af-muted);
+}
+
+/* ---- empty state ---- */
+
+.af-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 260px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.af-empty__glyph {
+  font-family: var(--af-mono);
+  font-size: 26px;
+  color: var(--af-line-strong);
+}
+
+.af-empty__message {
+  font-family: var(--af-mono);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  line-height: 1.7;
+  color: var(--af-muted);
+  white-space: pre-line;
+}
+
+/* ---- footer ---- */
+
+.af-footer {
+  padding: 24px 0 16px;
+  text-align: center;
+  font-family: var(--af-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--af-muted);
+}

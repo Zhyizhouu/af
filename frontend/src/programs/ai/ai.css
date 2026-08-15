@@ -1,0 +1,446 @@
+.ai {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.ai__main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px 0;
+  max-width: 940px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.ai__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1.5px solid var(--af-ink);
+  flex: none;
+}
+
+.ai__tagline {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* Reserved so the tagline does not run under the split pane's close button. */
+.af-split__pane .ai__head {
+  padding-right: 34px;
+}
+
+/* Below this the header wraps onto two lines and the tagline is the half worth
+   losing — the program's name is not. */
+@media (max-width: 640px) {
+  .ai__tagline {
+    display: none;
+  }
+}
+
+.ai__warn {
+  font-family: var(--af-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--af-warn);
+}
+
+/* ---- transcript ---- */
+
+.ai__transcript {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 2px 12px;
+  scroll-behavior: smooth;
+}
+
+.ai__empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 440px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+/* Fades and lifts a turn into place. Short and single-shot — a transcript that
+   slid every message on every render would be unreadable. */
+@keyframes ai-appear {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ai__turn {
+  margin-bottom: 20px;
+  animation: ai-appear 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.ai__turn--user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ai__bubble {
+  max-width: 520px;
+  padding: 13px 15px 13px 17px;
+}
+
+.ai__attribution {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.ai__tick {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: var(--af-accent);
+}
+
+.ai__reply {
+  margin: 0 0 14px;
+}
+
+/* ---- thinking ---- */
+
+.ai__thinking {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 20px;
+}
+
+.ai__pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--af-line-strong);
+  animation: ai-pulse 1.1s ease-in-out infinite;
+}
+
+/* Each square trails the one before by a fraction of a cycle, so the row reads
+   as a wave rather than three things blinking. */
+.ai__pip:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.ai__pip:nth-child(3) {
+  animation-delay: 0.36s;
+}
+.ai__thinking .af-panel-label {
+  margin-left: 4px;
+}
+
+@keyframes ai-pulse {
+  0%,
+  100% {
+    background: var(--af-line-strong);
+  }
+  50% {
+    background: var(--af-accent);
+  }
+}
+
+/* ---- composer ---- */
+
+.ai__composer {
+  flex: none;
+  background: var(--af-sunken);
+  border: 1px solid var(--af-line-strong);
+  border-radius: var(--af-radius);
+  padding: 12px 10px 10px 14px;
+  margin-top: 14px;
+  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.ai__composer:focus-within {
+  background: var(--af-panel);
+  border-color: var(--af-accent);
+  box-shadow: 0 0 0 3px var(--af-accent-soft);
+}
+
+/* The field carries no chrome of its own — the box around it is the control. */
+.ai__input {
+  border: none;
+  background: transparent;
+  padding: 0;
+  resize: none;
+  min-height: 48px;
+  max-height: 180px;
+  field-sizing: content;
+}
+
+.ai__input:focus {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ai__composer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.ai__spacer {
+  flex: 1;
+}
+
+/* ---- sidebar ---- */
+
+.ai__sidebar {
+  flex: none;
+  width: 260px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 14px;
+  border-right: 1px solid var(--af-line);
+  background: var(--af-panel);
+}
+
+.ai__sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ai__sidebar-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai__sidebar-empty {
+  padding-top: 24px;
+}
+
+.ai__sidebar-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius);
+  background: var(--af-panel);
+  padding: 4px 4px 4px 0;
+}
+
+.ai__sidebar-row.is-current {
+  border-color: var(--af-accent);
+  background: var(--af-sunken);
+}
+
+.ai__sidebar-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 8px 4px 8px 11px;
+}
+
+.ai__sidebar-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* On a phone the sidebar cannot sit beside the transcript, so it sits over it —
+   reachable from the same toggle rather than gone. */
+@media (max-width: 720px) {
+  .ai__sidebar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 5;
+    width: min(280px, 85vw);
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.25);
+  }
+
+  .ai {
+    position: relative;
+  }
+}
+
+/* ---- cards ---- */
+
+.card {
+  margin-bottom: 12px;
+}
+
+.card--danger {
+  border-color: var(--af-warn);
+}
+
+.card__title {
+  font-family: var(--af-mono);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--af-ink);
+  margin-bottom: 10px;
+}
+
+.card__title--danger {
+  color: var(--af-warn);
+}
+
+.card__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.card__label {
+  width: 58px;
+  flex: none;
+  font-family: var(--af-mono);
+  font-size: 11.5px;
+  color: var(--af-muted);
+}
+
+.card__value {
+  font-family: var(--af-mono);
+  font-size: 12px;
+  color: var(--af-ink);
+}
+
+.card__value--missing {
+  color: var(--af-warn);
+}
+
+.card__notes {
+  margin: 8px 0 0;
+  color: var(--af-muted);
+}
+
+.card__caution {
+  font-family: var(--af-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--af-warn);
+  margin: 12px 0 0;
+}
+
+.card .af-btn {
+  margin-top: 14px;
+}
+
+/* ---- attachments ---- */
+
+.ai__attached,
+.ai__pending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.ai__attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--af-mono);
+  font-size: 11px;
+  color: var(--af-muted);
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius);
+  padding: 3px 6px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai__attachment-thumb {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  border-radius: 1px;
+  flex: none;
+}
+
+.ai__attachment-drop {
+  background: none;
+  border: none;
+  color: var(--af-muted);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 2px;
+}
+
+.ai__attachment-drop:hover {
+  color: var(--af-warn);
+}
+
+/* A file input styled as one of the kit's icon buttons: the native control is
+   unstylable, so it is hidden inside a label that is the button. */
+.ai__attach {
+  position: relative;
+  cursor: pointer;
+}
+
+.ai__attach input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ai__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.card__encoded {
+  font-family: var(--af-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--af-muted);
+  margin: 12px 0 0;
+  word-break: break-all;
+}
+
+.card__links {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.card__links .af-btn {
+  text-decoration: none;
+}

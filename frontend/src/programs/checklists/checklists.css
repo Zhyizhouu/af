@@ -1,0 +1,110 @@
+.chk {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  max-width: 940px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.chk__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1.5px solid var(--af-ink);
+}
+
+.chk__tabs {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.chk__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chk__open {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  text-align: left;
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.chk__title {
+  font-family: var(--af-mono);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--af-ink);
+}
+
+.chk__row-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* A bar rather than a number: the useful question mid-session is "how much
+   left", and a fraction answers that slower than a length does. */
+.chk__progress {
+  height: 4px;
+  background: var(--af-sunken);
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius);
+  overflow: hidden;
+}
+
+.chk__progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--af-accent);
+  transition: width 200ms ease;
+}
+
+.chk__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chk__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.chk__item input {
+  margin-top: 3px;
+  flex: none;
+}
+
+.chk__done {
+  color: var(--af-muted);
+  text-decoration: line-through;
+}
+
+.chk__types {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}

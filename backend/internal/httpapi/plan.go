@@ -64,7 +64,7 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 	var proposed plan.Plan
 	if err := s.planner.GenerateJSON(
 		ctx,
-		plan.Instructions(now, request.Categories, request.Calendar()),
+		plan.Instructions(now, request.Categories, request.Calendar(), request.Files()),
 		conversation(request),
 		plan.Schema,
 		&proposed,
@@ -97,6 +97,7 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 		"sessions": cleaned.Sessions,
 		"events":   cleaned.Events,
 		"removals": cleaned.Removals,
+		"qrCodes":  cleaned.QRCodes,
 		"reply":    cleaned.Reply,
 	})
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -877,6 +878,64 @@ void main() {
       // Already carried out — it must not offer to do it a second time.
       expect(find.textContaining('Add 1'), findsNothing);
       expect(find.textContaining('Added 1 event'), findsOneWidget);
+    });
+
+    /// Enter sends; Shift+Enter is left alone so the field breaks the line.
+    ///
+    /// Only the interception is asserted here. The newline itself comes from
+    /// the platform text input, which `sendKeyEvent` does not drive — so what
+    /// a widget test can prove is that Shift+Enter is *not* swallowed and that
+    /// Enter both sends and is consumed.
+    testWidgets('enter sends and shift+enter does not', (tester) async {
+      final captured = <Map<String, dynamic>>[];
+      await pump(tester, scripted(captured, [answerBody(reply: 'Noted.')]));
+
+      String composerText() =>
+          tester.widget<TextField>(find.byType(TextField)).controller!.text;
+
+      await tester.enterText(find.byType(TextField), 'first line');
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+      await tester.pumpAndSettle();
+
+      expect(captured, isEmpty, reason: 'shift+enter must not send');
+      expect(composerText(), 'first line',
+          reason: 'shift+enter must leave the message alone');
+
+      await tester.enterText(find.byType(TextField), 'first line\nsecond line');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(captured, hasLength(1));
+      // Multi-line messages survive, so Shift+Enter is worth having.
+      expect(captured.single['prompt'], 'first line\nsecond line');
+      expect(composerText(), isEmpty, reason: 'sending clears the composer');
+    });
+
+    testWidgets('enter does nothing while a message is in flight',
+        (tester) async {
+      await pump(
+        tester,
+        MockClient((request) async {
+          if (request.url.path.endsWith('/limits')) {
+            return http.Response(limitsBody, 200, headers: jsonHeaders);
+          }
+          return http.Response(
+            jsonEncode({'error': 'nope'}),
+            503,
+            headers: jsonHeaders,
+          );
+        }),
+      );
+
+      // Disabled composer: the key must not queue a second request.
+      await tester.enterText(find.byType(TextField), 'hello');
+      await tester.pump();
+      expect(find.text('Send'), findsOneWidget);
     });
 
     testWidgets('history says so when there is none', (tester) async {

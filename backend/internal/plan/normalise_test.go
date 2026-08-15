@@ -393,6 +393,145 @@ func TestRemovals(t *testing.T) {
 	})
 }
 
+// A QR is generated rather than confirmed, so nothing looks at it between the
+// model and the person. Whatever is wrong with it has to be caught here or it
+// arrives as a broken picture.
+func TestQRCodes(t *testing.T) {
+	t.Run("a code is kept and tidied", func(t *testing.T) {
+		got := plan.Normalise(plan.Plan{
+			QRCodes: []plan.QR{{Text: "  https://af.test/x  ", Label: " Room 401 ", ECC: "q"}},
+		}, categories, now, nil)
+
+		if len(got.QRCodes) != 1 {
+			t.Fatalf("qrCodes = %+v", got.QRCodes)
+		}
+		code := got.QRCodes[0]
+		if code.Text != "https://af.test/x" || code.Label != "Room 401" || code.ECC != "Q" {
+			t.Errorf("not tidied: %+v", code)
+		}
+	})
+
+	// A logo covers the middle of the code, which is damage. Only the highest
+	// correction level reliably survives it, whatever the model asked for.
+	t.Run("a logo forces the highest correction level", func(t *testing.T) {
+		got := plan.Normalise(plan.Plan{
+			QRCodes: []plan.QR{{Text: "https://af.test", Label: "x", ECC: "L", UseLogo: true}},
+		}, categories, now, nil)
+
+		if got.QRCodes[0].ECC != "H" {
+			t.Errorf("ecc = %q, want H", got.QRCodes[0].ECC)
+		}
+	})
+
+	t.Run("an invented correction level falls back", func(t *testing.T) {
+		got := plan.Normalise(plan.Plan{
+			QRCodes: []plan.QR{{Text: "x", Label: "x", ECC: "ULTRA"}},
+		}, categories, now, nil)
+
+		if got.QRCodes[0].ECC != "M" {
+			t.Errorf("ecc = %q, want M", got.QRCodes[0].ECC)
+		}
+	})
+
+	t.Run("an empty payload is dropped", func(t *testing.T) {
+		got := plan.Normalise(plan.Plan{
+			QRCodes: []plan.QR{{Text: "   ", Label: "Nothing"}},
+		}, categories, now, nil)
+
+		if len(got.QRCodes) != 0 {
+			t.Errorf("qrCodes = %+v, want none", got.QRCodes)
+		}
+	})
+
+	// Past the format's own ceiling there is no code to make, so it is refused
+	// rather than truncated — a truncated payload scans as the wrong thing.
+	t.Run("a payload past the format ceiling is dropped", func(t *testing.T) {
+		got := plan.Normalise(plan.Plan{
+			QRCodes: []plan.QR{{Text: strings.Repeat("x", plan.MaxQRBytes+1), Label: "Huge"}},
+		}, categories, now, nil)
+
+		if len(got.QRCodes) != 0 {
+			t.Errorf("qrCodes = %+v, want none", got.QRCodes)
+		}
+	})
+
+	t.Run("a missing label gets one", func(t *testing.T) {
+		got := plan.Normalise(plan.Plan{
+			QRCodes: []plan.QR{{Text: "https://af.test", ECC: "M"}},
+		}, categories, now, nil)
+
+		if got.QRCodes[0].Label == "" {
+			t.Error("a code came back with nothing to call it")
+		}
+	})
+
+	t.Run("the count is capped", func(t *testing.T) {
+		flood := make([]plan.QR, plan.MaxQRCodes+10)
+		for i := range flood {
+			flood[i] = plan.QR{Text: "https://af.test", Label: "x", ECC: "M"}
+		}
+
+		got := plan.Normalise(plan.Plan{QRCodes: flood}, categories, now, nil)
+		if len(got.QRCodes) != plan.MaxQRCodes {
+			t.Errorf("kept %d codes, want %d", len(got.QRCodes), plan.MaxQRCodes)
+		}
+	})
+
+	// A code changes nothing, so it must not be dragged behind the confirm gate
+	// — but a turn that produced one is still not an empty turn.
+	t.Run("a code needs no confirming but is not nothing", func(t *testing.T) {
+		got := plan.Normalise(plan.Plan{
+			QRCodes: []plan.QR{{Text: "https://af.test", Label: "x", ECC: "M"}},
+		}, categories, now, nil)
+
+		if got.IsEmpty() {
+			t.Error("a turn that produced a code is not an empty turn")
+		}
+		if got.NeedsConfirming() {
+			t.Error("a QR code must not be put behind the confirm gate")
+		}
+		if got.Reply == "" {
+			t.Error("a turn that produced a code said nothing about it")
+		}
+	})
+}
+
+func TestAttachments(t *testing.T) {
+	// The bytes never leave the browser; the model is told only that a file
+	// exists so it can decide whether the request wants it used.
+	t.Run("attachments are named to the model", func(t *testing.T) {
+		rendered := plan.RenderAttachments([]plan.Attachment{
+			{Name: "logo.png", Kind: "image/png"},
+		})
+
+		for _, want := range []string{"logo.png", "image/png"} {
+			if !strings.Contains(rendered, want) {
+				t.Errorf("rendered attachments missing %q:\n%s", want, rendered)
+			}
+		}
+	})
+
+	// Silence would read as the subject not having come up, rather than as
+	// there being nothing there.
+	t.Run("nothing attached says so", func(t *testing.T) {
+		if !strings.Contains(plan.RenderAttachments(nil), "nothing") {
+			t.Errorf("render = %q", plan.RenderAttachments(nil))
+		}
+	})
+
+	t.Run("the attachment list is capped", func(t *testing.T) {
+		flood := make([]plan.Attachment, plan.MaxAttachments+5)
+		for i := range flood {
+			flood[i] = plan.Attachment{Name: fmt.Sprint(i), Kind: "image/png"}
+		}
+
+		shown := plan.Request{Attachments: flood}.Files()
+		if len(shown) != plan.MaxAttachments {
+			t.Fatalf("showed %d attachments, want %d", len(shown), plan.MaxAttachments)
+		}
+	})
+}
+
 func TestRequestValidation(t *testing.T) {
 	valid := plan.Request{
 		Prompt:     "UAP Algoritma on Monday at 9 in room 401",

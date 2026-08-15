@@ -1,0 +1,84 @@
+.qr-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+  max-width: 940px;
+  margin: 0 auto;
+}
+
+.qr-page__text {
+  resize: vertical;
+}
+
+.qr-page__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.qr-page__control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.qr-page__control input[type='color'] {
+  width: 56px;
+  height: 32px;
+  padding: 2px;
+  background: var(--af-sunken);
+  border: 1px solid var(--af-line-strong);
+  border-radius: var(--af-radius);
+  cursor: pointer;
+}
+
+.qr-page__file {
+  font-family: var(--af-mono);
+  font-size: 11px;
+  color: var(--af-muted);
+  max-width: 210px;
+}
+
+/* ---- the code itself ---- */
+
+.qr {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.qr__image {
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius);
+  background: var(--af-panel);
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Holds the slot open while the encoder runs, so the card does not jump. */
+.qr__pending {
+  border: 1px dashed var(--af-line-strong);
+  border-radius: var(--af-radius);
+}
+
+.qr__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.qr__actions .af-btn {
+  text-decoration: none;
+}
+
+.qr__error {
+  font-family: var(--af-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--af-warn);
+  margin: 0;
+}

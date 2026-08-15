@@ -1,0 +1,51 @@
+.aud {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  max-width: 940px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.aud__head {
+  padding-bottom: 14px;
+  border-bottom: 1.5px solid var(--af-ink);
+}
+
+.aud__file {
+  font-family: var(--af-mono);
+  font-size: 12px;
+  color: var(--af-muted);
+  width: 100%;
+}
+
+.aud__formats,
+.aud__bitrates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+/* One cell per phase rather than a percentage: a conversion has stages, and
+   which stage it is stuck in is the useful thing to see. */
+.aud__phases {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 12px;
+}
+
+.aud__phase {
+  flex: 1;
+  height: 6px;
+  background: var(--af-sunken);
+  border: 1px solid var(--af-line);
+  border-radius: 1px;
+}
+
+.aud__phase.is-done {
+  background: var(--af-accent);
+  border-color: var(--af-accent);
+}

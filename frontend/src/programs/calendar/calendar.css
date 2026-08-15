@@ -1,0 +1,359 @@
+.cal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  height: 100%;
+  min-height: 0;
+}
+
+.cal__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1.5px solid var(--af-ink);
+}
+
+.cal__views {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.cal__view {
+  font-family: var(--af-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--af-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--af-radius);
+  padding: 6px 9px;
+  cursor: pointer;
+}
+
+.cal__view.is-active {
+  color: var(--af-ink);
+  border-color: var(--af-line-strong);
+  background: var(--af-sunken);
+}
+
+.cal__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cal__range {
+  font-family: var(--af-mono);
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  color: var(--af-ink);
+  min-width: 12ch;
+}
+
+.cal__spacer {
+  flex: 1;
+}
+
+.cal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ---- year ---- */
+
+.cal__year {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.cal__mini {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cal__mini-day {
+  font-family: var(--af-mono);
+  font-size: 10px;
+  color: var(--af-muted);
+  background: none;
+  border: none;
+  border-radius: 1px;
+  padding: 3px 0;
+  cursor: pointer;
+}
+
+.cal__mini-day.is-busy {
+  color: var(--af-ink);
+  background: var(--af-accent-soft);
+}
+
+/* ---- month ---- */
+
+.cal__weekdays,
+.cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal__weekdays {
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.cal__cell {
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 6px;
+  background: var(--af-sunken);
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius);
+  cursor: pointer;
+}
+
+.cal__cell--blank {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+.cal__cell.is-today {
+  border-color: var(--af-accent);
+}
+
+.cal__cell.is-selected {
+  background: var(--af-accent-soft);
+}
+
+.cal__cell-date {
+  font-family: var(--af-mono);
+  font-size: 11.5px;
+  color: var(--af-ink);
+}
+
+.cal__dots {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.cal__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  display: inline-block;
+}
+
+/* ---- agenda ---- */
+
+.cal__agenda {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cal__agenda-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--af-sunken);
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius);
+  padding: 8px 10px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.cal__stripe {
+  width: 3px;
+  align-self: stretch;
+  border-radius: 1px;
+  flex: none;
+}
+
+.cal__agenda-when {
+  font-family: var(--af-mono);
+  font-size: 11.5px;
+  color: var(--af-muted);
+  width: 7ch;
+  flex: none;
+}
+
+.cal__agenda-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- time grid ---- */
+
+.cal__grid-head {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.cal__timegrid {
+  display: grid;
+  gap: 4px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.cal__axis {
+  display: flex;
+  flex-direction: column;
+}
+
+.cal__hour {
+  font-family: var(--af-mono);
+  font-size: 10px;
+  color: var(--af-muted);
+  border-top: 1px solid var(--af-line);
+  padding-top: 2px;
+}
+
+.cal__column {
+  position: relative;
+  border-left: 1px solid var(--af-line);
+}
+
+.cal__slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--af-line);
+  cursor: pointer;
+  padding: 0;
+}
+
+.cal__slot:hover {
+  background: var(--af-accent-soft);
+}
+
+.cal__block {
+  position: absolute;
+  background: var(--af-panel);
+  border: 1px solid;
+  border-left-width: 3px;
+  border-radius: var(--af-radius);
+  padding: 3px 5px;
+  overflow: hidden;
+  font-family: var(--af-mono);
+  font-size: 10.5px;
+  color: var(--af-ink);
+}
+
+.cal__block-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The now-line, so "where am I" is answerable without reading the axis. */
+.cal__now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--af-warn);
+  pointer-events: none;
+}
+
+/* ---- editor ---- */
+
+.cal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  z-index: 10;
+}
+
+.cal__editor {
+  width: 100%;
+  max-width: 420px;
+  max-height: 88vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cal__editor .af-input {
+  margin-bottom: 6px;
+}
+
+.cal__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 10px;
+  cursor: pointer;
+}
+
+.cal__categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+
+.cal__category {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--af-mono);
+  font-size: 11px;
+  color: var(--af-muted);
+  background: var(--af-sunken);
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius);
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+.cal__category.is-active {
+  color: var(--af-ink);
+  border-color: var(--af-accent);
+}
+
+.cal__editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.cal__editor-actions .af-btn {
+  flex: 1;
+  min-width: 100px;
+}

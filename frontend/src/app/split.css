@@ -1,0 +1,82 @@
+.af-split {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+}
+
+.af-split__pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex-grow: 0;
+  flex-shrink: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.af-split--single .af-split__pane {
+  flex-basis: 100%;
+}
+
+/* A hairline at rest that thickens to the accent on hover — the same rule the
+   panels use, so the divider reads as part of the instrument rather than as
+   chrome bolted on. */
+.af-split__divider {
+  flex: none;
+  width: 9px;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.af-split__grip {
+  width: 1px;
+  height: 100%;
+  background: var(--af-line-strong);
+  transition: background 120ms ease, width 120ms ease;
+}
+
+.af-split__divider:hover .af-split__grip,
+.af-split__divider:focus-visible .af-split__grip,
+.af-split--dragging .af-split__grip {
+  background: var(--af-accent);
+  width: 2px;
+}
+
+.af-split__divider:focus-visible {
+  outline: none;
+}
+
+/* Text selection across both panes while dragging is the classic splitter
+   papercut: you resize, and the whole page ends up highlighted. */
+.af-split--dragging {
+  user-select: none;
+  cursor: col-resize;
+}
+
+.af-split__close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--af-radius);
+  border: 1px solid var(--af-line);
+  background: var(--af-panel);
+  color: var(--af-muted);
+  font-family: var(--af-mono);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.af-split__close:hover {
+  color: var(--af-ink);
+  border-color: var(--af-line-strong);
+}

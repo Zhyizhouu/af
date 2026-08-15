@@ -78,10 +78,51 @@ const (
 	KindSession = "session"
 )
 
+// QR is a code the assistant is handing back, not proposing.
+//
+// The distinction matters and is the reason this is a separate field rather
+// than another kind of proposal: a QR changes nothing. It writes to no
+// calendar, deletes nothing and can be thrown away by closing the tab, so
+// putting it behind the confirm gate would be asking somebody to approve a
+// picture. Sessions, events and removals touch stored data and stay gated.
+type QR struct {
+	// What the code encodes. A URL, usually; anything that fits, in principle.
+	Text string `json:"text"`
+
+	// A short human name for the card, since the encoded text is often a long
+	// URL that reads as noise in a heading.
+	Label string `json:"label"`
+
+	// Error-correction level, L through H. Higher survives more damage at the
+	// cost of density — and covering the middle with a logo *is* damage, which
+	// is why a logo forces H.
+	ECC string `json:"ecc"`
+
+	// Whether to knock the person's attached image into the middle.
+	UseLogo bool `json:"useLogo"`
+}
+
+// ECCLevels are the only correction levels that exist.
+var ECCLevels = []string{"L", "M", "Q", "H"}
+
+// Attachment is a file the person put in the conversation.
+//
+// Metadata only — the bytes never leave the browser. The model is told a logo
+// exists so it can decide whether the request wants one used; it has no reason
+// to see the image itself, and sending it would cost tokens, latency and a
+// copy of somebody's file on Google's side for no gain.
+type Attachment struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+}
+
 // Plan is what one request produces.
 type Plan struct {
 	Sessions []Session `json:"sessions"`
 	Events   []Event   `json:"events"`
+
+	// Codes to render into the transcript. Produced, not proposed.
+	QRCodes []QR `json:"qrCodes"`
 
 	// Ids of existing entries the assistant is offering to delete. Ids only:
 	// the client renders these from its own records rather than from anything
@@ -97,8 +138,18 @@ type Plan struct {
 	Reply string `json:"reply"`
 }
 
+// IsEmpty reports whether there is anything to show alongside the reply.
+//
+// QR codes count: a turn that produced one is not an empty turn, even though
+// nothing about it needs confirming.
 func (p Plan) IsEmpty() bool {
-	return len(p.Sessions) == 0 && len(p.Events) == 0 && len(p.Removals) == 0
+	return len(p.Sessions) == 0 && len(p.Events) == 0 &&
+		len(p.Removals) == 0 && len(p.QRCodes) == 0
+}
+
+// NeedsConfirming reports whether this turn touches stored data.
+func (p Plan) NeedsConfirming() bool {
+	return len(p.Sessions) > 0 || len(p.Events) > 0 || len(p.Removals) > 0
 }
 
 // Roles a conversation turn can take. The wire uses "assistant" rather than
@@ -217,6 +268,9 @@ type Request struct {
 	// them. A window rather than everything — see MaxExisting.
 	Existing []Entry `json:"existing"`
 
+	// Files the person attached, by name and kind only. See [Attachment].
+	Attachments []Attachment `json:"attachments"`
+
 	// The client's current local time, formatted like the times the model is
 	// asked to produce. Sent rather than read from the server's clock: "next
 	// Monday" depends on where the person asking is, not where this runs.
@@ -239,6 +293,15 @@ const (
 	// semester is thousands of entries and none of them fit; the client sends
 	// a window around today and this bounds what it can cost regardless.
 	MaxExisting = 120
+	// MaxQRCodes bounds one turn. Somebody wanting forty codes wants the QR
+	// Generator, not a chat message.
+	MaxQRCodes = 8
+	// MaxQRBytes is the ceiling of the format itself: version 40 at correction
+	// level L holds about 2,953 bytes, and every other combination less. Past
+	// this there is no code to make.
+	MaxQRBytes = 2953
+	// MaxAttachments bounds what one conversation can carry.
+	MaxAttachments = 8
 )
 
 func (r Request) Validate() error {
@@ -292,6 +355,14 @@ func (r Request) Calendar() []Entry {
 		return r.Existing
 	}
 	return r.Existing[:MaxExisting]
+}
+
+// Files is the attachment list the model is shown, bounded.
+func (r Request) Files() []Attachment {
+	if len(r.Attachments) <= MaxAttachments {
+		return r.Attachments
+	}
+	return r.Attachments[:MaxAttachments]
 }
 
 // KnownIDs is the set a removal is allowed to name.

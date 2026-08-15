@@ -1,0 +1,102 @@
+.hab {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  max-width: 940px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.hab__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1.5px solid var(--af-ink);
+}
+
+.hab__head .af-btn {
+  margin-left: auto;
+}
+
+.hab__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hab__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Square, like every other mark in AF. A circle here would be the only round
+   thing on the page. */
+.hab__tick {
+  width: 20px;
+  height: 20px;
+  border: 2px solid;
+  border-radius: var(--af-radius);
+  cursor: pointer;
+  flex: none;
+  padding: 0;
+  transition: background 140ms ease;
+}
+
+.hab__done {
+  color: var(--af-muted);
+}
+
+.hab__row-actions {
+  margin-left: auto;
+}
+
+.hab__ranges {
+  display: flex;
+  gap: 3px;
+}
+
+.hab__chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 120px;
+  padding: 4px;
+  background: var(--af-sunken);
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius);
+  overflow: hidden;
+}
+
+.hab__bar {
+  flex: 1;
+  min-width: 1px;
+  background: var(--af-accent);
+  border-radius: 1px 1px 0 0;
+}
+
+.hab__tones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+
+.hab__tone {
+  width: 24px;
+  height: 24px;
+  border: 2px solid transparent;
+  border-radius: var(--af-radius);
+  cursor: pointer;
+  padding: 0;
+}
+
+.hab__tone.is-active {
+  border-color: var(--af-ink);
+}

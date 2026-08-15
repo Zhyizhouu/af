@@ -1,0 +1,145 @@
+/*
+ * Design tokens for the AF design language.
+ *
+ * Lifted value-for-value from `lib/theme/af_tokens.dart`, which in turn mirrors
+ * the CSS custom properties in `AF-QRgenerator.html`: a "technical instrument"
+ * look built from hairline rules, monospace labels and a single electric
+ * accent, with nothing rounder than 4px.
+ *
+ * Dark is the same system with the ink/desk roles swapped, so no component ever
+ * branches on theme — they only read tokens.
+ */
+
+:root {
+  --af-desk: #e7e9ed;
+  --af-panel: #ffffff;
+  --af-sunken: #fbfbfc;
+  --af-ink: #14161b;
+  --af-muted: #767c86;
+  --af-line: #dee1e6;
+  --af-line-strong: #c9cdd4;
+  --af-accent: #3b49ff;
+  --af-accent-soft: rgba(59, 73, 255, 0.1);
+  --af-warn: #b4451b;
+  --af-warn-soft: rgba(180, 69, 27, 0.1);
+  --af-ok: #2e7d46;
+
+  /* Foreground for solid ink buttons: white on near-black in light, and the
+     desk colour on a pale button in dark, which holds the same relationship. */
+  --af-on-ink: var(--af-panel);
+
+  --af-radius: 4px;
+
+  /* Ordered fallbacks, same stack the Flutter build walked, so no font is
+     bundled and every platform resolves something. */
+  --af-mono: Menlo, Consolas, 'Cascadia Mono', 'Roboto Mono', 'DejaVu Sans Mono',
+    monospace;
+  --af-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+}
+
+:root[data-theme='dark'] {
+  --af-desk: #0e1013;
+  --af-panel: #16191e;
+  --af-sunken: #1b1f26;
+  --af-ink: #e6e8ec;
+  --af-muted: #8b929e;
+  --af-line: #262b33;
+  --af-line-strong: #363d48;
+  --af-accent: #5d69ff;
+  --af-accent-soft: rgba(93, 105, 255, 0.14);
+  --af-warn: #e0763f;
+  --af-warn-soft: rgba(224, 118, 63, 0.14);
+  --af-ok: #4caf6b;
+
+  --af-on-ink: var(--af-desk);
+}
+
+/* The theme is an explicit choice stored in settings, so "system" resolves to
+   a stamped attribute at boot rather than being read here. This block only
+   covers the first paint before that runs. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']):not([data-theme='dark']) {
+    --af-desk: #0e1013;
+    --af-panel: #16191e;
+    --af-sunken: #1b1f26;
+    --af-ink: #e6e8ec;
+    --af-muted: #8b929e;
+    --af-line: #262b33;
+    --af-line-strong: #363d48;
+    --af-accent: #5d69ff;
+    --af-accent-soft: rgba(93, 105, 255, 0.14);
+    --af-warn: #e0763f;
+    --af-warn-soft: rgba(224, 118, 63, 0.14);
+    --af-ok: #4caf6b;
+
+    --af-on-ink: var(--af-desk);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--af-desk);
+  color: var(--af-ink);
+  font-family: var(--af-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Typography.
+ *
+ * The rule from the QR Generator: monospace carries all the machinery — labels,
+ * values, buttons, metadata, anything numeric — while the system sans carries
+ * human prose. Keeping that split is most of what makes the look cohere.
+ */
+
+.af-mono {
+  font-family: var(--af-mono);
+}
+
+.af-body {
+  font-family: var(--af-sans);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.af-meta {
+  font-family: var(--af-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--af-muted);
+}
+
+.af-panel-label {
+  font-family: var(--af-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--af-muted);
+}
+
+.af-panel-count {
+  font-family: var(--af-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--af-ink);
+}
+
+.af-brand {
+  font-family: var(--af-mono);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--af-ink);
+}
