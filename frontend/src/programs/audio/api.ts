@@ -27,12 +27,17 @@ export interface AudioFormat {
   /** Lossless formats hide the bitrate control rather than show it doing nothing. */
   lossy: boolean;
   /** Per-format, because libopus refuses anything above 256k and fails the whole
-   *  conversion rather than clamping. Empty means the server's common set. */
+   *  conversion rather than clamping. Empty means the server's common set.
+   *
+   *  The server omits the key rather than sending `[]`, so this is only ever an
+   *  array because `limits()` fills it in. Do not read it off a raw response. */
   bitrates: number[];
   note: string;
 }
 
 export interface AudioLimits {
+  /** False when the server runs without Temporal and the object store. */
+  configured: boolean;
   maxUploadBytes: number;
   formats: AudioFormat[];
   defaultFormat: string;
@@ -85,8 +90,19 @@ export class AudioApi {
       this.fetcher(`${this.base}/v1/limits`, { headers: await this.headers() }),
     );
     return {
+      // Absent means an older server that predates the flag, and those all had
+      // a converter — so assume configured rather than hiding a working page.
+      configured: body.configured !== false,
       maxUploadBytes: Number(body.maxUploadBytes ?? 0),
-      formats: Array.isArray(body.formats) ? (body.formats as AudioFormat[]) : [],
+      // Normalised here rather than trusted: the server omits `bitrates`
+      // entirely for formats that take the common set, so the wire shape does
+      // not match the type and every reader downstream would have to guess.
+      formats: Array.isArray(body.formats)
+        ? (body.formats as AudioFormat[]).map((format) => ({
+            ...format,
+            bitrates: Array.isArray(format.bitrates) ? format.bitrates : [],
+          }))
+        : [],
       defaultFormat: String(body.defaultFormat ?? 'mp3'),
       bitrates: Array.isArray(body.bitrates) ? (body.bitrates as number[]) : [],
       defaultBitrate: Number(body.defaultBitrate ?? 192),

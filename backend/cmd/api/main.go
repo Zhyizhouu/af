@@ -19,6 +19,7 @@ import (
 
 	"github.com/Zhyizhouu/af/backend/internal/auth"
 	"github.com/Zhyizhouu/af/backend/internal/config"
+	"github.com/Zhyizhouu/af/backend/internal/convert"
 	"github.com/Zhyizhouu/af/backend/internal/gemini"
 	"github.com/Zhyizhouu/af/backend/internal/httpapi"
 	"github.com/Zhyizhouu/af/backend/internal/storage"
@@ -42,31 +43,46 @@ func run(log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	blobs, err := storage.NewSeaweed(ctx, storage.Options{
-		Endpoint:  cfg.S3Endpoint,
-		Region:    cfg.S3Region,
-		AccessKey: cfg.S3AccessKey,
-		SecretKey: cfg.S3SecretKey,
-		Bucket:    cfg.S3Bucket,
-	})
-	if err != nil {
-		return err
-	}
-
 	verifier, err := verifier(ctx, cfg, log)
 	if err != nil {
 		return err
 	}
 
-	temporalClient, err := client.Dial(client.Options{
-		HostPort:  cfg.TemporalHostPort,
-		Namespace: cfg.TemporalNamespace,
-		Logger:    log,
-	})
-	if err != nil {
-		return err
+	// The converter needs both the object store and Temporal; the assistant
+	// needs neither. Both are dialled eagerly on purpose — a gateway that
+	// starts and then fails every conversion is worse than one that refuses to
+	// start — but the whole pair is skippable, so the assistant can be deployed
+	// on a host with no disk and no workflow engine.
+	var (
+		blobs          convert.Blobs
+		temporalClient client.Client
+	)
+	if cfg.ConverterDisabled {
+		log.Warn("AF_CONVERTER_DISABLED is set: the converter is unavailable on this server")
+	} else {
+		seaweed, err := storage.NewSeaweed(ctx, storage.Options{
+			Endpoint:  cfg.S3Endpoint,
+			Region:    cfg.S3Region,
+			AccessKey: cfg.S3AccessKey,
+			SecretKey: cfg.S3SecretKey,
+			Bucket:    cfg.S3Bucket,
+		})
+		if err != nil {
+			return err
+		}
+		blobs = seaweed
+
+		dialled, err := client.Dial(client.Options{
+			HostPort:  cfg.TemporalHostPort,
+			Namespace: cfg.TemporalNamespace,
+			Logger:    log,
+		})
+		if err != nil {
+			return err
+		}
+		defer dialled.Close()
+		temporalClient = dialled
 	}
-	defer temporalClient.Close()
 
 	// The assistant is the one feature that lives entirely in the gateway —
 	// one synchronous call, nothing stored, no worker involved. Nil without a
@@ -106,7 +122,11 @@ func run(log *slog.Logger) error {
 		_ = server.Shutdown(shutdown)
 	}()
 
-	log.Info("api listening", "addr", cfg.HTTPAddr, "temporal", cfg.TemporalHostPort)
+	log.Info("api listening",
+		"addr", cfg.HTTPAddr,
+		"converter", temporalClient != nil,
+		"assistant", planner != nil,
+	)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

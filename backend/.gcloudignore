@@ -1,0 +1,20 @@
+# What `gcloud run deploy --source .` uploads from this directory.
+#
+# Without this file gcloud falls back to .gitignore, which lives at the repo
+# root and is Flutter-shaped — it knows nothing about what a Go build needs.
+
+.git/
+.gitignore
+
+# Test binaries and coverage
+*.test
+*.out
+coverage.txt
+
+# The worker's image is built separately and is not part of the gateway
+Dockerfile.worker
+
+# Local env, never uploaded — Cloud Run gets its settings from --set-env-vars
+# and --set-secrets instead.
+.env
+.env.*

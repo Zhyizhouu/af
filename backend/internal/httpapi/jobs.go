@@ -42,6 +42,10 @@ type jobResponse struct {
 // bitrate. Same principle as the reset cooldown: the server owns the policy,
 // the client renders whatever it is told.
 type limitsResponse struct {
+	// False when this gateway runs without Temporal and the object store, so
+	// the page can say so instead of offering a button that cannot work. Same
+	// contract as the assistant's `configured`.
+	Configured       bool             `json:"configured"`
 	MaxUploadBytes   int64            `json:"maxUploadBytes"`
 	Formats          []convert.Format `json:"formats"`
 	DefaultFormat    string           `json:"defaultFormat"`
@@ -57,6 +61,7 @@ func (s *Server) handleLimits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, limitsResponse{
+		Configured:       s.temporal != nil && s.blobs != nil,
 		MaxUploadBytes:   s.cfg.MaxUploadBytes,
 		Formats:          convert.Formats,
 		DefaultFormat:    convert.DefaultFormat,
@@ -69,6 +74,9 @@ func (s *Server) handleLimits(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	uid, ok := s.caller(w, r)
 	if !ok {
+		return
+	}
+	if !s.converterReady(w) {
 		return
 	}
 
@@ -268,6 +276,13 @@ func (s *Server) describe(
 	r *http.Request,
 	uid string,
 ) (convert.Status, bool) {
+	// Covers status, download and cancel alike — every one of them reaches the
+	// workflow through here, so this is the single place the converter's
+	// absence has to be caught.
+	if !s.converterReady(w) {
+		return convert.Status{}, false
+	}
+
 	id := r.PathValue("id")
 
 	response, err := s.temporal.QueryWorkflow(

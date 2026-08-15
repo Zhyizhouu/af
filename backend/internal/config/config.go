@@ -25,6 +25,13 @@ type Config struct {
 	TemporalNamespace string
 	TaskQueue         string
 
+	// Set to run the gateway without Temporal or the object store. The
+	// converter then reports itself unavailable, the way the assistant does
+	// without a Gemini key. It exists because the assistant needs neither a
+	// workflow engine nor a disk, so it can be deployed on hosts that have
+	// no persistent storage at all.
+	ConverterDisabled bool
+
 	// SeaweedFS, spoken to through its S3 gateway
 	S3Endpoint  string
 	S3Region    string
@@ -47,11 +54,12 @@ type Config struct {
 
 func Load() (Config, error) {
 	c := Config{
-		HTTPAddr:            env("AF_HTTP_ADDR", ":8080"),
+		HTTPAddr:            httpAddr(),
 		AllowedOrigins:      list("AF_ALLOWED_ORIGINS", "http://localhost:*,https://*.vercel.app"),
 		TemporalHostPort:    env("AF_TEMPORAL_HOSTPORT", "temporal:7233"),
 		TemporalNamespace:   env("AF_TEMPORAL_NAMESPACE", "default"),
 		TaskQueue:           env("AF_TASK_QUEUE", "mp3-convert"),
+		ConverterDisabled:   boolean("AF_CONVERTER_DISABLED", false),
 		S3Endpoint:          env("AF_S3_ENDPOINT", "http://seaweedfs:8333"),
 		S3Region:            env("AF_S3_REGION", "us-east-1"),
 		S3AccessKey:         env("AF_S3_ACCESS_KEY", "af-local"),
@@ -73,6 +81,23 @@ func Load() (Config, error) {
 		return c, err
 	}
 	return c, nil
+}
+
+// httpAddr honours AF_HTTP_ADDR first, then PORT, then :8080.
+//
+// Container hosts — Cloud Run, Render, Fly — inject PORT and expect the process
+// to listen on exactly that. Cloud Run's default happens to be 8080, so without
+// this the gateway would appear to work and then fail the moment anything asked
+// for a different port, which is the kind of thing that only shows up in the
+// one deployment nobody is watching.
+func httpAddr() string {
+	if v := strings.TrimSpace(os.Getenv("AF_HTTP_ADDR")); v != "" {
+		return v
+	}
+	if port := strings.TrimSpace(os.Getenv("PORT")); port != "" {
+		return ":" + port
+	}
+	return ":8080"
 }
 
 func env(key, fallback string) string {

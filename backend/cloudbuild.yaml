@@ -1,0 +1,26 @@
+# Cloud Build for the gateway image.
+#
+# A config file rather than `gcloud run deploy --source .`, because that path
+# only finds a Dockerfile named exactly `Dockerfile`, and the gateway's is
+# `Dockerfile.api` — the worker has its own beside it and neither should be
+# renamed to suit one deployment target.
+#
+#   gcloud builds submit --config cloudbuild.yaml --substitutions=_IMAGE=<ref>
+#
+# deploy-cloudrun.ps1 passes _IMAGE for you.
+
+substitutions:
+  _IMAGE: ''
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '-f', 'Dockerfile.api', '-t', '${_IMAGE}', '.']
+
+images:
+  - '${_IMAGE}'
+
+options:
+  # Without this the build wants a user-owned logs bucket and fails on projects
+  # that have never had one — the default service account writes to Cloud
+  # Logging instead.
+  logging: CLOUD_LOGGING_ONLY

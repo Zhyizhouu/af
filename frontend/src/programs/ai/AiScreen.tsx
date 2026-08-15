@@ -79,6 +79,14 @@ export function AiScreen({
   const [limitsError, setLimitsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Shell-style prompt recall. Browsing is a mode rather than a per-keypress
+  // decision: entering it needs the caret at the very edge of the draft, so
+  // the arrows still move between the lines of a multi-line message, but once
+  // in it they step through history until you type something.
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const stashedDraft = useRef('');
+  const composer = useRef<HTMLTextAreaElement>(null);
+
   // Collapsed by default in a split pane, and on anything narrow: a sidebar
   // plus a readable transcript needs room that half a window — or a phone —
   // does not have. Driven from state rather than hidden in CSS, because a
@@ -175,6 +183,7 @@ export function AiScreen({
     const withUser = [...messages, userMessage(message, pending)];
     setMessages(withUser);
     setDraft('');
+    setHistoryIndex(null);
     setPending([]);
     setAttachError(null);
     setBusy(true);
@@ -270,9 +279,47 @@ export function AiScreen({
     [],
   );
 
+  /**
+   * Steps through this conversation's own prompts: -1 back, +1 forward.
+   *
+   * History is derived from the transcript rather than kept alongside it, so it
+   * cannot drift out of step with what was actually sent, and opening an old
+   * conversation brings its prompts back with it.
+   */
+  const recall = useCallback(
+    (step: -1 | 1): boolean => {
+      const prompts = messages.filter((m) => m.role === 'user').map((m) => m.text);
+      if (prompts.length === 0) return false;
+
+      const next = (historyIndex ?? prompts.length) + step;
+      if (next < 0) return true; // already at the oldest — stay rather than wrap
+
+      if (historyIndex === null) stashedDraft.current = draft;
+
+      if (next >= prompts.length) {
+        // Stepped past the newest: hand back the draft that was interrupted.
+        setHistoryIndex(null);
+        setDraft(stashedDraft.current);
+      } else {
+        setHistoryIndex(next);
+        setDraft(prompts[next] ?? '');
+      }
+
+      // After the value lands, put the caret at the end so the recalled text is
+      // ready to edit rather than to overtype.
+      requestAnimationFrame(() => {
+        const el = composer.current;
+        if (el) el.setSelectionRange(el.value.length, el.value.length);
+      });
+      return true;
+    },
+    [messages, historyIndex, draft],
+  );
+
   const startNew = useCallback(() => {
     setMessages([]);
     setDraft('');
+    setHistoryIndex(null);
     setConversationId(newConversationId());
   }, []);
 
@@ -281,6 +328,7 @@ export function AiScreen({
       setMessages(loadConversation(row));
       setConversationId(row.id);
       setDraft('');
+      setHistoryIndex(null);
       scrollToEnd();
     },
     [scrollToEnd],
@@ -369,14 +417,35 @@ export function AiScreen({
           <textarea
             className="af-input af-input--prose ai__input"
             rows={2}
+            ref={composer}
             value={draft}
             disabled={!enabled}
             placeholder="Write a message…"
-            onChange={(event) => setDraft(event.target.value)}
-            // Enter sends, Shift+Enter breaks the line. preventDefault is what
-            // stops the newline landing as well as the message going — without
-            // it you send and are left holding a blank second line.
+            onChange={(event) => {
+              setDraft(event.target.value);
+              // Typing is how you leave history — from here the draft is yours.
+              setHistoryIndex(null);
+            }}
             onKeyDown={(event) => {
+              // Up recalls, Down goes forward again. Entering history needs the
+              // caret at the matching edge so a multi-line draft can still be
+              // navigated; once browsing, the arrows belong to history.
+              if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                const el = event.currentTarget;
+                const collapsed = el.selectionStart === el.selectionEnd;
+                const browsing = historyIndex !== null;
+                const entering =
+                  event.key === 'ArrowUp' && collapsed && el.selectionStart === 0;
+                // Down only means anything once there is somewhere to go back to.
+                if (browsing || entering) {
+                  if (recall(event.key === 'ArrowUp' ? -1 : 1)) event.preventDefault();
+                }
+                return;
+              }
+
+              // Enter sends, Shift+Enter breaks the line. preventDefault is what
+              // stops the newline landing as well as the message going — without
+              // it you send and are left holding a blank second line.
               if (event.key !== 'Enter' || event.shiftKey) return;
               event.preventDefault();
               if (enabled) void send();

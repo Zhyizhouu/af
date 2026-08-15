@@ -45,8 +45,13 @@ export function AudioScreen({ api }: { api?: AudioApi }) {
       });
   }, []);
 
+  // Assume configured until told otherwise, so a slow limits call does not
+  // flash "not configured" at somebody whose converter is perfectly fine.
+  const configured = limits?.configured ?? true;
   const chosen = limits?.formats.find((option) => option.id === format);
-  const bitrates = chosen?.bitrates.length ? chosen.bitrates : (limits?.bitrates ?? []);
+  // `?.` on bitrates as well as on chosen: the API layer normalises it, but a
+  // whole screen going blank is too steep a price for one missing key.
+  const bitrates = chosen?.bitrates?.length ? chosen.bitrates : (limits?.bitrates ?? []);
 
   // Polled rather than streamed: the API has no socket, and a conversion is
   // measured in seconds, so a one-second poll is both simple and accurate
@@ -112,6 +117,15 @@ export function AudioScreen({ api }: { api?: AudioApi }) {
       <header className="page__head">
         <span className="af-brand">reAFresh · Audio Converter</span>
       </header>
+
+      {limits && !limits.configured && (
+        <AFPanel label="Not configured">
+          <span className="ai__warn">
+            This server runs without Temporal and the object store, so nothing can be
+            converted. Unset AF_CONVERTER_DISABLED on the API and restart it.
+          </span>
+        </AFPanel>
+      )}
 
       {error && (
         <AFPanel label="Problem">
@@ -203,7 +217,7 @@ export function AudioScreen({ api }: { api?: AudioApi }) {
       <AFButton
         label={busy ? 'Uploading…' : 'Convert'}
         expand
-        disabled={!file || busy || tooBig || !limits}
+        disabled={!file || busy || tooBig || !limits || !configured}
         onClick={() => void convert()}
       />
     </div>

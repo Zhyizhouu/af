@@ -172,6 +172,21 @@ func (s *Server) caller(w http.ResponseWriter, r *http.Request) (string, bool) {
 	return uid, true
 }
 
+// converterReady reports whether this gateway was started with the object
+// store and Temporal, having already answered the request when it was not.
+//
+// The mirror of the assistant's missing-key behaviour: the feature says it is
+// unavailable rather than the process refusing to start, which is what lets one
+// deployment serve the assistant alone on a host with no disk.
+func (s *Server) converterReady(w http.ResponseWriter) bool {
+	if s.temporal != nil && s.blobs != nil {
+		return true
+	}
+	writeError(w, http.StatusServiceUnavailable,
+		"The converter is not configured on this server.")
+	return false
+}
+
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
