@@ -40,10 +40,54 @@ type Event struct {
 	Category string `json:"category"`
 }
 
+// Entry is something already in the person's calendar.
+//
+// Sent with every request so the assistant can talk about what is there
+// instead of only about what it has just invented. Without it "cancel the
+// lunch tomorrow" is unanswerable — the lunch does not exist as far as the
+// model is concerned, and it says so, which reads as the assistant being
+// broken rather than blind.
+type Entry struct {
+	// The client's own identifier. Round-tripped rather than interpreted: it
+	// is a UUID for an event and a box key for a session, and the only thing
+	// this package does with it is check that a removal names one it was told
+	// about.
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+
+	Title    string `json:"title"`
+	Start    string `json:"start"`
+	End      string `json:"end"`
+	AllDay   bool   `json:"allDay"`
+	Category string `json:"category,omitempty"`
+
+	// A session's fields, unflattened. Sent because moving one means deleting
+	// it and proposing its replacement, and a replacement cannot be built out
+	// of a display title — "UAS · Room 401" does not say which course it is,
+	// and a session proposed without one is dropped as nonsense.
+	Type        string `json:"type,omitempty"`
+	Room        string `json:"room,omitempty"`
+	CourseCode  string `json:"courseCode,omitempty"`
+	CourseName  string `json:"courseName,omitempty"`
+	CourseClass string `json:"courseClass,omitempty"`
+}
+
+// Kinds an existing entry can have.
+const (
+	KindEvent   = "event"
+	KindSession = "session"
+)
+
 // Plan is what one request produces.
 type Plan struct {
 	Sessions []Session `json:"sessions"`
 	Events   []Event   `json:"events"`
+
+	// Ids of existing entries the assistant is offering to delete. Ids only:
+	// the client renders these from its own records rather than from anything
+	// the model says about them, so a card can never describe one thing while
+	// deleting another.
+	Removals []string `json:"removals"`
 
 	// Reply is what the assistant says back — the conversational half. It
 	// carries what was assumed and what could not be worked out, because
@@ -53,7 +97,9 @@ type Plan struct {
 	Reply string `json:"reply"`
 }
 
-func (p Plan) IsEmpty() bool { return len(p.Sessions) == 0 && len(p.Events) == 0 }
+func (p Plan) IsEmpty() bool {
+	return len(p.Sessions) == 0 && len(p.Events) == 0 && len(p.Removals) == 0
+}
 
 // Roles a conversation turn can take. The wire uses "assistant" rather than
 // Gemini's "model", because this is the vocabulary the client speaks; the
@@ -79,6 +125,7 @@ type Turn struct {
 	// turn.
 	Sessions []Session `json:"sessions,omitempty"`
 	Events   []Event   `json:"events,omitempty"`
+	Removals []string  `json:"removals,omitempty"`
 
 	// True once the person confirmed this turn's proposals. The model is told
 	// so that it does not cheerfully offer to create them a second time.
@@ -107,8 +154,45 @@ func (t Turn) Render() string {
 		fmt.Fprintf(&b, "\n- event | %s | %s to %s | %s",
 			e.Title, e.Start, e.End, e.Category)
 	}
-	if t.Committed && (len(t.Sessions) > 0 || len(t.Events) > 0) {
-		b.WriteString("\n(confirmed — these are already saved, do not propose them again)")
+	for _, id := range t.Removals {
+		fmt.Fprintf(&b, "\n- delete | %s", id)
+	}
+
+	if t.Committed && (len(t.Sessions) > 0 || len(t.Events) > 0 ||
+		len(t.Removals) > 0) {
+		b.WriteString("\n(confirmed — this was carried out already, do not offer it again)")
+	}
+	return b.String()
+}
+
+// RenderExisting is the calendar as the model is shown it.
+func RenderExisting(entries []Entry) string {
+	if len(entries) == 0 {
+		return "Their calendar is empty over this period."
+	}
+
+	var b strings.Builder
+	b.WriteString("Already in their calendar. " +
+		"Use these ids verbatim in \"removals\"; never invent one.\n")
+
+	for _, e := range entries {
+		when := e.Start
+		switch {
+		case e.AllDay:
+			when += " (all day)"
+		case e.End != "" && e.End != e.Start:
+			when += " to " + e.End
+		}
+		fmt.Fprintf(&b, "- [%s] %s | %s | %s", e.ID, e.Kind, orDash(e.Title), when)
+		if e.Category != "" {
+			b.WriteString(" | " + e.Category)
+		}
+		if e.Kind == KindSession {
+			fmt.Fprintf(&b, " | type %s | room %s | %s %s %s",
+				orDash(e.Type), orDash(e.Room),
+				orDash(e.CourseCode), orDash(e.CourseName), orDash(e.CourseClass))
+		}
+		b.WriteString("\n")
 	}
 	return b.String()
 }
@@ -128,6 +212,11 @@ type Request struct {
 	// because the client is the only thing that remembers it.
 	History []Turn `json:"history"`
 
+	// What is already scheduled, sent by the client for the same reason: the
+	// records live on the person's device, and this service holds none of
+	// them. A window rather than everything — see MaxExisting.
+	Existing []Entry `json:"existing"`
+
 	// The client's current local time, formatted like the times the model is
 	// asked to produce. Sent rather than read from the server's clock: "next
 	// Monday" depends on where the person asking is, not where this runs.
@@ -146,6 +235,10 @@ const (
 	// far more than a scheduling conversation runs to, and the cap is what
 	// stops a long-lived tab growing its own prompt cost without limit.
 	MaxHistoryTurns = 24
+	// MaxExisting is how much of the calendar the model is shown. A busy
+	// semester is thousands of entries and none of them fit; the client sends
+	// a window around today and this bounds what it can cost regardless.
+	MaxExisting = 120
 )
 
 func (r Request) Validate() error {
@@ -187,6 +280,29 @@ func (r Request) Recent() []Turn {
 		return r.History
 	}
 	return r.History[len(r.History)-MaxHistoryTurns:]
+}
+
+// Calendar is the part of the calendar the model is shown.
+//
+// Trimmed from the front, unlike the conversation: the client sends these in
+// time order, and if a window has to be cut short it is the far future that
+// matters least.
+func (r Request) Calendar() []Entry {
+	if len(r.Existing) <= MaxExisting {
+		return r.Existing
+	}
+	return r.Existing[:MaxExisting]
+}
+
+// KnownIDs is the set a removal is allowed to name.
+func (r Request) KnownIDs() map[string]bool {
+	known := make(map[string]bool, len(r.Existing))
+	for _, entry := range r.Existing {
+		if id := strings.TrimSpace(entry.ID); id != "" {
+			known[id] = true
+		}
+	}
+	return known
 }
 
 // TimeLayout is the shape every time in this package takes: local wall clock,

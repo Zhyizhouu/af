@@ -9,6 +9,7 @@ import 'package:http/testing.dart';
 import 'package:af/programs/ai/ai_api.dart';
 import 'package:af/programs/ai/ai_proposal_card.dart';
 import 'package:af/programs/ai/ai_screen.dart';
+import 'package:af/programs/calendar/calendar_provider.dart';
 import 'package:af/programs/calendar/category_provider.dart';
 import 'package:af/programs/calendar/event_category.dart';
 import 'package:af/theme/app_theme.dart';
@@ -29,9 +30,15 @@ void main() {
   String answerBody({
     List<Map<String, Object>> sessions = const [],
     List<Map<String, Object>> events = const [],
+    List<String> removals = const [],
     String reply = 'Here you go.',
   }) =>
-      jsonEncode({'sessions': sessions, 'events': events, 'reply': reply});
+      jsonEncode({
+        'sessions': sessions,
+        'events': events,
+        'removals': removals,
+        'reply': reply,
+      });
 
   final limitsBody = jsonEncode({
     'configured': true,
@@ -81,6 +88,7 @@ void main() {
       final answer = await api.send(
         message: 'anything',
         history: const [],
+        existing: const [],
         now: DateTime(2026, 8, 15, 9),
         categories: const ['social', 'other'],
       );
@@ -128,9 +136,29 @@ void main() {
             committed: true,
           ),
         ],
+        existing: [
+          AiEntry(
+            id: 'evt-1',
+            kind: AiEntry.kindEvent,
+            title: 'Dentist',
+            start: DateTime(2026, 8, 20, 8),
+            end: DateTime(2026, 8, 20, 9),
+            allDay: false,
+            category: 'health',
+          ),
+        ],
         now: DateTime(2026, 8, 15, 9),
         categories: const ['social'],
       );
+
+      // Without this the assistant cannot see anything it did not itself
+      // propose, and "cancel the dentist" reads to it as a dentist that does
+      // not exist.
+      final existing = sent!['existing'] as List;
+      expect(existing, hasLength(1));
+      expect(existing[0]['id'], 'evt-1');
+      expect(existing[0]['kind'], 'event');
+      expect(existing[0]['start'], '2026-08-20 08:00');
 
       final history = sent!['history'] as List;
       expect(history, hasLength(2));
@@ -161,6 +189,7 @@ void main() {
       final answer = await api.send(
         message: 'anything',
         history: const [],
+        existing: const [],
         now: DateTime(2026, 8, 15, 9),
         categories: const ['work'],
       );
@@ -186,6 +215,7 @@ void main() {
       final answer = await api.send(
         message: 'anything',
         history: const [],
+        existing: const [],
         now: DateTime(2026, 8, 15, 9),
         categories: const ['work'],
       );
@@ -209,6 +239,7 @@ void main() {
         api.send(
           message: 'x',
           history: const [],
+          existing: const [],
           now: DateTime(2026, 8, 15),
           categories: const ['work'],
         ),
@@ -244,6 +275,7 @@ void main() {
         api.send(
           message: 'x',
           history: const [],
+          existing: const [],
           now: DateTime(2026, 8, 15),
           categories: const ['work'],
         ),
@@ -375,10 +407,31 @@ void main() {
   });
 
   group('screen', () {
+    /// Something already in the calendar, as the merged agenda sees it.
+    AgendaEntry scheduled({
+      String id = 'evt-1',
+      String title = 'Lunch with Dina',
+      AgendaKind kind = AgendaKind.event,
+      DateTime? start,
+    }) {
+      final at = start ?? DateTime.now().add(const Duration(days: 1));
+      return AgendaEntry(
+        kind: kind,
+        id: id,
+        title: title,
+        subtitle: '',
+        start: at,
+        end: at.add(const Duration(hours: 1)),
+        allDay: false,
+        category: kind == AgendaKind.event ? fallbackCategory : null,
+      );
+    }
+
     Future<void> pump(
       WidgetTester tester,
       MockClient client, {
       Size size = const Size(390, 844),
+      List<AgendaEntry> agenda = const [],
     }) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
@@ -387,6 +440,7 @@ void main() {
       await tester.pumpWidget(ProviderScope(
         overrides: [
           categoriesProvider.overrideWith((ref) async => builtInCategories),
+          agendaProvider.overrideWith((ref) async => agenda),
         ],
         child: MaterialApp(
           theme: AppTheme.light,
@@ -540,11 +594,166 @@ void main() {
       await say(tester, 'hello');
       expect(find.text('hello'), findsOneWidget);
 
-      await tester.tap(find.text('New chat'));
+      await tester.tap(find.byTooltip('New chat'));
       await tester.pumpAndSettle();
 
       expect(find.text('hello'), findsNothing);
       expect(find.text('Noted.'), findsNothing);
+    });
+
+    // The assistant is blind to anything it did not itself propose unless this
+    // app tells it what is there — which is why "cancel the lunch tomorrow"
+    // used to come back as "you have nothing scheduled tomorrow".
+    testWidgets('what is already scheduled goes out with the message',
+        (tester) async {
+      final captured = <Map<String, dynamic>>[];
+      await pump(
+        tester,
+        scripted(captured, [answerBody(reply: 'Noted.')]),
+        agenda: [scheduled(title: 'Lunch with Dina')],
+      );
+
+      await say(tester, 'what do I have tomorrow?');
+
+      final existing = captured.single['existing'] as List;
+      expect(existing, hasLength(1));
+      expect(existing.single['id'], 'evt-1');
+      expect(existing.single['title'], 'Lunch with Dina');
+      expect(existing.single['kind'], 'event');
+    });
+
+    // Entries far outside the window would crowd out the ones a request is
+    // actually about, and cost tokens for the privilege.
+    testWidgets('only the near calendar is sent', (tester) async {
+      final captured = <Map<String, dynamic>>[];
+      await pump(
+        tester,
+        scripted(captured, [answerBody(reply: 'Noted.')]),
+        agenda: [
+          scheduled(id: 'near', title: 'Near'),
+          scheduled(
+            id: 'far',
+            title: 'Far',
+            start: DateTime.now().add(const Duration(days: 400)),
+          ),
+          scheduled(
+            id: 'old',
+            title: 'Old',
+            start: DateTime.now().subtract(const Duration(days: 400)),
+          ),
+        ],
+      );
+
+      await say(tester, 'anything');
+
+      final existing = captured.single['existing'] as List;
+      expect(existing, hasLength(1));
+      expect(existing.single['title'], 'Near');
+    });
+
+    // The answer carries an id and nothing else, so the card has to be drawn
+    // from this app's own record. Anything else could describe one entry while
+    // deleting another.
+    testWidgets('a deletion is shown as the entry it will really delete',
+        (tester) async {
+      await pump(
+        tester,
+        scripted([], [
+          answerBody(removals: ['evt-1'], reply: 'I will cancel that lunch.'),
+        ]),
+        agenda: [scheduled(title: 'Lunch with Dina')],
+      );
+
+      await say(tester, 'cancel the lunch tomorrow');
+
+      expect(find.text('DELETE'), findsOneWidget);
+      expect(find.text('Lunch with Dina'), findsOneWidget);
+      expect(find.textContaining('Confirming deletes it'), findsOneWidget);
+      // Named, not counted: a button that destroys something should say so.
+      expect(find.text('Delete 1 entry'), findsOneWidget);
+      // And the way out of a deletion card is to keep the entry.
+      expect(find.text('Keep it'), findsOneWidget);
+    });
+
+    // A model that names an entry nobody sent it is hallucinating, and the
+    // client must not invent a card for it either.
+    testWidgets('a deletion naming nothing real is not shown', (tester) async {
+      await pump(
+        tester,
+        scripted([], [
+          answerBody(removals: ['made-up'], reply: 'Cancelling that.'),
+        ]),
+        agenda: [scheduled(title: 'Lunch with Dina')],
+      );
+
+      await say(tester, 'cancel something');
+
+      expect(find.text('Cancelling that.'), findsOneWidget);
+      expect(find.text('DELETE'), findsNothing);
+      expect(find.textContaining('Delete'), findsNothing);
+    });
+
+    // A move is a delete plus a create, and the create is the half that gets
+    // lost — leaving a button that only destroys something.
+    testWidgets('a move shows both halves under one button', (tester) async {
+      await pump(
+        tester,
+        scripted([], [
+          jsonEncode({
+            'sessions': [
+              {
+                'type': 'UAS',
+                'start': '2026-08-18 10:00',
+                'room': '401',
+                'courseCode': 'COMP6047',
+                'courseName': 'Algorithm',
+                'courseClass': 'BAA1',
+              }
+            ],
+            'events': [],
+            'removals': ['sess-1'],
+            'reply': 'Moved it to 10.',
+          }),
+        ]),
+        agenda: [
+          scheduled(
+            id: 'sess-1',
+            title: 'UAS · Room 401',
+            kind: AgendaKind.session,
+          ),
+        ],
+      );
+
+      await say(tester, 'move my UAS to 10am');
+
+      expect(find.text('DELETE'), findsOneWidget);
+      expect(find.text('SESSION'), findsWidgets);
+      expect(find.text('Add 1 and delete 1'), findsOneWidget);
+    });
+
+    testWidgets('keeping an entry drops it from the deletion', (tester) async {
+      final captured = <Map<String, dynamic>>[];
+      await pump(
+        tester,
+        scripted(captured, [
+          answerBody(removals: ['evt-1'], reply: 'I will cancel that.'),
+          answerBody(reply: 'Right.'),
+        ]),
+        agenda: [scheduled(title: 'Lunch with Dina')],
+      );
+
+      await say(tester, 'cancel the lunch');
+      expect(find.text('DELETE'), findsOneWidget);
+
+      await tester.tap(find.text('Keep it'));
+      await tester.pumpAndSettle();
+      expect(find.text('DELETE'), findsNothing);
+
+      await say(tester, 'anything else?');
+
+      // Sending it back would have the assistant offer the deletion again.
+      final history = captured[1]['history'] as List;
+      expect(history[1]['removals'], anyOf(isNull, isEmpty));
     });
 
     // Better to say so on arrival than to let somebody type a paragraph and

@@ -33,7 +33,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				Title: "Dentist", Start: soon, End: stamp(now.Add(49 * time.Hour)),
 				Category: "medical-appointments",
 			}},
-		}, categories, now)
+		}, categories, now, nil)
 
 		if len(got.Events) != 1 {
 			t.Fatalf("expected the event kept, got %d", len(got.Events))
@@ -50,7 +50,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				Title: "Standup", Start: soon, End: stamp(now.Add(24 * time.Hour)),
 				Category: "work",
 			}},
-		}, categories, now)
+		}, categories, now, nil)
 
 		if len(got.Events) != 1 {
 			t.Fatalf("expected the event kept, got %d", len(got.Events))
@@ -70,7 +70,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				Title: "Project", Start: soon,
 				End: stamp(now.AddDate(0, 6, 0)), Category: "work",
 			}},
-		}, categories, now)
+		}, categories, now, nil)
 
 		if len(got.Events) != 0 {
 			t.Fatalf("expected it dropped, got %+v", got.Events)
@@ -85,7 +85,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				{Title: "Distant", Start: "2099-01-01 09:00", End: "2099-01-01 10:00", Category: "work"},
 				{Title: "Fine", Start: soon, End: stamp(now.Add(49 * time.Hour)), Category: "work"},
 			},
-		}, categories, now)
+		}, categories, now, nil)
 
 		if len(got.Events) != 1 || got.Events[0].Title != "Fine" {
 			t.Fatalf("expected only the plausible event, got %+v", got.Events)
@@ -98,7 +98,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				Title: "   ", Start: soon, End: stamp(now.Add(49 * time.Hour)),
 				Category: "work",
 			}},
-		}, categories, now)
+		}, categories, now, nil)
 
 		if len(got.Events) != 0 {
 			t.Fatalf("expected it dropped, got %+v", got.Events)
@@ -114,7 +114,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				Type: "MIDTERM", Start: soon, Room: "401",
 				CourseCode: "COMP6047", CourseName: "Algorithm",
 			}},
-		}, categories, now)
+		}, categories, now, nil)
 
 		if len(got.Sessions) != 0 {
 			t.Fatalf("expected it dropped, got %+v", got.Sessions)
@@ -124,7 +124,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 	t.Run("a session with no course at all is dropped", func(t *testing.T) {
 		got := plan.Normalise(plan.Plan{
 			Sessions: []plan.Session{{Type: "UAP", Start: soon, Room: "401"}},
-		}, categories, now)
+		}, categories, now, nil)
 
 		if len(got.Sessions) != 0 {
 			t.Fatalf("expected it dropped, got %+v", got.Sessions)
@@ -138,7 +138,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				CourseCode: " comp6047 ", CourseName: " Algorithm ",
 				CourseClass: " baa1 ",
 			}},
-		}, categories, now)
+		}, categories, now, nil)
 
 		if len(got.Sessions) != 1 {
 			t.Fatalf("expected the session kept, got %d", len(got.Sessions))
@@ -161,7 +161,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 			})
 		}
 
-		got := plan.Normalise(plan.Plan{Events: flood}, categories, now)
+		got := plan.Normalise(plan.Plan{Events: flood}, categories, now, nil)
 		if len(got.Events) != plan.MaxProposals {
 			t.Errorf("kept %d events, want the cap of %d",
 				len(got.Events), plan.MaxProposals)
@@ -171,7 +171,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 	t.Run("an empty answer stays empty and keeps its reply", func(t *testing.T) {
 		got := plan.Normalise(
 			plan.Plan{Reply: "  I could not find a date in that.  "},
-			categories, now)
+			categories, now, nil)
 
 		if !got.IsEmpty() {
 			t.Error("expected an empty plan")
@@ -189,7 +189,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				Title: "Lunch", Start: soon, End: stamp(now.Add(49 * time.Hour)),
 				Category: "work",
 			}},
-		}, categories, now)
+		}, categories, now, nil)
 		if withEntries.Reply == "" {
 			t.Error("a plan with entries came back with nothing said")
 		}
@@ -198,7 +198,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 		// as the assistant having ignored the request.
 		allDropped := plan.Normalise(plan.Plan{
 			Events: []plan.Event{{Title: "", Start: soon, Category: "work"}},
-		}, categories, now)
+		}, categories, now, nil)
 		if !allDropped.IsEmpty() {
 			t.Fatal("expected the malformed event to be dropped")
 		}
@@ -229,8 +229,8 @@ func TestHistory(t *testing.T) {
 				t.Errorf("rendered turn is missing %q:\n%s", want, rendered)
 			}
 		}
-		if strings.Contains(rendered, "already saved") {
-			t.Error("an unconfirmed turn claimed to be saved")
+		if strings.Contains(rendered, "carried out already") {
+			t.Error("an unconfirmed turn claimed to be carried out")
 		}
 	})
 
@@ -243,7 +243,7 @@ func TestHistory(t *testing.T) {
 			Events:    []plan.Event{{Title: "Lunch", Start: soon, Category: "social"}},
 			Committed: true,
 		}
-		if !strings.Contains(turn.Render(), "already saved") {
+		if !strings.Contains(turn.Render(), "carried out already") {
 			t.Errorf("a confirmed turn did not say so:\n%s", turn.Render())
 		}
 	})
@@ -284,6 +284,111 @@ func TestHistory(t *testing.T) {
 		}
 		if err := request.Validate(); err == nil {
 			t.Error("expected a request with a made-up role to be refused")
+		}
+	})
+}
+
+// Removals are the only thing the assistant can propose that destroys
+// something, so the guard around them is the sharpest in the package: an id it
+// was not given cannot be acted on, whatever it says.
+func TestRemovals(t *testing.T) {
+	existing := []plan.Entry{
+		{
+			ID: "evt-1", Kind: plan.KindEvent, Title: "Lunch with Dina",
+			Start: soon, End: stamp(now.Add(49 * time.Hour)), Category: "social",
+		},
+		{
+			ID: "7", Kind: plan.KindSession, Title: "UAP · Room 401",
+			Start: soon, End: soon,
+		},
+	}
+	known := plan.Request{Existing: existing}.KnownIDs()
+
+	t.Run("an id from the calendar is kept", func(t *testing.T) {
+		got := plan.Normalise(
+			plan.Plan{Removals: []string{" evt-1 "}}, categories, now, known)
+
+		if len(got.Removals) != 1 || got.Removals[0] != "evt-1" {
+			t.Fatalf("removals = %+v, want [evt-1]", got.Removals)
+		}
+	})
+
+	// The failure mode of guessing is deleting the wrong thing, so an id that
+	// was never offered is dropped rather than matched to the nearest entry.
+	t.Run("an id nobody sent is dropped", func(t *testing.T) {
+		got := plan.Normalise(plan.Plan{
+			Removals: []string{"evt-99", "made-up", "evt-1"},
+		}, categories, now, known)
+
+		if len(got.Removals) != 1 || got.Removals[0] != "evt-1" {
+			t.Fatalf("removals = %+v, want only the real one", got.Removals)
+		}
+	})
+
+	// Nothing breaks on a double delete, but the card would appear twice.
+	t.Run("a repeated id is only listed once", func(t *testing.T) {
+		got := plan.Normalise(plan.Plan{
+			Removals: []string{"evt-1", "evt-1", "7"},
+		}, categories, now, known)
+
+		if len(got.Removals) != 2 {
+			t.Fatalf("removals = %+v, want two", got.Removals)
+		}
+	})
+
+	// With no calendar sent, every id is unknown — which is exactly the state
+	// a client that forgot to send one would be in.
+	t.Run("nothing can be removed when no calendar was sent", func(t *testing.T) {
+		got := plan.Normalise(
+			plan.Plan{Removals: []string{"evt-1"}}, categories, now, nil)
+
+		if len(got.Removals) != 0 {
+			t.Fatalf("removals = %+v, want none", got.Removals)
+		}
+	})
+
+	t.Run("a removal counts as something to show", func(t *testing.T) {
+		got := plan.Normalise(
+			plan.Plan{Removals: []string{"evt-1"}}, categories, now, known)
+
+		if got.IsEmpty() {
+			t.Error("a plan that deletes something is not an empty plan")
+		}
+		if got.Reply == "" {
+			t.Error("a plan that deletes something said nothing about it")
+		}
+	})
+
+	t.Run("the calendar is rendered with ids the model can copy", func(t *testing.T) {
+		rendered := plan.RenderExisting(existing)
+		for _, want := range []string{"[evt-1]", "[7]", "Lunch with Dina", "social"} {
+			if !strings.Contains(rendered, want) {
+				t.Errorf("rendered calendar is missing %q:\n%s", want, rendered)
+			}
+		}
+	})
+
+	// Saying "empty" is not the same as saying nothing: silence reads to the
+	// model as the calendar simply not having been mentioned.
+	t.Run("an empty calendar says so", func(t *testing.T) {
+		if !strings.Contains(plan.RenderExisting(nil), "empty") {
+			t.Errorf("render = %q", plan.RenderExisting(nil))
+		}
+	})
+
+	t.Run("the calendar window is capped", func(t *testing.T) {
+		flood := make([]plan.Entry, plan.MaxExisting+40)
+		for i := range flood {
+			flood[i] = plan.Entry{ID: fmt.Sprint(i), Kind: plan.KindEvent, Start: soon}
+		}
+
+		shown := plan.Request{Existing: flood}.Calendar()
+		if len(shown) != plan.MaxExisting {
+			t.Fatalf("showed %d entries, want %d", len(shown), plan.MaxExisting)
+		}
+		// Cut from the far end: the near future is what a request is about.
+		if shown[0].ID != "0" {
+			t.Error("the window was trimmed from the wrong end")
 		}
 	})
 }

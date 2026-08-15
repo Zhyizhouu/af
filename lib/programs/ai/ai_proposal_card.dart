@@ -6,6 +6,7 @@ import '../../theme/af_tokens.dart';
 import '../../widgets/af_button.dart';
 import '../../widgets/af_chip.dart';
 import '../../widgets/af_panel.dart';
+import '../calendar/calendar_provider.dart';
 import '../calendar/event_category.dart';
 import 'ai_api.dart';
 
@@ -113,6 +114,75 @@ class EventProposalCard extends StatelessWidget {
           if (onRemove != null) ...[
             const SizedBox(height: 14),
             AFButton.quiet(label: 'Remove', expand: true, onPressed: onRemove),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One entry the assistant is offering to delete.
+///
+/// Drawn from this app's own record rather than from anything the model said
+/// about it: the answer carries an id and nothing else, so what is described
+/// here is necessarily what will be deleted.
+///
+/// Marked in the warn colour, and the way out is labelled "Keep it" rather
+/// than "Remove" — on a deletion card, "remove" could sensibly mean either
+/// thing, and this is not a control worth being clever about.
+class RemovalProposalCard extends StatelessWidget {
+  final AgendaEntry entry;
+  final VoidCallback? onKeep;
+
+  const RemovalProposalCard({
+    super.key,
+    required this.entry,
+    this.onKeep,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.af;
+
+    final when = entry.allDay
+        ? '${_day.format(entry.start)} · all day'
+        : entry.end.isAfter(entry.start)
+            ? '${_day.format(entry.start)} · '
+                '${_clock.format(entry.start)}–${_clock.format(entry.end)}'
+            : '${_day.format(entry.start)} · ${_clock.format(entry.start)}';
+
+    return AFPanel(
+      label: 'Delete',
+      countWidget: AFChip(
+        label: entry.kind == AgendaKind.session ? 'SESSION' : 'EVENT',
+        color: t.warn,
+      ),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            entry.title,
+            style: AFText.mono(
+              size: 13.5,
+              color: t.warn,
+              weight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _Row(label: 'When', value: when),
+          if (entry.subtitle.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(entry.subtitle, style: AFText.body(context, color: t.muted)),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            'This is already in your calendar. Confirming deletes it.',
+            style: AFText.meta(context, color: t.warn),
+          ),
+          if (onKeep != null) ...[
+            const SizedBox(height: 14),
+            AFButton.quiet(label: 'Keep it', expand: true, onPressed: onKeep),
           ],
         ],
       ),

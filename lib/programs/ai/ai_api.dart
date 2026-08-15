@@ -156,6 +156,70 @@ class EventProposal {
       };
 }
 
+/// Something already in the calendar, on its way to the assistant.
+///
+/// Sent with every message because the records live on this device and the
+/// server holds none of them. Without it the assistant is blind to everything
+/// it did not itself propose — "cancel the lunch tomorrow" reads to it as a
+/// lunch that does not exist.
+class AiEntry {
+  static const kindEvent = 'event';
+  static const kindSession = 'session';
+
+  /// This app's own identifier, round-tripped untouched. A removal is only
+  /// honoured when it names one of these.
+  final String id;
+  final String kind;
+
+  final String title;
+  final DateTime start;
+  final DateTime end;
+  final bool allDay;
+  final String category;
+
+  /// A session's fields, unflattened.
+  ///
+  /// Moving a session means deleting it and proposing its replacement, and a
+  /// replacement cannot be rebuilt from a display title: "UAS · Room 401"
+  /// does not say which course it is, and a session proposed without one is
+  /// thrown out as nonsense. Empty for events.
+  final String type;
+  final String room;
+  final String courseCode;
+  final String courseName;
+  final String courseClass;
+
+  const AiEntry({
+    required this.id,
+    required this.kind,
+    required this.title,
+    required this.start,
+    required this.end,
+    required this.allDay,
+    this.category = '',
+    this.type = '',
+    this.room = '',
+    this.courseCode = '',
+    this.courseName = '',
+    this.courseClass = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'kind': kind,
+        'title': title,
+        'start': aiTimeFormat.format(start),
+        'end': aiTimeFormat.format(end),
+        'allDay': allDay,
+        if (category.isNotEmpty) 'category': category,
+        if (type.isNotEmpty) 'type': type,
+        if (room.isNotEmpty) 'room': room,
+        if (courseCode.isNotEmpty) 'courseCode': courseCode,
+        if (courseName.isNotEmpty) 'courseName': courseName,
+        if (courseClass.isNotEmpty) 'courseClass': courseClass,
+      };
+}
+
 /// One answer from the assistant: what it said, and what it is offering.
 class AiAnswer {
   /// The conversational half — what it assumed, what it could not work out, or
@@ -166,14 +230,20 @@ class AiAnswer {
   final List<SessionProposal> sessions;
   final List<EventProposal> events;
 
+  /// Ids of existing entries it is offering to delete. Ids only — this app
+  /// draws the card from its own copy of the record, so a card can never
+  /// describe one entry while deleting another.
+  final List<String> removals;
+
   const AiAnswer({
     required this.reply,
     required this.sessions,
     required this.events,
+    this.removals = const [],
   });
 
-  bool get isEmpty => sessions.isEmpty && events.isEmpty;
-  int get total => sessions.length + events.length;
+  bool get isEmpty => sessions.isEmpty && events.isEmpty && removals.isEmpty;
+  int get total => sessions.length + events.length + removals.length;
 
   factory AiAnswer.fromJson(Map<String, dynamic> json) => AiAnswer(
         reply: json['reply'] as String? ?? '',
@@ -184,6 +254,10 @@ class AiAnswer {
         events: [
           for (final e in (json['events'] as List? ?? const []))
             ?EventProposal.fromJson(e as Map<String, dynamic>),
+        ],
+        removals: [
+          for (final id in (json['removals'] as List? ?? const []))
+            if (id is String && id.trim().isNotEmpty) id,
         ],
       );
 }
@@ -205,9 +279,10 @@ class AiTurn {
   /// alone does not say which entries were on the table.
   final List<SessionProposal> sessions;
   final List<EventProposal> events;
+  final List<String> removals;
 
-  /// Set once these were confirmed, so the assistant does not offer to create
-  /// them all over again.
+  /// Set once these were confirmed, so the assistant does not offer to carry
+  /// them out all over again.
   final bool committed;
 
   const AiTurn({
@@ -215,6 +290,7 @@ class AiTurn {
     required this.text,
     this.sessions = const [],
     this.events = const [],
+    this.removals = const [],
     this.committed = false,
   });
 
@@ -224,6 +300,7 @@ class AiTurn {
         if (sessions.isNotEmpty)
           'sessions': [for (final s in sessions) s.toJson()],
         if (events.isNotEmpty) 'events': [for (final e in events) e.toJson()],
+        if (removals.isNotEmpty) 'removals': removals,
         if (committed) 'committed': true,
       };
 }
@@ -301,13 +378,14 @@ class AiApi {
 
   /// Says something to the assistant and reads what comes back.
   ///
-  /// [history] is the conversation so far, oldest first — the server keeps
-  /// none of it. [now] and [categories] are sent rather than assumed: "next
-  /// Monday" depends on where the person asking is, and the categories belong
-  /// to this account.
+  /// [history] is the conversation so far and [existing] is what is already
+  /// scheduled — the server keeps neither between calls. [now] and
+  /// [categories] are sent rather than assumed: "next Monday" depends on where
+  /// the person asking is, and the categories belong to this account.
   Future<AiAnswer> send({
     required String message,
     required List<AiTurn> history,
+    required List<AiEntry> existing,
     required DateTime now,
     required List<String> categories,
   }) async {
@@ -318,6 +396,7 @@ class AiApi {
         body: jsonEncode({
           'prompt': message,
           'history': [for (final turn in history) turn.toJson()],
+          'existing': [for (final entry in existing) entry.toJson()],
           'now': aiTimeFormat.format(now),
           'categories': categories,
         }),

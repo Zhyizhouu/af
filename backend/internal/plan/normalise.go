@@ -15,13 +15,38 @@ import (
 // Nothing is repaired silently where repairing would change intent — a
 // proposal that cannot be made sensible is dropped, because a wrong entry
 // somebody confirms without reading is worse than a missing one they notice.
-func Normalise(p Plan, categories []string, now time.Time) Plan {
+func Normalise(p Plan, categories []string, now time.Time, known map[string]bool) Plan {
 	allowed := make(map[string]bool, len(categories))
 	for _, slug := range categories {
 		allowed[strings.TrimSpace(slug)] = true
 	}
 
-	out := Plan{Reply: strings.TrimSpace(p.Reply)}
+	// Empty slices rather than nil: both marshal differently, and a required
+	// array arriving as null is the kind of thing a client only discovers in
+	// production. This one copes either way; the next one might not.
+	out := Plan{
+		Reply:    strings.TrimSpace(p.Reply),
+		Sessions: []Session{},
+		Events:   []Event{},
+		Removals: []string{},
+	}
+
+	// Deletion is the one thing here that destroys something, so a removal is
+	// only ever an id this same request supplied. A hallucinated id is not
+	// repaired or matched to the nearest entry — it is dropped, because the
+	// failure mode of guessing is deleting the wrong thing.
+	seen := make(map[string]bool, len(p.Removals))
+	for _, id := range p.Removals {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] || !known[id] {
+			continue
+		}
+		seen[id] = true
+		out.Removals = append(out.Removals, id)
+		if len(out.Removals) >= MaxProposals {
+			break
+		}
+	}
 
 	for _, session := range p.Sessions {
 		if len(out.Sessions)+len(out.Events) >= MaxProposals {
@@ -48,9 +73,9 @@ func Normalise(p Plan, categories []string, now time.Time) Plan {
 	if out.Reply == "" {
 		switch {
 		case !out.IsEmpty():
-			out.Reply = "Here is what I have. Check it before you add it."
-		case len(p.Sessions)+len(p.Events) > 0:
-			out.Reply = "I could not make sense of the entries I came up with. " +
+			out.Reply = "Here is what I have. Check it before you confirm."
+		case len(p.Sessions)+len(p.Events)+len(p.Removals) > 0:
+			out.Reply = "I could not make sense of the changes I came up with. " +
 				"Try naming the date and time directly."
 		default:
 			out.Reply = "I did not find anything to schedule in that."
