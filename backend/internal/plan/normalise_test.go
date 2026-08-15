@@ -33,7 +33,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				Title: "Dentist", Start: soon, End: stamp(now.Add(49 * time.Hour)),
 				Category: "medical-appointments",
 			}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if len(got.Events) != 1 {
 			t.Fatalf("expected the event kept, got %d", len(got.Events))
@@ -50,7 +50,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				Title: "Standup", Start: soon, End: stamp(now.Add(24 * time.Hour)),
 				Category: "work",
 			}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if len(got.Events) != 1 {
 			t.Fatalf("expected the event kept, got %d", len(got.Events))
@@ -70,7 +70,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				Title: "Project", Start: soon,
 				End: stamp(now.AddDate(0, 6, 0)), Category: "work",
 			}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if len(got.Events) != 0 {
 			t.Fatalf("expected it dropped, got %+v", got.Events)
@@ -85,7 +85,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				{Title: "Distant", Start: "2099-01-01 09:00", End: "2099-01-01 10:00", Category: "work"},
 				{Title: "Fine", Start: soon, End: stamp(now.Add(49 * time.Hour)), Category: "work"},
 			},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if len(got.Events) != 1 || got.Events[0].Title != "Fine" {
 			t.Fatalf("expected only the plausible event, got %+v", got.Events)
@@ -98,7 +98,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				Title: "   ", Start: soon, End: stamp(now.Add(49 * time.Hour)),
 				Category: "work",
 			}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if len(got.Events) != 0 {
 			t.Fatalf("expected it dropped, got %+v", got.Events)
@@ -114,7 +114,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				Type: "MIDTERM", Start: soon, Room: "401",
 				CourseCode: "COMP6047", CourseName: "Algorithm",
 			}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if len(got.Sessions) != 0 {
 			t.Fatalf("expected it dropped, got %+v", got.Sessions)
@@ -124,7 +124,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 	t.Run("a session with no course at all is dropped", func(t *testing.T) {
 		got := plan.Normalise(plan.Plan{
 			Sessions: []plan.Session{{Type: "UAP", Start: soon, Room: "401"}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if len(got.Sessions) != 0 {
 			t.Fatalf("expected it dropped, got %+v", got.Sessions)
@@ -138,7 +138,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				CourseCode: " comp6047 ", CourseName: " Algorithm ",
 				CourseClass: " baa1 ",
 			}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if len(got.Sessions) != 1 {
 			t.Fatalf("expected the session kept, got %d", len(got.Sessions))
@@ -161,7 +161,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 			})
 		}
 
-		got := plan.Normalise(plan.Plan{Events: flood}, categories, now, nil)
+		got := plan.Normalise(plan.Plan{Events: flood}, categories, now, nil, nil)
 		if len(got.Events) != plan.MaxProposals {
 			t.Errorf("kept %d events, want the cap of %d",
 				len(got.Events), plan.MaxProposals)
@@ -171,7 +171,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 	t.Run("an empty answer stays empty and keeps its reply", func(t *testing.T) {
 		got := plan.Normalise(
 			plan.Plan{Reply: "  I could not find a date in that.  "},
-			categories, now, nil)
+			categories, now, nil, nil)
 
 		if !got.IsEmpty() {
 			t.Error("expected an empty plan")
@@ -189,7 +189,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 				Title: "Lunch", Start: soon, End: stamp(now.Add(49 * time.Hour)),
 				Category: "work",
 			}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 		if withEntries.Reply == "" {
 			t.Error("a plan with entries came back with nothing said")
 		}
@@ -198,7 +198,7 @@ func TestNormaliseRejectsNonsense(t *testing.T) {
 		// as the assistant having ignored the request.
 		allDropped := plan.Normalise(plan.Plan{
 			Events: []plan.Event{{Title: "", Start: soon, Category: "work"}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 		if !allDropped.IsEmpty() {
 			t.Fatal("expected the malformed event to be dropped")
 		}
@@ -306,7 +306,7 @@ func TestRemovals(t *testing.T) {
 
 	t.Run("an id from the calendar is kept", func(t *testing.T) {
 		got := plan.Normalise(
-			plan.Plan{Removals: []string{" evt-1 "}}, categories, now, known)
+			plan.Plan{Removals: []string{" evt-1 "}}, categories, now, known, nil)
 
 		if len(got.Removals) != 1 || got.Removals[0] != "evt-1" {
 			t.Fatalf("removals = %+v, want [evt-1]", got.Removals)
@@ -318,7 +318,7 @@ func TestRemovals(t *testing.T) {
 	t.Run("an id nobody sent is dropped", func(t *testing.T) {
 		got := plan.Normalise(plan.Plan{
 			Removals: []string{"evt-99", "made-up", "evt-1"},
-		}, categories, now, known)
+		}, categories, now, known, nil)
 
 		if len(got.Removals) != 1 || got.Removals[0] != "evt-1" {
 			t.Fatalf("removals = %+v, want only the real one", got.Removals)
@@ -329,7 +329,7 @@ func TestRemovals(t *testing.T) {
 	t.Run("a repeated id is only listed once", func(t *testing.T) {
 		got := plan.Normalise(plan.Plan{
 			Removals: []string{"evt-1", "evt-1", "7"},
-		}, categories, now, known)
+		}, categories, now, known, nil)
 
 		if len(got.Removals) != 2 {
 			t.Fatalf("removals = %+v, want two", got.Removals)
@@ -340,7 +340,7 @@ func TestRemovals(t *testing.T) {
 	// a client that forgot to send one would be in.
 	t.Run("nothing can be removed when no calendar was sent", func(t *testing.T) {
 		got := plan.Normalise(
-			plan.Plan{Removals: []string{"evt-1"}}, categories, now, nil)
+			plan.Plan{Removals: []string{"evt-1"}}, categories, now, nil, nil)
 
 		if len(got.Removals) != 0 {
 			t.Fatalf("removals = %+v, want none", got.Removals)
@@ -349,7 +349,7 @@ func TestRemovals(t *testing.T) {
 
 	t.Run("a removal counts as something to show", func(t *testing.T) {
 		got := plan.Normalise(
-			plan.Plan{Removals: []string{"evt-1"}}, categories, now, known)
+			plan.Plan{Removals: []string{"evt-1"}}, categories, now, known, nil)
 
 		if got.IsEmpty() {
 			t.Error("a plan that deletes something is not an empty plan")
@@ -400,7 +400,7 @@ func TestQRCodes(t *testing.T) {
 	t.Run("a code is kept and tidied", func(t *testing.T) {
 		got := plan.Normalise(plan.Plan{
 			QRCodes: []plan.QR{{Text: "  https://af.test/x  ", Label: " Room 401 ", ECC: "q"}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if len(got.QRCodes) != 1 {
 			t.Fatalf("qrCodes = %+v", got.QRCodes)
@@ -416,7 +416,7 @@ func TestQRCodes(t *testing.T) {
 	t.Run("a logo forces the highest correction level", func(t *testing.T) {
 		got := plan.Normalise(plan.Plan{
 			QRCodes: []plan.QR{{Text: "https://af.test", Label: "x", ECC: "L", UseLogo: true}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if got.QRCodes[0].ECC != "H" {
 			t.Errorf("ecc = %q, want H", got.QRCodes[0].ECC)
@@ -426,7 +426,7 @@ func TestQRCodes(t *testing.T) {
 	t.Run("an invented correction level falls back", func(t *testing.T) {
 		got := plan.Normalise(plan.Plan{
 			QRCodes: []plan.QR{{Text: "x", Label: "x", ECC: "ULTRA"}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if got.QRCodes[0].ECC != "M" {
 			t.Errorf("ecc = %q, want M", got.QRCodes[0].ECC)
@@ -436,7 +436,7 @@ func TestQRCodes(t *testing.T) {
 	t.Run("an empty payload is dropped", func(t *testing.T) {
 		got := plan.Normalise(plan.Plan{
 			QRCodes: []plan.QR{{Text: "   ", Label: "Nothing"}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if len(got.QRCodes) != 0 {
 			t.Errorf("qrCodes = %+v, want none", got.QRCodes)
@@ -448,7 +448,7 @@ func TestQRCodes(t *testing.T) {
 	t.Run("a payload past the format ceiling is dropped", func(t *testing.T) {
 		got := plan.Normalise(plan.Plan{
 			QRCodes: []plan.QR{{Text: strings.Repeat("x", plan.MaxQRBytes+1), Label: "Huge"}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if len(got.QRCodes) != 0 {
 			t.Errorf("qrCodes = %+v, want none", got.QRCodes)
@@ -458,7 +458,7 @@ func TestQRCodes(t *testing.T) {
 	t.Run("a missing label gets one", func(t *testing.T) {
 		got := plan.Normalise(plan.Plan{
 			QRCodes: []plan.QR{{Text: "https://af.test", ECC: "M"}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if got.QRCodes[0].Label == "" {
 			t.Error("a code came back with nothing to call it")
@@ -471,7 +471,7 @@ func TestQRCodes(t *testing.T) {
 			flood[i] = plan.QR{Text: "https://af.test", Label: "x", ECC: "M"}
 		}
 
-		got := plan.Normalise(plan.Plan{QRCodes: flood}, categories, now, nil)
+		got := plan.Normalise(plan.Plan{QRCodes: flood}, categories, now, nil, nil)
 		if len(got.QRCodes) != plan.MaxQRCodes {
 			t.Errorf("kept %d codes, want %d", len(got.QRCodes), plan.MaxQRCodes)
 		}
@@ -482,7 +482,7 @@ func TestQRCodes(t *testing.T) {
 	t.Run("a code needs no confirming but is not nothing", func(t *testing.T) {
 		got := plan.Normalise(plan.Plan{
 			QRCodes: []plan.QR{{Text: "https://af.test", Label: "x", ECC: "M"}},
-		}, categories, now, nil)
+		}, categories, now, nil, nil)
 
 		if got.IsEmpty() {
 			t.Error("a turn that produced a code is not an empty turn")

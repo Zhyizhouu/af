@@ -118,6 +118,7 @@ describe('api', () => {
       attachments: [],
       now: new Date(2026, 7, 15, 9),
       categories: ['social'],
+      habits: [],
     });
 
     expect(result.sessions).toHaveLength(1);
@@ -142,6 +143,7 @@ describe('api', () => {
       attachments: [],
       now: new Date(2026, 7, 15),
       categories: ['work'],
+      habits: [],
     });
 
     expect(result.events).toHaveLength(1);
@@ -161,6 +163,7 @@ describe('api', () => {
       attachments: [],
       now: new Date(2026, 7, 15),
       categories: ['work'],
+      habits: [],
     });
 
     expect(result.events[0]!.end).toEqual(new Date(2026, 7, 19, 13));
@@ -179,6 +182,7 @@ describe('api', () => {
         attachments: [],
         now: new Date(),
         categories: ['work'],
+      habits: [],
       }),
     ).rejects.toMatchObject({ throttled: true });
   });
@@ -230,11 +234,16 @@ describe('stored conversations', () => {
         },
       ],
       removals: [],
+      habitTicks: [
+        { habitId: 'h1', name: 'Read', day: '2026-08-15', done: true },
+        { habitId: 'h2', name: 'Run', day: '2026-08-15', done: false },
+      ],
       qrCodes: [],
       attachments: [],
       droppedSessions: new Set(),
       droppedEvents: new Set([0]),
       droppedRemovals: new Set(),
+      droppedHabitTicks: new Set([1]),
       committed: true,
       failed: false,
     };
@@ -251,6 +260,16 @@ describe('stored conversations', () => {
     // other keeps a dropped proposal dropped.
     expect(restored!.committed).toBe(true);
     expect(restored!.droppedEvents).toEqual(new Set([0]));
+
+    // The habit's name is stored alongside the id on purpose: the id alone
+    // would leave a reopened conversation unable to say what it ticked once
+    // that habit is renamed or deleted.
+    expect(restored!.habitTicks).toHaveLength(2);
+    expect(restored!.habitTicks[0]).toEqual({
+      habitId: 'h1', name: 'Read', day: '2026-08-15', done: true,
+    });
+    expect(restored!.habitTicks[1]!.done).toBe(false);
+    expect(restored!.droppedHabitTicks).toEqual(new Set([1]));
   });
 
   // The entry may well have been deleted by the time this is reopened — which

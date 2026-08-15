@@ -40,6 +40,37 @@ type Event struct {
 	Category string `json:"category"`
 }
 
+// Habit is one of the person's habits, as the model is shown it.
+//
+// Sent for the same reason the calendar is: the records live on the device and
+// this service holds none of them. Without it "tick today's habits" is
+// unanswerable, and the assistant answers by talking about the calendar —
+// which reads as it being broken rather than blind.
+type Habit struct {
+	// The client's own identifier, round-tripped rather than interpreted. A
+	// tick names one of these or it is dropped.
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Whether it is already ticked on the day in question, so the model does
+	// not offer to do what is done.
+	Done bool `json:"done"`
+}
+
+// HabitTick is a proposed mark against one habit on one day.
+//
+// Ids only for the habit itself, the same rule removals follow: the card is
+// drawn from the client's own record, so a tick can never describe one habit
+// while marking another. Done is carried rather than assumed because unticking
+// something marked by mistake is the other half of the request.
+type HabitTick struct {
+	HabitID string `json:"habitId"`
+	// YYYY-MM-DD in the person's own timezone. A day key, not an instant —
+	// habits are recorded per day, and which day it is depends on where they
+	// are, not where this runs.
+	Day  string `json:"day"`
+	Done bool   `json:"done"`
+}
+
 // Entry is something already in the person's calendar.
 //
 // Sent with every request so the assistant can talk about what is there
@@ -130,6 +161,11 @@ type Plan struct {
 	// deleting another.
 	Removals []string `json:"removals"`
 
+	// Marks against habits. Gated like sessions and events — it writes to
+	// stored data — but cheap to undo, which is why unticking is the same
+	// proposal with Done false rather than a second kind of thing.
+	HabitTicks []HabitTick `json:"habitTicks"`
+
 	// Reply is what the assistant says back — the conversational half. It
 	// carries what was assumed and what could not be worked out, because
 	// "I assumed 2026" is exactly the kind of thing worth reading before
@@ -144,12 +180,13 @@ type Plan struct {
 // nothing about it needs confirming.
 func (p Plan) IsEmpty() bool {
 	return len(p.Sessions) == 0 && len(p.Events) == 0 &&
-		len(p.Removals) == 0 && len(p.QRCodes) == 0
+		len(p.Removals) == 0 && len(p.QRCodes) == 0 && len(p.HabitTicks) == 0
 }
 
 // NeedsConfirming reports whether this turn touches stored data.
 func (p Plan) NeedsConfirming() bool {
-	return len(p.Sessions) > 0 || len(p.Events) > 0 || len(p.Removals) > 0
+	return len(p.Sessions) > 0 || len(p.Events) > 0 || len(p.Removals) > 0 ||
+		len(p.HabitTicks) > 0
 }
 
 // Roles a conversation turn can take. The wire uses "assistant" rather than
@@ -174,9 +211,10 @@ type Turn struct {
 	// Without them "move that one to ten" is unanswerable — the prose alone
 	// does not say which entries were on the table. Only read on an assistant
 	// turn.
-	Sessions []Session `json:"sessions,omitempty"`
-	Events   []Event   `json:"events,omitempty"`
-	Removals []string  `json:"removals,omitempty"`
+	Sessions   []Session   `json:"sessions,omitempty"`
+	Events     []Event     `json:"events,omitempty"`
+	Removals   []string    `json:"removals,omitempty"`
+	HabitTicks []HabitTick `json:"habitTicks,omitempty"`
 
 	// True once the person confirmed this turn's proposals. The model is told
 	// so that it does not cheerfully offer to create them a second time.
@@ -208,15 +246,46 @@ func (t Turn) Render() string {
 	for _, id := range t.Removals {
 		fmt.Fprintf(&b, "\n- delete | %s", id)
 	}
+	for _, h := range t.HabitTicks {
+		verb := "untick"
+		if h.Done {
+			verb = "tick"
+		}
+		fmt.Fprintf(&b, "\n- %s habit | %s | %s", verb, h.HabitID, h.Day)
+	}
 
 	if t.Committed && (len(t.Sessions) > 0 || len(t.Events) > 0 ||
-		len(t.Removals) > 0) {
+		len(t.Removals) > 0 || len(t.HabitTicks) > 0) {
 		b.WriteString("\n(confirmed — this was carried out already, do not offer it again)")
 	}
 	return b.String()
 }
 
 // RenderExisting is the calendar as the model is shown it.
+// RenderHabits is the habit list as the model is shown it.
+//
+// Saying "none" matters as much as it does for the calendar: silence reads as
+// habits simply not having been mentioned, and the model then answers a request
+// to tick one by talking about the calendar instead.
+func RenderHabits(habits []Habit, today string) string {
+	if len(habits) == 0 {
+		return "They are not tracking any habits."
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Their habits, and whether each is already done on %s. "+
+		"Use these ids verbatim in \"habitTicks\"; never invent one.\n", today)
+
+	for _, h := range habits {
+		state := "not done"
+		if h.Done {
+			state = "done"
+		}
+		fmt.Fprintf(&b, "- [%s] %s | %s\n", h.ID, orDash(h.Name), state)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
 func RenderExisting(entries []Entry) string {
 	if len(entries) == 0 {
 		return "Their calendar is empty over this period."
@@ -279,6 +348,22 @@ type Request struct {
 	// Category slugs the model may choose from. Sent by the client because it
 	// owns them — the built-ins ship with the app and the rest are the user's.
 	Categories []string `json:"categories"`
+
+	// The person's habits and whether each is done today. Sent for the same
+	// reason as Existing: this service stores none of them.
+	Habits []Habit `json:"habits"`
+}
+
+// KnownHabitIDs is the set a tick may name. Same guard as KnownIDs: a habit id
+// the request never mentioned is a guess, and a guess marks the wrong habit.
+func (r Request) KnownHabitIDs() map[string]bool {
+	known := make(map[string]bool, len(r.Habits))
+	for _, habit := range r.Habits {
+		if id := strings.TrimSpace(habit.ID); id != "" {
+			known[id] = true
+		}
+	}
+	return known
 }
 
 const (
@@ -293,6 +378,9 @@ const (
 	// semester is thousands of entries and none of them fit; the client sends
 	// a window around today and this bounds what it can cost regardless.
 	MaxExisting = 120
+	// MaxHabits bounds the habit list the same way. Nobody tracks a hundred
+	// habits, and the cap stops a malformed client sending one.
+	MaxHabits = 60
 	// MaxQRCodes bounds one turn. Somebody wanting forty codes wants the QR
 	// Generator, not a chat message.
 	MaxQRCodes = 8
@@ -363,6 +451,14 @@ func (r Request) Files() []Attachment {
 		return r.Attachments
 	}
 	return r.Attachments[:MaxAttachments]
+}
+
+// Tracked is the habit list the model is shown, bounded.
+func (r Request) Tracked() []Habit {
+	if len(r.Habits) <= MaxHabits {
+		return r.Habits
+	}
+	return r.Habits[:MaxHabits]
 }
 
 // KnownIDs is the set a removal is allowed to name.

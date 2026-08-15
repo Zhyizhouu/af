@@ -25,6 +25,15 @@
   background: var(--af-accent-soft);
 }
 
+/* The icon is a dark tile with its own ground, so it keeps its corners rather
+   than sitting square against the light desk. --af-radius-sm, not --af-radius:
+   at 28px the larger radius starts rounding the monogram itself away. */
+.dash__logo {
+  border-radius: var(--af-radius-sm);
+  flex: none;
+  align-self: center;
+}
+
 .dash__mark {
   font-family: var(--af-mono);
   font-size: 20px;

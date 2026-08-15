@@ -13,6 +13,7 @@ import {
   hasProposals,
   keptCount,
   keptEvents,
+  keptHabitTicks,
   keptRemovals,
   keptSessions,
   toTurn,
@@ -29,7 +30,8 @@ import {
   saveConversation,
 } from './conversations';
 import { commitTurn } from './commit';
-import { EventCard, QrArtifactCard, RemovalCard, SessionCard } from './cards';
+import { EventCard, HabitTickCard, QrArtifactCard, RemovalCard, SessionCard } from './cards';
+import { readHabitsForAssistant } from '../habits/store';
 import type { AiConversationRow } from '../../data/db';
 import './ai.css';
 
@@ -173,7 +175,11 @@ export function AiScreen({
     const message = draft.trim();
     if (!message || busy) return;
 
-    const [agenda, sessions] = await Promise.all([readAgenda(), readSessionsById()]);
+    const [agenda, sessions, habits] = await Promise.all([
+      readAgenda(),
+      readSessionsById(),
+      readHabitsForAssistant(),
+    ]);
     const now = new Date();
 
     // Taken before the new message is added, and skipping failures — an error
@@ -203,8 +209,14 @@ export function AiScreen({
         // asking rather than to wherever the server runs.
         now,
         categories,
+        habits,
       });
-      next = [...withUser, assistantMessage(answer, agenda)];
+      // Names resolved here rather than in the card, so a tick keeps saying
+      // which habit it was even after that habit is renamed or deleted.
+      next = [
+        ...withUser,
+        assistantMessage(answer, agenda, new Map(habits.map((h) => [h.id, h.name]))),
+      ];
     } catch (error) {
       next = [
         ...withUser,
@@ -269,7 +281,7 @@ export function AiScreen({
   );
 
   const drop = useCallback(
-    (index: number, field: 'droppedSessions' | 'droppedEvents' | 'droppedRemovals', at: number) => {
+    (index: number, field: 'droppedSessions' | 'droppedEvents' | 'droppedRemovals' | 'droppedHabitTicks', at: number) => {
       setMessages((current) =>
         current.map((m, i) =>
           i === index ? { ...m, [field]: new Set([...m[field], at]) } : m,
@@ -529,7 +541,7 @@ function Turn({
   logo: string | null;
   busy: boolean;
   onCommit: () => void;
-  onDrop: (field: 'droppedSessions' | 'droppedEvents' | 'droppedRemovals', at: number) => void;
+  onDrop: (field: 'droppedSessions' | 'droppedEvents' | 'droppedRemovals' | 'droppedHabitTicks', at: number) => void;
 }) {
   if (message.role === 'user') {
     return (
@@ -595,6 +607,15 @@ function Turn({
               />
             ),
           )}
+          {message.habitTicks.map((tick, i) =>
+            message.droppedHabitTicks.has(i) ? null : (
+              <HabitTickCard
+                key={`h${i}`}
+                tick={tick}
+                onRemove={locked ? undefined : () => onDrop('droppedHabitTicks', i)}
+              />
+            ),
+          )}
           {message.removals.map((entry, i) =>
             message.droppedRemovals.has(i) ? null : (
               <RemovalCard
@@ -618,6 +639,7 @@ function summarise(message: AiMessage): string {
   const sessions = keptSessions(message).length;
   const events = keptEvents(message).length;
   const removals = keptRemovals(message).length;
+  const ticks = keptHabitTicks(message).length;
 
   const added = [
     sessions > 0 ? plural(sessions, 'session', 'sessions') : '',
@@ -626,6 +648,7 @@ function summarise(message: AiMessage): string {
 
   return [
     added.length ? `Added ${added.join(' and ')}` : '',
+    ticks > 0 ? `marked ${plural(ticks, 'habit', 'habits')}` : '',
     removals > 0 ? `deleted ${plural(removals, 'entry', 'entries')}` : '',
   ]
     .filter(Boolean)
@@ -646,18 +669,33 @@ function CommitControl({
 
   const adding = keptSessions(message).length + keptEvents(message).length;
   const deleting = keptRemovals(message).length;
+  const ticks = keptHabitTicks(message);
+
+  // Habits get their own clause rather than being folded into "add": ticking
+  // one adds nothing to the calendar, and a button claiming otherwise would be
+  // lying about what it is about to do.
+  const habits =
+    ticks.length === 0
+      ? ''
+      : ticks.every((tick) => tick.done)
+        ? `tick ${plural(ticks.length, 'habit', 'habits')}`
+        : ticks.every((tick) => !tick.done)
+          ? `untick ${plural(ticks.length, 'habit', 'habits')}`
+          : `update ${plural(ticks.length, 'habit', 'habits')}`;
 
   // Spelled out rather than counted whenever a deletion is involved: "Apply 3
   // changes" is not something anybody should have to decode before pressing a
   // button that destroys one of them.
+  const clauses = [
+    adding > 0 ? `add ${adding} to my calendar` : '',
+    habits,
+    deleting > 0 ? `delete ${plural(deleting, 'entry', 'entries')}` : '',
+  ].filter(Boolean);
+
   const label =
-    adding === 0 && deleting === 0
+    clauses.length === 0
       ? 'Nothing left to do'
-      : deleting === 0
-        ? `Add ${adding} to my calendar`
-        : adding === 0
-          ? `Delete ${plural(deleting, 'entry', 'entries')}`
-          : `Add ${adding} and delete ${deleting}`;
+      : clauses.join(' and ').replace(/^./, (c) => c.toUpperCase());
 
   return (
     <AFButton

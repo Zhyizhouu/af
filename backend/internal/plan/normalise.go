@@ -16,7 +16,13 @@ import (
 // Nothing is repaired silently where repairing would change intent — a
 // proposal that cannot be made sensible is dropped, because a wrong entry
 // somebody confirms without reading is worse than a missing one they notice.
-func Normalise(p Plan, categories []string, now time.Time, known map[string]bool) Plan {
+func Normalise(
+	p Plan,
+	categories []string,
+	now time.Time,
+	known map[string]bool,
+	knownHabits map[string]bool,
+) Plan {
 	allowed := make(map[string]bool, len(categories))
 	for _, slug := range categories {
 		allowed[strings.TrimSpace(slug)] = true
@@ -26,11 +32,44 @@ func Normalise(p Plan, categories []string, now time.Time, known map[string]bool
 	// array arriving as null is the kind of thing a client only discovers in
 	// production. This one copes either way; the next one might not.
 	out := Plan{
-		Reply:    strings.TrimSpace(p.Reply),
-		Sessions: []Session{},
-		Events:   []Event{},
-		Removals: []string{},
-		QRCodes:  []QR{},
+		Reply:      strings.TrimSpace(p.Reply),
+		Sessions:   []Session{},
+		Events:     []Event{},
+		Removals:   []string{},
+		QRCodes:    []QR{},
+		HabitTicks: []HabitTick{},
+	}
+
+	// A tick names a habit this same request supplied, for the reason removals
+	// do: an invented id marks the wrong habit, and the person confirming sees
+	// a name the client resolved rather than one the model wrote. One mark per
+	// habit per day — the last one wins, because "tick it, no, untick it" in a
+	// single answer is the model changing its mind mid-sentence, not two marks.
+	ticked := make(map[string]int, len(p.HabitTicks))
+	for _, tick := range p.HabitTicks {
+		id := strings.TrimSpace(tick.HabitID)
+		day := strings.TrimSpace(tick.Day)
+		if id == "" || !knownHabits[id] {
+			continue
+		}
+		// A day key, not an instant. Anything else is dropped rather than
+		// guessed at: marking the wrong day is as wrong as the wrong habit.
+		if _, err := time.Parse("2006-01-02", day); err != nil {
+			continue
+		}
+
+		key := id + "|" + day
+		if at, seen := ticked[key]; seen {
+			out.HabitTicks[at].Done = tick.Done
+			continue
+		}
+		if len(out.HabitTicks) >= MaxProposals {
+			break
+		}
+		ticked[key] = len(out.HabitTicks)
+		out.HabitTicks = append(out.HabitTicks, HabitTick{
+			HabitID: id, Day: day, Done: tick.Done,
+		})
 	}
 
 	// Deletion is the one thing here that destroys something, so a removal is
@@ -88,7 +127,7 @@ func Normalise(p Plan, categories []string, now time.Time, known map[string]bool
 		switch {
 		case !out.IsEmpty():
 			out.Reply = "Here is what I have. Check it before you confirm."
-		case len(p.Sessions)+len(p.Events)+len(p.Removals) > 0:
+		case len(p.Sessions)+len(p.Events)+len(p.Removals)+len(p.HabitTicks) > 0:
 			out.Reply = "I could not make sense of the changes I came up with. " +
 				"Try naming the date and time directly."
 		default:

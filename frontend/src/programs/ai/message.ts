@@ -32,6 +32,12 @@ export interface AiMessage {
    * once a conversation can be reopened days later on another device.
    */
   removals: AgendaEntry[];
+  /**
+   * Marks it offered to make against habits, with the habit's name snapshotted
+   * for the same reason removals are: the card has to keep saying which habit
+   * it was even after that habit is renamed or deleted.
+   */
+  habitTicks: HabitTickProposal[];
   /** Produced, not proposed — nothing here waits behind the confirm button. */
   qrCodes: QrArtifact[];
   /** Files the person put on this turn. See [AiAttachment]. */
@@ -40,6 +46,7 @@ export interface AiMessage {
   droppedSessions: Set<number>;
   droppedEvents: Set<number>;
   droppedRemovals: Set<number>;
+  droppedHabitTicks: Set<number>;
   /** Stops a turn being carried out twice, including after a reload. */
   committed: boolean;
   /** A failure, kept in place so it stays attached to what caused it. */
@@ -64,20 +71,37 @@ export interface AiAttachment {
   data: string;
 }
 
+/**
+ * One proposed mark against one habit.
+ *
+ * `name` is carried rather than looked up at paint time: confirming does not
+ * change the habit list, but deleting a habit later would otherwise leave a
+ * card in the transcript that cannot say what it ticked.
+ */
+export interface HabitTickProposal {
+  habitId: string;
+  name: string;
+  /** YYYY-MM-DD in Jakarta, matching the key habit days are stored under. */
+  day: string;
+  done: boolean;
+}
+
 export const maxAttachmentBytes = 96 * 1024;
 
 const blank = (): Pick<
   AiMessage,
-  'sessions' | 'events' | 'removals' | 'qrCodes' | 'attachments' | 'droppedSessions' | 'droppedEvents' | 'droppedRemovals' | 'committed' | 'failed'
+  'sessions' | 'events' | 'removals' | 'habitTicks' | 'qrCodes' | 'attachments' | 'droppedSessions' | 'droppedEvents' | 'droppedRemovals' | 'droppedHabitTicks' | 'committed' | 'failed'
 > => ({
   sessions: [],
   events: [],
   removals: [],
+  habitTicks: [],
   qrCodes: [],
   attachments: [],
   droppedSessions: new Set(),
   droppedEvents: new Set(),
   droppedRemovals: new Set(),
+  droppedHabitTicks: new Set(),
   committed: false,
   failed: false,
 });
@@ -104,7 +128,11 @@ export const errorMessage = (text: string): AiMessage => ({
  * a delete card that cannot say what it deletes is not something anybody can
  * confirm.
  */
-export function assistantMessage(answer: AiAnswer, agenda: AgendaEntry[]): AiMessage {
+export function assistantMessage(
+  answer: AiAnswer,
+  agenda: AgendaEntry[],
+  habitNames: Map<string, string> = new Map(),
+): AiMessage {
   const byId = new Map(agenda.map((entry) => [entry.id, entry]));
   return {
     role: 'assistant',
@@ -116,6 +144,13 @@ export function assistantMessage(answer: AiAnswer, agenda: AgendaEntry[]): AiMes
     removals: answer.removals
       .map((id) => byId.get(id))
       .filter((entry): entry is AgendaEntry => entry !== undefined),
+    // Same rule as removals: a tick naming a habit that no longer exists is
+    // dropped rather than drawn nameless. A card that cannot say what it ticks
+    // is not something anybody can confirm.
+    habitTicks: answer.habitTicks.flatMap((tick) => {
+      const name = habitNames.get(tick.habitId);
+      return name === undefined ? [] : [{ ...tick, name }];
+    }),
   };
 }
 
@@ -125,13 +160,16 @@ const keep = <T,>(items: T[], dropped: Set<number>): T[] =>
 export const keptSessions = (m: AiMessage) => keep(m.sessions, m.droppedSessions);
 export const keptEvents = (m: AiMessage) => keep(m.events, m.droppedEvents);
 export const keptRemovals = (m: AiMessage) => keep(m.removals, m.droppedRemovals);
+export const keptHabitTicks = (m: AiMessage) => keep(m.habitTicks, m.droppedHabitTicks);
 
 /** Anything needing confirmation. QR codes are deliberately not among them. */
 export const hasProposals = (m: AiMessage) =>
-  m.sessions.length > 0 || m.events.length > 0 || m.removals.length > 0;
+  m.sessions.length > 0 || m.events.length > 0 || m.removals.length > 0 ||
+  m.habitTicks.length > 0;
 
 export const keptCount = (m: AiMessage) =>
-  keptSessions(m).length + keptEvents(m).length + keptRemovals(m).length;
+  keptSessions(m).length + keptEvents(m).length + keptRemovals(m).length +
+  keptHabitTicks(m).length;
 
 /**
  * What the server is told about this turn next time.
@@ -145,6 +183,8 @@ export const toTurn = (m: AiMessage): AiTurn => ({
   sessions: keptSessions(m),
   events: keptEvents(m),
   removals: keptRemovals(m).map((entry) => entry.id),
+  // The name is ours, not the server's — it only ever needed the id.
+  habitTicks: keptHabitTicks(m).map(({ habitId, day, done }) => ({ habitId, day, done })),
   committed: m.committed,
 });
 
@@ -184,11 +224,13 @@ export function messageToJson(m: AiMessage): Record<string, unknown> {
     ...(m.sessions.length ? { sessions: m.sessions.map(sessionToJson) } : {}),
     ...(m.events.length ? { events: m.events.map(eventToJson) } : {}),
     ...(m.removals.length ? { removals: m.removals.map(entryToStored) } : {}),
+    ...(m.habitTicks.length ? { habitTicks: m.habitTicks } : {}),
     ...(m.qrCodes.length ? { qrCodes: m.qrCodes } : {}),
     ...(m.attachments.length ? { attachments: m.attachments } : {}),
     ...(m.droppedSessions.size ? { droppedSessions: [...m.droppedSessions] } : {}),
     ...(m.droppedEvents.size ? { droppedEvents: [...m.droppedEvents] } : {}),
     ...(m.droppedRemovals.size ? { droppedRemovals: [...m.droppedRemovals] } : {}),
+    ...(m.droppedHabitTicks.size ? { droppedHabitTicks: [...m.droppedHabitTicks] } : {}),
     ...(m.committed ? { committed: true } : {}),
     ...(m.failed ? { failed: true } : {}),
   };
@@ -224,6 +266,15 @@ export function messageFromJson(json: Record<string, unknown>): AiMessage | null
     removals: (Array.isArray(json.removals) ? json.removals : [])
       .map((r) => entryFromStored(r as Record<string, unknown>))
       .filter((r): r is AgendaEntry => r !== null),
+    habitTicks: (Array.isArray(json.habitTicks) ? json.habitTicks : []).map((tick) => {
+      const t = tick as Record<string, unknown>;
+      return {
+        habitId: String(t.habitId ?? ''),
+        name: String(t.name ?? ''),
+        day: String(t.day ?? ''),
+        done: Boolean(t.done),
+      };
+    }).filter((tick) => tick.habitId !== '' && tick.day !== ''),
     qrCodes: (Array.isArray(json.qrCodes) ? json.qrCodes : []).map((code) => {
       const c = code as Record<string, unknown>;
       return {
@@ -244,6 +295,7 @@ export function messageFromJson(json: Record<string, unknown>): AiMessage | null
     droppedSessions: indices(json.droppedSessions),
     droppedEvents: indices(json.droppedEvents),
     droppedRemovals: indices(json.droppedRemovals),
+    droppedHabitTicks: indices(json.droppedHabitTicks),
     committed: Boolean(json.committed),
     failed: Boolean(json.failed),
   };

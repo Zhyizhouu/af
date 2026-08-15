@@ -187,7 +187,22 @@ export interface AiTurn {
   sessions?: SessionProposal[];
   events?: EventProposal[];
   removals?: string[];
+  habitTicks?: AiHabitTick[];
   committed?: boolean;
+}
+
+/** A mark against one habit, on the wire. Ids only — the name is ours. */
+export interface AiHabitTick {
+  habitId: string;
+  day: string;
+  done: boolean;
+}
+
+/** One of the person's habits, as the assistant is shown it. */
+export interface AiHabit {
+  id: string;
+  name: string;
+  done: boolean;
 }
 
 const turnToJson = (turn: AiTurn) => ({
@@ -196,6 +211,7 @@ const turnToJson = (turn: AiTurn) => ({
   ...(turn.sessions?.length ? { sessions: turn.sessions.map(sessionToJson) } : {}),
   ...(turn.events?.length ? { events: turn.events.map(eventToJson) } : {}),
   ...(turn.removals?.length ? { removals: turn.removals } : {}),
+  ...(turn.habitTicks?.length ? { habitTicks: turn.habitTicks } : {}),
   ...(turn.committed ? { committed: true } : {}),
 });
 
@@ -207,6 +223,8 @@ export interface AiAnswer {
   /** Ids only. The card is drawn from this app's own record, so it can never
    *  describe one entry while deleting another. */
   removals: string[];
+  /** Marks against habits. Ids only, for the same reason removals are. */
+  habitTicks: AiHabitTick[];
   /** Produced, not proposed. Nothing here needs confirming. */
   qrCodes: QrArtifact[];
 }
@@ -278,6 +296,9 @@ export class AiApi {
     attachments: AttachmentRef[];
     now: Date;
     categories: string[];
+    /** Their habits and whether each is done today. Sent for the same reason
+     *  `existing` is: the server stores none of it. */
+    habits: AiHabit[];
   }): Promise<AiAnswer> {
     const body = await this.send(async () =>
       this.fetcher(`${this.base}/v1/ai/plan`, {
@@ -290,6 +311,7 @@ export class AiApi {
           attachments: input.attachments,
           now: formatLocal(input.now),
           categories: input.categories,
+          habits: input.habits,
         }),
       }),
     );
@@ -301,6 +323,13 @@ export class AiApi {
       removals: (Array.isArray(body.removals) ? (body.removals as unknown[]) : []).filter(
         (id): id is string => typeof id === 'string' && id.trim() !== '',
       ),
+      habitTicks: asArray(body.habitTicks)
+        .map((tick) => ({
+          habitId: String(tick.habitId ?? ''),
+          day: String(tick.day ?? ''),
+          done: Boolean(tick.done),
+        }))
+        .filter((tick) => tick.habitId !== '' && tick.day !== ''),
       qrCodes: asArray(body.qrCodes)
         .map((code) => ({
           text: String(code.text ?? ''),

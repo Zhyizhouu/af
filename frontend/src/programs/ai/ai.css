@@ -268,8 +268,9 @@
 }
 
 .ai__sidebar-title {
-  /* Overrides the .af-body sans it inherits. Slightly larger because serif
-     x-heights run small next to system-ui at the same pixel size. */
+  /* Carries the whole type spec itself, because the span deliberately does not
+     take .af-body. Slightly larger than body text because serif x-heights run
+     small next to system-ui at the same pixel size. */
   font-family: var(--af-serif);
   font-size: 15px;
   line-height: 1.35;

@@ -1,6 +1,13 @@
 import { db } from '../../data/db';
 import { createSession, deleteSession } from '../checklists/store';
-import { keptEvents, keptRemovals, keptSessions, type AiMessage } from './message';
+import { setHabitDone } from '../habits/store';
+import {
+  keptEvents,
+  keptHabitTicks,
+  keptRemovals,
+  keptSessions,
+  type AiMessage,
+} from './message';
 
 /**
  * Carries out one turn. The only thing in the program that changes anything.
@@ -40,6 +47,13 @@ export async function commitTurn(message: AiMessage): Promise<void> {
       updatedAt: now,
       deleted: false,
     });
+  }
+
+  // Set to the state the card promised rather than flipped: by the time this
+  // runs the day record may have moved underneath the proposal, and a flip
+  // would then land on the opposite of what the person confirmed.
+  for (const tick of keptHabitTicks(message)) {
+    await setHabitDone(tick.habitId, tick.day, tick.done);
   }
 
   // Tombstoned rather than dropped, so the deletion propagates on the next sync

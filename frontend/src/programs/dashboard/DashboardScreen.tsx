@@ -66,6 +66,11 @@ export function DashboardScreen() {
   return (
     <div className="page dash">
       <header className="page__head">
+        {/* The real monogram rather than the nav's accent tick. mark.png rather
+            than the shipped icon: that one carries a ring, a caption and a lot
+            of ground, which at this size reads as a dark blob. This is the same
+            art cropped to the monogram. */}
+        <img className="dash__logo" src="/mark.png" alt="" width={40} height={40} />
         <span className="af-brand">reAFresh</span>
         <span className="page__spacer" />
         <span className="af-panel-label">{dayStamp.format(now)}</span>

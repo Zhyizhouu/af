@@ -91,12 +91,34 @@ var Schema = map[string]any{
 			"description": "Ids of entries already in their calendar that you are offering to delete. Copy an id exactly as it was given to you. Empty unless they asked to cancel, remove or delete something.",
 			"items":       map[string]any{"type": "string"},
 		},
+		"habitTicks": map[string]any{
+			"type":        "array",
+			"description": "Marks against their habits. Empty unless they asked to tick, check off, complete or undo a habit.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"habitId": map[string]any{
+						"type":        "string",
+						"description": "The id of one of their habits, copied exactly as it was given to you. Never invent one.",
+					},
+					"day": map[string]any{
+						"type":        "string",
+						"description": "The day to mark, as YYYY-MM-DD. Today's date unless they named a different day.",
+					},
+					"done": map[string]any{
+						"type":        "boolean",
+						"description": "True to tick it, false to undo a tick.",
+					},
+				},
+				"required": []string{"habitId", "day", "done"},
+			},
+		},
 		"reply": map[string]any{
 			"type":        "string",
 			"description": "What you say back, in one or two short plain sentences. Name anything you assumed. No markdown, no lists — the entries are shown as cards beside this.",
 		},
 	},
-	"required": []string{"sessions", "events", "removals", "qrCodes", "reply"},
+	"required": []string{"sessions", "events", "removals", "qrCodes", "habitTicks", "reply"},
 }
 
 // Instructions is the system half of the request.
@@ -109,6 +131,7 @@ func Instructions(
 	categories []string,
 	existing []Entry,
 	attachments []Attachment,
+	habits []Habit,
 ) string {
 	var b strings.Builder
 
@@ -143,18 +166,26 @@ QR codes:
 18. Set useLogo only when they have attached an image and want it on the code. When useLogo is true, set ecc to "H" — the logo covers part of the code, and only the highest correction level survives that. Otherwise "M".
 19. If they ask for a logo on a code but have attached nothing, say so and generate the plain code anyway.
 
+Habits:
+20. Their habits are listed separately from the calendar. A habit is not an event and never belongs in "events" — when they ask to tick, check off, complete or undo one, put it in "habitTicks" and leave the calendar alone.
+21. Copy the habit id exactly as it was given to you. If they name a habit that is not on the list, say so rather than inventing an id or proposing an event instead.
+22. "tick my habits for today" with no habit named means every habit not already done today. Do not re-tick one the list already shows as done — say it was already done.
+23. Set "day" to today's date unless they named another one. Use "done": false only when they are undoing a tick.
+
 How the conversation works:
-20. Always return the complete set of changes currently under discussion, not just the newest one. When the person corrects something — "make that 10am", "it is room 402", "drop the lunch" — repeat every entry that still stands, with the correction applied. The cards on screen are replaced by what you return, so an entry you leave out is an entry they lose.
-21. A turn marked confirmed has already been carried out. Never offer those again, even while restating the rest.
-22. When the person is asking a question, thinking aloud, or saying something that is not about scheduling, return empty lists and just answer them in "reply". An empty proposal list is a perfectly good turn.
-23. "reply" is one or two short sentences of plain prose. Say what you did and name what you assumed. Do not list the entries back — they are shown as cards next to what you say. No markdown.
-24. Ask a question when a request is genuinely ambiguous rather than guessing at it, and return nothing on that turn.
+24. Always return the complete set of changes currently under discussion, not just the newest one. When the person corrects something — "make that 10am", "it is room 402", "drop the lunch" — repeat every entry that still stands, with the correction applied. The cards on screen are replaced by what you return, so an entry you leave out is an entry they lose.
+25. A turn marked confirmed has already been carried out. Never offer those again, even while restating the rest.
+26. When the person is asking a question, thinking aloud, or saying something that is not about scheduling, return empty lists and just answer them in "reply". An empty proposal list is a perfectly good turn.
+27. "reply" is one or two short sentences of plain prose. Say what you did and name what you assumed. Do not list the entries back — they are shown as cards next to what you say. No markdown.
+28. Ask a question when a request is genuinely ambiguous rather than guessing at it, and return nothing on that turn.
 
 `)
 
 	b.WriteString(RenderAttachments(attachments))
 	b.WriteString("\n")
 	b.WriteString(RenderExisting(existing))
+	b.WriteString("\n\n")
+	b.WriteString(RenderHabits(habits, now.Format("2006-01-02")))
 	return b.String()
 }
 

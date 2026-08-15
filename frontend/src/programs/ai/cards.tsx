@@ -4,6 +4,7 @@ import type { AgendaEntry } from '../../data/agenda';
 import { QrCode } from '../qr/QrCode';
 import { isEcc, type Ecc } from '../qr/qr';
 import { sessionLabel, type EventProposal, type QrArtifact, type SessionProposal } from './api';
+import type { HabitTickProposal } from './message';
 
 /**
  * The proposal cards.
@@ -133,6 +134,35 @@ export function QrArtifactCard({
       {applied && (
         <AFHint>The logo does not travel to the QR Generator — attach it there.</AFHint>
       )}
+    </AFPanel>
+  );
+}
+
+/**
+ * One mark the assistant is offering to make against a habit.
+ *
+ * Not drawn as a deletion even when it undoes a tick: unticking loses one day's
+ * mark, which is a world away from deleting a session and its checklist. It
+ * still waits behind the confirm button, because it writes to stored data.
+ */
+export function HabitTickCard({
+  tick,
+  onRemove,
+}: {
+  tick: HabitTickProposal;
+  onRemove?: () => void;
+}) {
+  return (
+    <AFPanel
+      label={tick.done ? 'Tick habit' : 'Untick habit'}
+      countSlot={
+        <AFChip label={tick.done ? 'DONE' : 'UNDO'} color={tick.done ? undefined : 'var(--af-warn)'} />
+      }
+      className="card"
+    >
+      <div className="card__title">{tick.name}</div>
+      <Row label="Day" value={tick.day} />
+      {onRemove && <AFButton label="Remove" variant="quiet" expand onClick={onRemove} />}
     </AFPanel>
   );
 }

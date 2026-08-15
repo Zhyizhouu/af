@@ -111,3 +111,47 @@ export async function completionOver(
 }
 
 export const todayKey = (now?: Date) => jakartaDayKey(now);
+
+/**
+ * The habits as the assistant is shown them: id, name, done today.
+ *
+ * Lives here rather than in the AI program because this file owns what a habit
+ * is — the same reason `readAgenda` lives beside the calendar.
+ */
+export async function readHabitsForAssistant(
+  now?: Date,
+): Promise<{ id: string; name: string; done: boolean }[]> {
+  const day = todayKey(now);
+  const [habits, record] = await Promise.all([listHabits(), readDay(day)]);
+  const done = new Set(record?.completed ?? []);
+  return habits.map((habit) => ({
+    id: habit.id,
+    name: habit.name,
+    done: done.has(habit.id),
+  }));
+}
+
+/**
+ * Sets a habit's mark to exactly `done`, rather than flipping it.
+ *
+ * [toggleHabit] is right for a checkbox, where the person can see the current
+ * state. A confirmed proposal says what it wants the state to *be*, and by the
+ * time it is confirmed the day record may have changed underneath it — so
+ * applying a flip there could land on the opposite of what the card said.
+ */
+export async function setHabitDone(
+  habitId: string,
+  day: string,
+  done: boolean,
+): Promise<void> {
+  const existing = await db().habitDays.get(day);
+  const completed = new Set(existing?.completed ?? []);
+  if (done) completed.add(habitId);
+  else completed.delete(habitId);
+
+  await db().habitDays.put({
+    day,
+    completed: [...completed],
+    updatedAt: Date.now(),
+  });
+}

@@ -68,7 +68,11 @@ export function Sidebar({
                   className="ai__sidebar-open"
                   onClick={() => onOpen(row)}
                 >
-                  <span className="af-body ai__sidebar-title">{row.title}</span>
+                  {/* Not .af-body: a conversation title is a name, not prose,
+                      and it carries the serif. Keeping both classes would be a
+                      specificity fight with tokens.css that .af-body wins on
+                      source order anyway. */}
+                  <span className="ai__sidebar-title">{row.title}</span>
                   <span className="af-meta">
                     {stamp.format(new Date(row.updatedAt))} · {row.turns.length} turns
                     {current ? ' · open' : ''}
