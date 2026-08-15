@@ -16,6 +16,10 @@ export interface Program {
 }
 
 export const programs: readonly Program[] = [
+  // First, so it is the default route. In the Flutter build the dashboard sat
+  // outside the program list as the shell's home; here the nav bar is already
+  // the launcher, and a dashboard missing from it is one nobody visits.
+  { slug: 'dashboard', name: 'Dashboard', mark: '⌂', requiresAuth: true, wide: true },
   { slug: 'checklists', name: 'Checklists', mark: '☑', requiresAuth: true, wide: false },
   { slug: 'calendar', name: 'Calendar', mark: '▦', requiresAuth: true, wide: true },
   { slug: 'habits', name: 'Habits', mark: '◈', requiresAuth: true, wide: false },

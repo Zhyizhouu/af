@@ -67,8 +67,8 @@ export function ChecklistsScreen() {
   }
 
   return (
-    <div className="chk">
-      <header className="chk__head">
+    <div className="page chk">
+      <header className="page__head">
         <span className="af-brand">reAFresh · Checklists</span>
         <div className="chk__tabs">
           {(['active', 'archived'] as const).map((option) => (
@@ -173,8 +173,8 @@ function SessionDetail({
   const done = items.filter((item) => item.isChecked).length;
 
   return (
-    <div className="chk">
-      <header className="chk__head">
+    <div className="page chk">
+      <header className="page__head">
         <AFButton label="‹ Back" variant="quiet" onClick={onBack} />
         <span className="af-brand">
           {session.type} · Room {session.room || '—'}

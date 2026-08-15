@@ -244,3 +244,41 @@
   letter-spacing: 0.22em;
   color: var(--af-muted);
 }
+
+/* ---- page ---- */
+
+/*
+ * The shell every program sits in.
+ *
+ * Same width, same padding, same rule under the header, whichever program is
+ * drawing — Checklists used to be a 940px column while Calendar spanned the
+ * whole window, which read as two different applications.
+ */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  width: 100%;
+  max-width: var(--af-page-width);
+  margin: 0 auto;
+  min-height: 0;
+}
+
+.page--tall {
+  height: 100%;
+}
+
+.page__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1.5px solid var(--af-ink);
+}
+
+/* Pushes whatever follows it to the far end of the header row. */
+.page__spacer {
+  flex: 1;
+}

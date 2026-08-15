@@ -1,6 +1,7 @@
 import { AFEmptyState, AFPanel } from '../components/AF';
 import { AiScreen } from '../programs/ai/AiScreen';
 import { AudioScreen } from '../programs/audio/AudioScreen';
+import { DashboardScreen } from '../programs/dashboard/DashboardScreen';
 import { CalendarScreen } from '../programs/calendar/CalendarScreen';
 import { ChecklistsScreen } from '../programs/checklists/ChecklistsScreen';
 import { HabitsScreen } from '../programs/habits/HabitsScreen';
@@ -20,6 +21,8 @@ export interface PaneOptions {
  */
 export function renderProgram(program: Program, options: PaneOptions) {
   switch (program.slug) {
+    case 'dashboard':
+      return <DashboardScreen />;
     case 'ai':
       return <AiScreen paneWidth={options.paneWidth} />;
     case 'qr':

@@ -29,7 +29,7 @@ export function QrScreen() {
   const verdict = contrastVerdict(ratio);
 
   return (
-    <div className="qr-page">
+    <div className="page qr-page">
       <AFPanel label="Encode" count={`${text.length} chars`}>
         <textarea
           className="af-input af-input--prose qr-page__text"

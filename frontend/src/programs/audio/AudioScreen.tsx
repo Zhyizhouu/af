@@ -108,8 +108,8 @@ export function AudioScreen({ api }: { api?: AudioApi }) {
   const tooBig = file && limits ? file.size > limits.maxUploadBytes : false;
 
   return (
-    <div className="aud">
-      <header className="aud__head">
+    <div className="page aud">
+      <header className="page__head">
         <span className="af-brand">reAFresh · Audio Converter</span>
       </header>
 

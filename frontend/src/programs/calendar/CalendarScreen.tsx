@@ -80,8 +80,8 @@ export function CalendarScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 's
       : ['year', 'month', 'week', 'threeDay', 'day'];
 
   return (
-    <div className="cal">
-      <header className="cal__head">
+    <div className="page page--tall cal">
+      <header className="page__head">
         <span className="af-brand">reAFresh · Calendar</span>
         <div className="cal__views">
           {views.map((option) => (

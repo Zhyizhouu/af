@@ -4,7 +4,9 @@
  * Lifted value-for-value from `lib/theme/af_tokens.dart`, which in turn mirrors
  * the CSS custom properties in `AF-QRgenerator.html`: a "technical instrument"
  * look built from hairline rules, monospace labels and a single electric
- * accent, with nothing rounder than 4px.
+ * accent. The corner radius was 4px in the Flutter build and is 8px here — a
+ * deliberate softening, changed in one token so it stays one decision rather
+ * than a value sprinkled through the stylesheets. CLAUDE.md records the change.
  *
  * Dark is the same system with the ink/desk roles swapped, so no component ever
  * branches on theme — they only read tokens.
@@ -28,7 +30,14 @@
      desk colour on a pale button in dark, which holds the same relationship. */
   --af-on-ink: var(--af-panel);
 
-  --af-radius: 4px;
+  --af-radius: 8px;
+  /* Small marks — ticks, dots, stripes — keep their own radius. At 8px a 20px
+     box reads as a circle, and nothing here is a circle. */
+  --af-radius-sm: 3px;
+
+  /* Every program's content column. One value, so no page can drift wider or
+     narrower than its neighbours by accident. */
+  --af-page-width: 1240px;
 
   /* Ordered fallbacks, same stack the Flutter build walked, so no font is
      bundled and every platform resolves something. */

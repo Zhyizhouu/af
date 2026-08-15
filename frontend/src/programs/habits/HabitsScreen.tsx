@@ -77,9 +77,10 @@ export function HabitsScreen() {
   );
 
   return (
-    <div className="hab">
-      <header className="hab__head">
+    <div className="page hab">
+      <header className="page__head">
         <span className="af-brand">reAFresh · Habits</span>
+        <span className="page__spacer" />
         <AFButton label="New habit" onClick={() => setEditing('new')} />
       </header>
 
