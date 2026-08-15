@@ -21,7 +21,7 @@ func Normalise(p Plan, categories []string, now time.Time) Plan {
 		allowed[strings.TrimSpace(slug)] = true
 	}
 
-	out := Plan{Note: strings.TrimSpace(p.Note)}
+	out := Plan{Reply: strings.TrimSpace(p.Reply)}
 
 	for _, session := range p.Sessions {
 		if len(out.Sessions)+len(out.Events) >= MaxProposals {
@@ -38,6 +38,22 @@ func Normalise(p Plan, categories []string, now time.Time) Plan {
 		}
 		if cleaned, ok := cleanEvent(event, allowed, now); ok {
 			out.Events = append(out.Events, cleaned)
+		}
+	}
+
+	// A chat cannot show an empty turn, and one is reachable two ways: a model
+	// that answered with proposals and no prose, or one whose every proposal
+	// was just dropped above. The second is the one worth wording carefully —
+	// saying nothing there would read as the assistant ignoring the request.
+	if out.Reply == "" {
+		switch {
+		case !out.IsEmpty():
+			out.Reply = "Here is what I have. Check it before you add it."
+		case len(p.Sessions)+len(p.Events) > 0:
+			out.Reply = "I could not make sense of the entries I came up with. " +
+				"Try naming the date and time directly."
+		default:
+			out.Reply = "I did not find anything to schedule in that."
 		}
 	}
 

@@ -19,27 +19,50 @@ import 'package:af/theme/app_theme.dart';
 /// testable is everything protecting the calendar from it: that a malformed
 /// proposal is dropped rather than shown, that a missing field is visible
 /// rather than blank, and that nothing is written until the button is pressed.
+///
+/// The conversation is testable here too, and matters more than it looks:
+/// the transcript lives in this app, so what the assistant knows on its second
+/// turn is entirely a question of what this code chose to send back.
 void main() {
-  String planBody({
+  const jsonHeaders = {'content-type': 'application/json'};
+
+  String answerBody({
     List<Map<String, Object>> sessions = const [],
     List<Map<String, Object>> events = const [],
-    String note = '',
+    String reply = 'Here you go.',
   }) =>
-      jsonEncode({'sessions': sessions, 'events': events, 'note': note});
+      jsonEncode({'sessions': sessions, 'events': events, 'reply': reply});
+
+  final limitsBody = jsonEncode({
+    'configured': true,
+    'sessionTypes': ['UAP', 'UAS'],
+    'maxProposals': 40,
+  });
 
   MockClient answering(String body, [int status = 200]) =>
-      MockClient((_) async => http.Response(
-            body,
-            status,
-            headers: {'content-type': 'application/json'},
-          ));
+      MockClient((_) async => http.Response(body, status, headers: jsonHeaders));
+
+  Map<String, Object> event({
+    String title = 'Lunch with Dina',
+    String start = '2026-08-19 12:00',
+    String end = '2026-08-19 13:00',
+    String category = 'social',
+  }) =>
+      {
+        'title': title,
+        'notes': '',
+        'start': start,
+        'end': end,
+        'allDay': false,
+        'category': category,
+      };
 
   group('api', () {
-    test('reads sessions and events out of an answer', () async {
+    test('reads sessions, events and the reply out of an answer', () async {
       final api = AiApi(
         base: 'http://converter.test',
         token: () async => 'id-token',
-        client: answering(planBody(
+        client: answering(answerBody(
           sessions: [
             {
               'type': 'UAP',
@@ -50,33 +73,76 @@ void main() {
               'courseClass': 'BAA1',
             }
           ],
-          events: [
-            {
-              'title': 'Lunch with Dina',
-              'notes': '',
-              'start': '2026-08-19 12:00',
-              'end': '2026-08-19 13:00',
-              'allDay': false,
-              'category': 'social',
-            }
-          ],
-          note: 'I assumed 2026.',
+          events: [event()],
+          reply: 'I assumed 2026.',
         )),
       );
 
-      final plan = await api.plan(
-        prompt: 'anything',
+      final answer = await api.send(
+        message: 'anything',
+        history: const [],
         now: DateTime(2026, 8, 15, 9),
         categories: const ['social', 'other'],
       );
 
-      expect(plan.sessions, hasLength(1));
-      expect(plan.sessions.single.type, 'UAP');
-      expect(plan.sessions.single.start, DateTime(2026, 8, 17, 9));
-      expect(plan.sessions.single.label, 'COMP6047 · Algorithm and Programming');
-      expect(plan.events.single.title, 'Lunch with Dina');
-      expect(plan.note, 'I assumed 2026.');
-      expect(plan.total, 2);
+      expect(answer.sessions, hasLength(1));
+      expect(answer.sessions.single.type, 'UAP');
+      expect(answer.sessions.single.start, DateTime(2026, 8, 17, 9));
+      expect(
+          answer.sessions.single.label, 'COMP6047 · Algorithm and Programming');
+      expect(answer.events.single.title, 'Lunch with Dina');
+      expect(answer.reply, 'I assumed 2026.');
+      expect(answer.total, 2);
+    });
+
+    // The server keeps nothing between calls, so a correction like "make that
+    // 10am" is answerable only if this app sends back what was said before.
+    test('sends the conversation so far with each message', () async {
+      Map<String, dynamic>? sent;
+      final api = AiApi(
+        base: 'http://converter.test',
+        token: () async => 'id-token',
+        client: MockClient((request) async {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(answerBody(), 200, headers: jsonHeaders);
+        }),
+      );
+
+      await api.send(
+        message: 'make that 10am',
+        history: [
+          const AiTurn(role: AiTurn.roleUser, text: 'lunch on Wednesday'),
+          AiTurn(
+            role: AiTurn.roleAssistant,
+            text: 'Booked for noon.',
+            events: [
+              EventProposal(
+                title: 'Lunch',
+                notes: '',
+                start: DateTime(2026, 8, 19, 12),
+                end: DateTime(2026, 8, 19, 13),
+                allDay: false,
+                category: 'social',
+              ),
+            ],
+            committed: true,
+          ),
+        ],
+        now: DateTime(2026, 8, 15, 9),
+        categories: const ['social'],
+      );
+
+      final history = sent!['history'] as List;
+      expect(history, hasLength(2));
+      expect(history[0]['role'], 'user');
+      expect(history[1]['role'], 'assistant');
+      expect(history[1]['text'], 'Booked for noon.');
+      // The entries have to travel with the turn, not just the prose — the
+      // prose alone does not say which entry "that" refers to.
+      expect(history[1]['events'], hasLength(1));
+      expect(history[1]['events'][0]['start'], '2026-08-19 12:00');
+      expect(history[1]['committed'], isTrue);
+      expect(sent!['prompt'], 'make that 10am');
     });
 
     // The server normalises too, but a proposal that arrives unreadable must
@@ -86,59 +152,45 @@ void main() {
       final api = AiApi(
         base: 'http://converter.test',
         token: () async => 'id-token',
-        client: answering(planBody(events: [
-          {
-            'title': 'Broken',
-            'notes': '',
-            'start': 'next tuesday',
-            'end': '2026-08-19 13:00',
-            'allDay': false,
-            'category': 'work',
-          },
-          {
-            'title': 'Fine',
-            'notes': '',
-            'start': '2026-08-19 12:00',
-            'end': '2026-08-19 13:00',
-            'allDay': false,
-            'category': 'work',
-          },
+        client: answering(answerBody(events: [
+          event(title: 'Broken', start: 'next tuesday', category: 'work'),
+          event(title: 'Fine', category: 'work'),
         ])),
       );
 
-      final plan = await api.plan(
-        prompt: 'anything',
+      final answer = await api.send(
+        message: 'anything',
+        history: const [],
         now: DateTime(2026, 8, 15, 9),
         categories: const ['work'],
       );
 
-      expect(plan.events, hasLength(1));
-      expect(plan.events.single.title, 'Fine');
+      expect(answer.events, hasLength(1));
+      expect(answer.events.single.title, 'Fine');
     });
 
     test('an end at or before its start becomes an hour', () async {
       final api = AiApi(
         base: 'http://converter.test',
         token: () async => 'id-token',
-        client: answering(planBody(events: [
-          {
-            'title': 'Backwards',
-            'notes': '',
-            'start': '2026-08-19 12:00',
-            'end': '2026-08-19 09:00',
-            'allDay': false,
-            'category': 'work',
-          }
+        client: answering(answerBody(events: [
+          event(
+            title: 'Backwards',
+            start: '2026-08-19 12:00',
+            end: '2026-08-19 09:00',
+            category: 'work',
+          ),
         ])),
       );
 
-      final plan = await api.plan(
-        prompt: 'anything',
+      final answer = await api.send(
+        message: 'anything',
+        history: const [],
         now: DateTime(2026, 8, 15, 9),
         categories: const ['work'],
       );
 
-      expect(plan.events.single.end, DateTime(2026, 8, 19, 13));
+      expect(answer.events.single.end, DateTime(2026, 8, 19, 13));
     });
 
     // Waiting is the fix for a quota, and retrying immediately is not — so the
@@ -154,8 +206,12 @@ void main() {
       );
 
       await expectLater(
-        api.plan(
-            prompt: 'x', now: DateTime(2026, 8, 15), categories: const ['work']),
+        api.send(
+          message: 'x',
+          history: const [],
+          now: DateTime(2026, 8, 15),
+          categories: const ['work'],
+        ),
         throwsA(isA<AiError>().having((e) => e.throttled, 'throttled', isTrue)),
       );
     });
@@ -185,14 +241,35 @@ void main() {
       );
 
       await expectLater(
-        api.plan(
-            prompt: 'x', now: DateTime(2026, 8, 15), categories: const ['work']),
+        api.send(
+          message: 'x',
+          history: const [],
+          now: DateTime(2026, 8, 15),
+          categories: const ['work'],
+        ),
         throwsA(isA<AiError>().having(
           (e) => e.message,
           'message',
           'Sign in to use the assistant.',
         )),
       );
+    });
+
+    // The endpoint is account-scoped on the server, so a request without a
+    // token is one the server is about to refuse anyway.
+    test('even reading the limits is signed', () async {
+      String? authorization;
+      final api = AiApi(
+        base: 'http://converter.test',
+        token: () async => 'id-token',
+        client: MockClient((request) async {
+          authorization = request.headers['Authorization'];
+          return http.Response(limitsBody, 200, headers: jsonHeaders);
+        }),
+      );
+
+      await api.limits();
+      expect(authorization, 'Bearer id-token');
     });
   });
 
@@ -313,8 +390,8 @@ void main() {
         ],
         child: MaterialApp(
           theme: AppTheme.light,
-          // AFShell owns the Scaffold in the real app; the prompt field needs
-          // a Material ancestor, so the test has to provide the same thing.
+          // AFShell owns the Scaffold in the real app; the composer needs a
+          // Material ancestor, so the test has to provide the same thing.
           home: Scaffold(
             body: AiScreen(
               api: AiApi(
@@ -330,17 +407,144 @@ void main() {
       expect(tester.takeException(), isNull);
     }
 
-    final configured = answering(jsonEncode({
-      'configured': true,
-      'sessionTypes': ['UAP', 'UAS'],
-      'maxProposals': 40,
-    }));
+    /// A client that answers /v1/ai/limits normally and hands out [answers] in
+    /// order for everything else, recording what it was asked.
+    MockClient scripted(List<Map<String, dynamic>> captured, List<String> answers) {
+      var sent = 0;
+      return MockClient((request) async {
+        if (request.url.path.endsWith('/limits')) {
+          return http.Response(limitsBody, 200, headers: jsonHeaders);
+        }
+        captured.add(jsonDecode(request.body) as Map<String, dynamic>);
+        final body = answers[sent < answers.length ? sent : answers.length - 1];
+        sent++;
+        return http.Response(body, 200, headers: jsonHeaders);
+      });
+    }
+
+    Future<void> say(WidgetTester tester, String message) async {
+      await tester.enterText(find.byType(TextField), message);
+      await tester.tap(find.text('Send'));
+      await tester.pumpAndSettle();
+    }
 
     testWidgets('renders on a phone and a desktop', (tester) async {
-      await pump(tester, configured);
-      expect(find.text('Ask'), findsWidgets);
+      await pump(tester, scripted([], [answerBody()]));
+      expect(find.text('Send'), findsOneWidget);
 
-      await pump(tester, configured, size: const Size(1440, 900));
+      await pump(tester, scripted([], [answerBody()]),
+          size: const Size(1440, 900));
+    });
+
+    testWidgets('a message and its answer both stay on screen', (tester) async {
+      await pump(
+        tester,
+        scripted([], [
+          answerBody(events: [event()], reply: 'Lunch it is.'),
+        ]),
+      );
+
+      await say(tester, 'lunch with Dina on Wednesday');
+
+      expect(find.text('lunch with Dina on Wednesday'), findsOneWidget);
+      expect(find.text('Lunch it is.'), findsOneWidget);
+      expect(find.text('Lunch with Dina'), findsOneWidget);
+      expect(find.text('Add 1 to my calendar'), findsOneWidget);
+    });
+
+    // The point of the conversation: the second message is answered knowing
+    // what the first one produced.
+    testWidgets('the second message carries the first exchange', (tester) async {
+      final captured = <Map<String, dynamic>>[];
+      await pump(
+        tester,
+        scripted(captured, [
+          answerBody(events: [event()], reply: 'Booked for noon.'),
+          answerBody(events: [event(start: '2026-08-19 10:00')], reply: 'Moved.'),
+        ]),
+      );
+
+      await say(tester, 'lunch with Dina on Wednesday');
+      await say(tester, 'make that 10am');
+
+      expect(captured, hasLength(2));
+      expect(captured[0]['history'], isEmpty);
+
+      final history = captured[1]['history'] as List;
+      expect(history, hasLength(2));
+      expect(history[0]['text'], 'lunch with Dina on Wednesday');
+      expect(history[1]['text'], 'Booked for noon.');
+      expect(history[1]['events'], hasLength(1));
+    });
+
+    // A removed proposal is off the table, and the assistant restates whatever
+    // is still standing — so sending it back would have it re-propose the one
+    // thing that was just thrown out.
+    testWidgets('a removed proposal is not sent back', (tester) async {
+      final captured = <Map<String, dynamic>>[];
+      await pump(
+        tester,
+        scripted(captured, [
+          answerBody(events: [
+            event(title: 'Lunch with Dina'),
+            event(title: 'Dentist', start: '2026-08-20 08:00'),
+          ]),
+          answerBody(reply: 'Right.'),
+        ]),
+      );
+
+      await say(tester, 'two things please');
+      expect(find.text('Add 2 to my calendar'), findsOneWidget);
+
+      // Each card carries its own Remove; the dentist is the second.
+      await tester.tap(find.text('Remove').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Dentist'), findsNothing);
+      expect(find.text('Add 1 to my calendar'), findsOneWidget);
+
+      await say(tester, 'anything else?');
+
+      final history = captured[1]['history'] as List;
+      final events = history[1]['events'] as List;
+      expect(events, hasLength(1));
+      expect(events.single['title'], 'Lunch with Dina');
+    });
+
+    testWidgets('a failure is shown in the transcript, not as a dead end',
+        (tester) async {
+      await pump(
+        tester,
+        MockClient((request) async {
+          if (request.url.path.endsWith('/limits')) {
+            return http.Response(limitsBody, 200, headers: jsonHeaders);
+          }
+          return http.Response(
+            jsonEncode({'error': 'The assistant could not answer. Try again.'}),
+            502,
+            headers: jsonHeaders,
+          );
+        }),
+      );
+
+      await say(tester, 'lunch on Wednesday');
+
+      expect(find.text('The assistant could not answer. Try again.'),
+          findsOneWidget);
+      // The conversation is still usable — the composer did not lock up.
+      expect(find.text('Send'), findsOneWidget);
+    });
+
+    testWidgets('a new chat clears the transcript', (tester) async {
+      await pump(tester, scripted([], [answerBody(reply: 'Noted.')]));
+
+      await say(tester, 'hello');
+      expect(find.text('hello'), findsOneWidget);
+
+      await tester.tap(find.text('New chat'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('hello'), findsNothing);
+      expect(find.text('Noted.'), findsNothing);
     });
 
     // Better to say so on arrival than to let somebody type a paragraph and

@@ -18,6 +18,12 @@ import (
 // No Temporal, no queue, no job id: this is a sub-second request that writes
 // nothing and holds nothing. Reaching for the machinery next door because it
 // is there would buy a worse version of a plain HTTP handler.
+//
+// It is a conversation, and the conversation still lives entirely on the
+// client: the transcript arrives with each message and is forgotten the moment
+// the response is written. Holding it here would mean owning per-account chat
+// state — a store to scope, expire and keep out of the wrong session — to buy
+// nothing the client cannot do by remembering its own messages.
 func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 	uid, ok := s.caller(w, r)
 	if !ok {
@@ -29,8 +35,11 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Roomier than the single-message limit because the body now carries the
+	// transcript. MaxHistoryTurns turns at the per-message cap is the real
+	// bound; this only stops something absurd being decoded at all.
 	var request plan.Request
-	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).
+	if err := json.NewDecoder(io.LimitReader(r.Body, 512<<10)).
 		Decode(&request); err != nil {
 		writeError(w, http.StatusBadRequest, "That request did not parse.")
 		return
@@ -56,7 +65,7 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 	if err := s.planner.GenerateJSON(
 		ctx,
 		plan.Instructions(now, request.Categories),
-		request.Prompt,
+		conversation(request),
 		plan.Schema,
 		&proposed,
 	); err != nil {
@@ -87,11 +96,34 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"sessions": cleaned.Sessions,
 		"events":   cleaned.Events,
-		"note":     cleaned.Note,
+		"reply":    cleaned.Reply,
+	})
+}
+
+// conversation is the transcript as the model should see it: the history the
+// client remembered, then the message it just sent.
+func conversation(r plan.Request) []gemini.Turn {
+	recent := r.Recent()
+	turns := make([]gemini.Turn, 0, len(recent)+1)
+
+	for _, turn := range recent {
+		role := gemini.RoleUser
+		if turn.Role == plan.RoleAssistant {
+			role = gemini.RoleModel
+		}
+		turns = append(turns, gemini.Turn{Role: role, Text: turn.Render()})
+	}
+
+	return append(turns, gemini.Turn{
+		Role: gemini.RoleUser,
+		Text: strings.TrimSpace(r.Prompt),
 	})
 }
 
 func (s *Server) handlePlanLimits(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.caller(w, r); !ok {
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"configured":   s.planner != nil,
 		"sessionTypes": plan.SessionTypes,

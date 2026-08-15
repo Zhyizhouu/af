@@ -231,8 +231,13 @@ class AudioApi {
     return {'Authorization': 'Bearer $token'};
   }
 
+  /// Signed like every other call: the server gates this behind an account
+  /// too, so an unauthenticated reader cannot inventory what this build of
+  /// ffmpeg supports or how large an upload it will take.
   Future<AudioLimits> limits() async {
-    final response = await _send(() async => _client.get(_uri('/v1/limits')));
+    final response = await _send(
+      () async => _client.get(_uri('/v1/limits'), headers: await _headers()),
+    );
     return AudioLimits.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
   }

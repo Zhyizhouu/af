@@ -53,6 +53,9 @@ type limitsResponse struct {
 func workflowID(jobID string) string { return "audio-" + jobID }
 
 func (s *Server) handleLimits(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.caller(w, r); !ok {
+		return
+	}
 	writeJSON(w, http.StatusOK, limitsResponse{
 		MaxUploadBytes:   s.cfg.MaxUploadBytes,
 		Formats:          convert.Formats,

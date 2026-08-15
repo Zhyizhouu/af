@@ -76,7 +76,11 @@ void main() {
 
   group('api', () {
     test('reads the format menu from the server', () async {
-      final api = AudioApi(base: 'http://converter.test', client: answering());
+      final api = AudioApi(
+        base: 'http://converter.test',
+        token: () async => 'id-token',
+        client: answering(),
+      );
       final limits = await api.limits();
 
       expect(limits.formats.map((f) => f.id), ['mp3', 'wav', 'flac', 'opus']);
@@ -84,6 +88,24 @@ void main() {
       expect(limits.formatById('opus')!.lossy, isTrue);
       expect(limits.formatById('nope'), isNull);
       expect(limits.resultTtl, const Duration(hours: 2));
+    });
+
+    // The endpoint is account-scoped on the server like every other one, so a
+    // request without a token is one the server is about to refuse anyway.
+    test('even reading the format menu is signed', () async {
+      String? authorization;
+      final api = AudioApi(
+        base: 'http://converter.test',
+        token: () async => 'id-token',
+        client: MockClient((request) async {
+          authorization = request.headers['Authorization'];
+          return http.Response(limitsBody(), 200,
+              headers: {'content-type': 'application/json'});
+        }),
+      );
+
+      await api.limits();
+      expect(authorization, 'Bearer id-token');
     });
 
     test('sends the chosen format and bitrate as query parameters', () async {
@@ -191,6 +213,7 @@ void main() {
     test('surfaces the server\'s own wording for a refusal', () async {
       final api = AudioApi(
         base: 'http://converter.test',
+        token: () async => 'id-token',
         client: MockClient((_) async => http.Response(
               jsonEncode({'error': 'Files are limited to 512 MB.'}),
               413,
@@ -212,6 +235,7 @@ void main() {
     test('names the endpoint when it cannot be reached at all', () async {
       final api = AudioApi(
         base: 'http://converter.test',
+        token: () async => 'id-token',
         client: MockClient((_) async => throw const SocketishFailure()),
       );
 
@@ -437,7 +461,11 @@ void main() {
       await tester.pumpWidget(MaterialApp(
         theme: AppTheme.light,
         home: AudioScreen(
-          api: AudioApi(base: 'http://converter.test', client: client),
+          api: AudioApi(
+            base: 'http://converter.test',
+            token: () async => 'id-token',
+            client: client,
+          ),
         ),
       ));
       await tester.pumpAndSettle();

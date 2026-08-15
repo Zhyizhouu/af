@@ -82,6 +82,17 @@ class SessionProposal {
         courseClass: courseClass ?? this.courseClass,
       );
 
+  /// Sent back with the next message, so the assistant can see what it put on
+  /// the table when somebody says "move that one to ten".
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        'start': aiTimeFormat.format(start),
+        'room': room,
+        'courseCode': courseCode,
+        'courseName': courseName,
+        'courseClass': courseClass,
+      };
+
   /// What the checklist list shows as a session's name.
   String get label => [courseCode, courseName].where((s) => s.isNotEmpty).join(' · ');
 }
@@ -134,27 +145,38 @@ class EventProposal {
         allDay: allDay ?? this.allDay,
         category: category ?? this.category,
       );
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'notes': notes,
+        'start': aiTimeFormat.format(start),
+        'end': aiTimeFormat.format(end),
+        'allDay': allDay,
+        'category': category,
+      };
 }
 
-/// One answer from the assistant.
-class AiPlan {
+/// One answer from the assistant: what it said, and what it is offering.
+class AiAnswer {
+  /// The conversational half — what it assumed, what it could not work out, or
+  /// simply an answer to a question. Never empty; the server guarantees it,
+  /// because a chat cannot render a turn with nothing in it.
+  final String reply;
+
   final List<SessionProposal> sessions;
   final List<EventProposal> events;
 
-  /// The model's own remark — what it assumed, or what it could not work out.
-  /// Worth reading before confirming anything.
-  final String note;
-
-  const AiPlan({
+  const AiAnswer({
+    required this.reply,
     required this.sessions,
     required this.events,
-    required this.note,
   });
 
   bool get isEmpty => sessions.isEmpty && events.isEmpty;
   int get total => sessions.length + events.length;
 
-  factory AiPlan.fromJson(Map<String, dynamic> json) => AiPlan(
+  factory AiAnswer.fromJson(Map<String, dynamic> json) => AiAnswer(
+        reply: json['reply'] as String? ?? '',
         sessions: [
           for (final s in (json['sessions'] as List? ?? const []))
             ?SessionProposal.fromJson(s as Map<String, dynamic>),
@@ -163,8 +185,47 @@ class AiPlan {
           for (final e in (json['events'] as List? ?? const []))
             ?EventProposal.fromJson(e as Map<String, dynamic>),
         ],
-        note: json['note'] as String? ?? '',
       );
+}
+
+/// One message in the conversation, on its way back to the server.
+///
+/// The transcript lives here rather than on the server. That is the whole
+/// reason the assistant needs no per-account storage: there is no conversation
+/// on the other end to scope to an account, expire, or hand to the wrong
+/// person — only this app's own memory of what it said and heard.
+class AiTurn {
+  static const roleUser = 'user';
+  static const roleAssistant = 'assistant';
+
+  final String role;
+  final String text;
+
+  /// What the assistant proposed on this turn. Echoed back because the prose
+  /// alone does not say which entries were on the table.
+  final List<SessionProposal> sessions;
+  final List<EventProposal> events;
+
+  /// Set once these were confirmed, so the assistant does not offer to create
+  /// them all over again.
+  final bool committed;
+
+  const AiTurn({
+    required this.role,
+    required this.text,
+    this.sessions = const [],
+    this.events = const [],
+    this.committed = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'role': role,
+        'text': text,
+        if (sessions.isNotEmpty)
+          'sessions': [for (final s in sessions) s.toJson()],
+        if (events.isNotEmpty) 'events': [for (final e in events) e.toJson()],
+        if (committed) 'committed': true,
+      };
 }
 
 class AiLimits {
@@ -192,8 +253,9 @@ class AiLimits {
 
 /// The assistant's API.
 ///
-/// One synchronous call. No job id, no polling: the model answers in a second
-/// or two, and nothing is stored anywhere until this app writes it locally.
+/// One synchronous call per message. No job id, no polling: the model answers
+/// in a second or two, and nothing is stored anywhere until this app writes it
+/// locally.
 class AiApi {
   final String base;
   final http.Client _client;
@@ -228,18 +290,24 @@ class AiApi {
     };
   }
 
+  /// Signed like every other call: the server gates this behind an account
+  /// too, so an unauthenticated reader cannot learn what is configured on it.
   Future<AiLimits> limits() async {
-    final response = await _send(() async => _client.get(_uri('/v1/ai/limits')));
+    final response = await _send(
+      () async => _client.get(_uri('/v1/ai/limits'), headers: await _headers()),
+    );
     return AiLimits.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  /// Asks for entries.
+  /// Says something to the assistant and reads what comes back.
   ///
-  /// [now] and [categories] are sent rather than assumed by the server:
-  /// "next Monday" depends on where the person asking is, and the categories
-  /// belong to this account.
-  Future<AiPlan> plan({
-    required String prompt,
+  /// [history] is the conversation so far, oldest first — the server keeps
+  /// none of it. [now] and [categories] are sent rather than assumed: "next
+  /// Monday" depends on where the person asking is, and the categories belong
+  /// to this account.
+  Future<AiAnswer> send({
+    required String message,
+    required List<AiTurn> history,
     required DateTime now,
     required List<String> categories,
   }) async {
@@ -248,13 +316,14 @@ class AiApi {
         _uri('/v1/ai/plan'),
         headers: await _headers(json: true),
         body: jsonEncode({
-          'prompt': prompt,
+          'prompt': message,
+          'history': [for (final turn in history) turn.toJson()],
           'now': aiTimeFormat.format(now),
           'categories': categories,
         }),
       ),
     );
-    return AiPlan.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return AiAnswer.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Uri _uri(String path) => Uri.parse('$base$path');

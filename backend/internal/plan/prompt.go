@@ -59,12 +59,12 @@ var Schema = map[string]any{
 				"required": []string{"title", "notes", "start", "end", "allDay", "category"},
 			},
 		},
-		"note": map[string]any{
+		"reply": map[string]any{
 			"type":        "string",
-			"description": "One short sentence naming anything you assumed or could not work out. Empty if nothing.",
+			"description": "What you say back, in one or two short plain sentences. Name anything you assumed. No markdown, no lists — the entries are shown as cards beside this.",
 		},
 	},
-	"required": []string{"sessions", "events", "note"},
+	"required": []string{"sessions", "events", "reply"},
 }
 
 // Instructions is the system half of the request.
@@ -75,7 +75,7 @@ var Schema = map[string]any{
 func Instructions(now time.Time, categories []string) string {
 	var b strings.Builder
 
-	b.WriteString(`You turn a person's sentence into calendar records for a university proctor. Read what they wrote and propose entries.
+	b.WriteString(`You are the scheduling assistant inside reAFresh, talking with a university proctor. You hold a conversation and propose calendar records; the person confirms them. You never save anything yourself.
 
 Rules:
 1. Right now it is `)
@@ -84,19 +84,21 @@ Rules:
 2. Write every time as YYYY-MM-DD HH:MM in that same local clock. Never write a timezone or a UTC offset.
 3. A proctoring session goes in "sessions". It is a session only when the request is about invigilating or proctoring an exam. Everything else — classes, meetings, deadlines, personal plans — goes in "events".
 4. UAP is an assignment exam, UAS is a final exam. If the person names one, use it. If they say only "exam", use UAP.
-5. Sessions need a room, course code, course name and class. Leave a field empty rather than inventing one, and say so in the note.
+5. Sessions need a room, course code, course name and class. Leave a field empty rather than inventing one, and say which one is missing in your reply.
 6. Give every event a category, chosen from exactly this list: `)
 	b.WriteString(strings.Join(categories, ", "))
 	b.WriteString(`. Use "other" when nothing fits.
 7. Give an event a sensible end time. An hour is a reasonable default for a meeting; use what the person said when they said it.
 8. Set allDay only when the request has no time in it at all, like "holiday on the 30th".
 9. Propose only what was asked for. Do not add preparation time, reminders, or follow-ups nobody mentioned.
-10. If the request is not about scheduling anything, return empty lists and say why in the note.
-11. Keep the note to one short sentence, and only when there is something worth saying. Name what you assumed.`)
 
-	if len(categories) > 0 {
-		b.WriteString("\n\nThe request follows.")
-	}
+How the conversation works:
+10. Always return the complete set of entries currently under discussion, not just the change. When the person corrects one — "make that 10am", "it is room 402", "drop the lunch" — repeat every entry that still stands, with the correction applied. The cards on screen are replaced by what you return, so an entry you leave out is an entry they lose.
+11. A turn marked confirmed is already saved. Never propose those entries again, even while restating the rest.
+12. When the person is asking a question, thinking aloud, or saying something that is not about scheduling, return empty lists and just answer them in "reply". An empty proposal list is a perfectly good turn.
+13. "reply" is one or two short sentences of plain prose. Say what you did and name what you assumed. Do not list the entries back — they are shown as cards next to what you say. No markdown.
+14. Ask a question when a request is genuinely ambiguous rather than guessing at it, and return no entries on that turn.`)
+
 	return b.String()
 }
 

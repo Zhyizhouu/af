@@ -78,6 +78,23 @@ func (c *Client) Model() string { return c.model }
 // is fine and the request was correct, there is just none left this minute.
 var ErrQuota = errors.New("gemini quota reached")
 
+// Roles a turn can take, as this API names them.
+const (
+	RoleUser  = "user"
+	RoleModel = "model"
+)
+
+// Turn is one message in a conversation.
+//
+// Sent as separate contents rather than pasted into one string, so the model
+// can tell its own previous answers from the person's text. That distinction
+// is not cosmetic: a transcript flattened into a single prompt lets anyone who
+// can type "Assistant:" put words in the model's mouth.
+type Turn struct {
+	Role string
+	Text string
+}
+
 // GenerateJSON asks the model for an answer matching schema.
 //
 // A schema rather than a request to "reply in JSON": the response parses by
@@ -85,17 +102,29 @@ var ErrQuota = errors.New("gemini quota reached")
 // Checking them is the caller's job — a schema constrains shape, never sense.
 func (c *Client) GenerateJSON(
 	ctx context.Context,
-	instructions, input string,
+	instructions string,
+	turns []Turn,
 	schema map[string]any,
 	into any,
 ) error {
+	if len(turns) == 0 {
+		return errors.New("there is nothing to ask about")
+	}
+
+	contents := make([]any, 0, len(turns))
+	for _, turn := range turns {
+		role := RoleUser
+		if turn.Role == RoleModel {
+			role = RoleModel
+		}
+		contents = append(contents, map[string]any{
+			"role":  role,
+			"parts": []any{map[string]any{"text": turn.Text}},
+		})
+	}
+
 	payload := map[string]any{
-		"contents": []any{
-			map[string]any{
-				"role":  "user",
-				"parts": []any{map[string]any{"text": input}},
-			},
-		},
+		"contents": contents,
 		"systemInstruction": map[string]any{
 			"parts": []any{map[string]any{"text": instructions}},
 		},

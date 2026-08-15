@@ -20,6 +20,7 @@ import (
 	"github.com/Zhyizhouu/af/backend/internal/auth"
 	"github.com/Zhyizhouu/af/backend/internal/config"
 	"github.com/Zhyizhouu/af/backend/internal/convert"
+	"github.com/Zhyizhouu/af/backend/internal/gemini"
 )
 
 // Planner is the model the assistant asks. An interface so the endpoint can be
@@ -28,7 +29,8 @@ import (
 type Planner interface {
 	GenerateJSON(
 		ctx context.Context,
-		instructions, input string,
+		instructions string,
+		turns []gemini.Turn,
 		schema map[string]any,
 		into any,
 	) error
@@ -161,7 +163,10 @@ func (r *statusRecorder) WriteHeader(status int) {
 func (s *Server) caller(w http.ResponseWriter, r *http.Request) (string, bool) {
 	uid, err := s.verifier.Verify(r.Context(), auth.BearerToken(r))
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "Sign in to convert files.")
+		// Deliberately not naming the feature: this guards the converter and the
+		// assistant alike, and the converter's wording appearing on the AI page
+		// reads as the wrong page having answered.
+		writeError(w, http.StatusUnauthorized, "Sign in first.")
 		return "", false
 	}
 	return uid, true
