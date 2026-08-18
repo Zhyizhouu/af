@@ -11,6 +11,13 @@ export interface Program {
   readonly name: string;
   readonly mark: string;
   readonly requiresAuth: boolean;
+  /**
+   * Hidden from every account without the `admin` claim.
+   *
+   * Presentation only. The program's routes refuse a non-admin server-side on
+   * their own; this exists so the app does not offer a door that will not open.
+   */
+  readonly requiresAdmin?: boolean;
   /** Wide programs want the room; reading-width ones do not. */
   readonly wide: boolean;
 }
@@ -30,3 +37,14 @@ export const programs: readonly Program[] = [
 
 export const programBySlug = (slug: string | null | undefined): Program | undefined =>
   programs.find((program) => program.slug === slug);
+
+/**
+ * The list as this account may see it.
+ *
+ * Everything that draws a program list goes through here rather than filtering
+ * for itself. The nav bar, the dashboard gallery and the split-view picker each
+ * remembering separately is precisely the bug one list exists to prevent — and
+ * the one that leaks is whichever gets added next.
+ */
+export const visiblePrograms = (admin: boolean): readonly Program[] =>
+  admin ? programs : programs.filter((program) => !program.requiresAdmin);

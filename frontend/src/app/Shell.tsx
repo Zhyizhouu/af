@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { programs, programBySlug } from './programs';
+import { visiblePrograms } from './programs';
 import { SplitView } from './SplitView';
 import { renderProgram } from './registry';
 import { useSession } from './session';
@@ -53,11 +53,21 @@ export function Shell() {
   const { slug } = useParams<{ slug: string }>();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
+  const { admin } = useSession();
 
-  const primary = programBySlug(slug) ?? programs[0]!;
+  const available = visiblePrograms(admin);
+
+  // Resolved against the visible list, not the full one, so a deep link to an
+  // admin program reads as an unknown slug for everybody else — the same
+  // recovery path a deleted program gets. Rendering it and letting its requests
+  // 403 would technically be safe and would look like the app is broken.
+  const reachable = (target: string | null | undefined) =>
+    available.find((program) => program.slug === target);
+
+  const primary = reachable(slug) ?? available[0]!;
   const secondarySlug = params.get('split');
   const secondary =
-    secondarySlug && secondarySlug !== primary.slug ? programBySlug(secondarySlug) : undefined;
+    secondarySlug && secondarySlug !== primary.slug ? reachable(secondarySlug) : undefined;
 
   const openSecondary = useCallback(
     (target: string) => {
@@ -76,7 +86,7 @@ export function Shell() {
         <span className="af-brand af-nav__brand">reAFresh</span>
 
         <div className="af-nav__links">
-          {programs.map((program) => (
+          {available.map((program) => (
             <NavLink
               key={program.slug}
               to={{ pathname: `/${program.slug}`, search: params.toString() }}
@@ -98,7 +108,7 @@ export function Shell() {
             onChange={(event) => openSecondary(event.target.value)}
           >
             <option value="">off</option>
-            {programs
+            {available
               .filter((program) => program.slug !== primary.slug)
               .map((program) => (
                 <option key={program.slug} value={program.slug}>
@@ -123,13 +133,13 @@ export function Shell() {
 
       {/* Kept so a deep link to a program that no longer exists lands
           somewhere real rather than on an empty shell. */}
-      {!programBySlug(slug) && slug !== undefined && (
+      {!reachable(slug) && slug !== undefined && (
         <button
           type="button"
           className="af-shell__recover"
-          onClick={() => navigate(`/${programs[0]!.slug}`, { replace: true })}
+          onClick={() => navigate(`/${available[0]!.slug}`, { replace: true })}
         >
-          {slug} is not a program here — go to {programs[0]!.name}
+          {slug} is not a program here — go to {available[0]!.name}
         </button>
       )}
     </div>

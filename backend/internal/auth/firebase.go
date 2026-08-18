@@ -23,9 +23,21 @@ import (
 // only useful to somebody probing.
 var ErrUnauthorized = errors.New("unauthorized")
 
-// Verifier turns a bearer token into a user id.
+// Caller is a verified identity: who is asking, and what they are allowed to
+// reach beyond their own data.
+//
+// Admin comes from a Firebase custom claim rather than a document in
+// Firestore. A claim is signed into the ID token, so checking it costs no read
+// and — more to the point — a user cannot grant it to themselves by writing
+// their own record. Only the Admin SDK, holding a service account, can set it.
+type Caller struct {
+	UID   string
+	Admin bool
+}
+
+// Verifier turns a bearer token into a caller.
 type Verifier interface {
-	Verify(ctx context.Context, idToken string) (string, error)
+	Verify(ctx context.Context, idToken string) (Caller, error)
 }
 
 type Firebase struct {
@@ -60,15 +72,26 @@ func NewFirebase(ctx context.Context, projectID, credentialsFile string) (*Fireb
 	return &Firebase{client: client}, nil
 }
 
-func (f *Firebase) Verify(ctx context.Context, idToken string) (string, error) {
+func (f *Firebase) Verify(ctx context.Context, idToken string) (Caller, error) {
 	token, err := f.client.VerifyIDToken(ctx, idToken)
 	if err != nil {
-		return "", ErrUnauthorized
+		return Caller{}, ErrUnauthorized
 	}
 	if token.UID == "" {
-		return "", ErrUnauthorized
+		return Caller{}, ErrUnauthorized
 	}
-	return token.UID, nil
+	return Caller{UID: token.UID, Admin: adminClaim(token.Claims)}, nil
+}
+
+// adminClaim reads the `admin` custom claim, treating anything that is not a
+// real boolean true as absent.
+//
+// Claims round-trip through JSON, so a claim set as the string "true" arrives
+// as a string. Comparing loosely would let a mis-set claim grant access; the
+// type assertion failing closed is the safe direction to be wrong in.
+func adminClaim(claims map[string]any) bool {
+	admin, _ := claims["admin"].(bool)
+	return admin
 }
 
 // Open accepts everybody as one shared user.
@@ -80,7 +103,15 @@ type Open struct{}
 
 const OpenUID = "local-dev"
 
-func (Open) Verify(context.Context, string) (string, error) { return OpenUID, nil }
+// Verify grants admin along with everything else.
+//
+// This mode already means anyone reaching the host is trusted completely, so
+// withholding the admin flag would protect nothing while making the local
+// stack behave unlike the deployed one — the failure mode being a feature that
+// cannot be exercised until it is in production.
+func (Open) Verify(context.Context, string) (Caller, error) {
+	return Caller{UID: OpenUID, Admin: true}, nil
+}
 
 // BearerToken pulls the credential out of a request.
 func BearerToken(r *http.Request) string {

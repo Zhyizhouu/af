@@ -1,4 +1,4 @@
-import { apiBase } from '../ai/api';
+import { convertApiBase } from '../../data/runtimeConfig';
 
 /**
  * The converter's API.
@@ -68,14 +68,19 @@ export interface AudioClientOptions {
 }
 
 export class AudioApi {
-  readonly base: string;
+  private readonly explicitBase?: string;
   private readonly token: () => Promise<string | null>;
   private readonly fetcher: typeof fetch;
 
   constructor(options: AudioClientOptions = {}) {
-    this.base = (options.base ?? apiBase).replace(/\/+$/, '');
+    this.explicitBase = options.base;
     this.token = options.token ?? (async () => null);
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
+  }
+
+  /** Resolved per call — see AiApi.base for why. */
+  get base(): string {
+    return (this.explicitBase ?? convertApiBase()).replace(/\/+$/, '');
   }
 
   private async headers(): Promise<Record<string, string>> {
@@ -206,7 +211,8 @@ export class AudioApi {
   private async read(call: () => Promise<Response>): Promise<Record<string, unknown>> {
     if (!this.base) {
       throw new AudioError(
-        'No converter is configured for this build. Set AF_CONVERT_API and rebuild.',
+        'No converter is configured. Set AF_CONVERT_API for the build, or point '
+        + 'config/runtime at a running gateway.',
       );
     }
 

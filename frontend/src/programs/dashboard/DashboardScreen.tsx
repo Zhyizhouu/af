@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AFHint, AFPanel } from '../../components/AF';
 import { useSession } from '../../app/session';
-import { programs } from '../../app/programs';
+import { visiblePrograms } from '../../app/programs';
 import { readAgenda, type AgendaEntry } from '../../data/agenda';
 import { categoryBySlug, listCategories, toneColor, type EventCategory } from '../calendar/categories';
 import { completionOver, listHabits, readDay, toggleHabit, todayKey } from '../habits/store';
@@ -22,7 +22,7 @@ const dayStamp = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'nu
  * dashboard nobody visits.
  */
 export function DashboardScreen() {
-  const { revision, requestSync } = useSession();
+  const { revision, requestSync, admin } = useSession();
 
   const [entries, setEntries] = useState<AgendaEntry[]>([]);
   const [categories, setCategories] = useState<EventCategory[]>([]);
@@ -79,7 +79,7 @@ export function DashboardScreen() {
       {/* Mark plus name, no descriptions — the gallery is for getting somewhere,
           not for reading about where you might go. */}
       <div className="dash__gallery">
-        {programs
+        {visiblePrograms(admin)
           .filter((program) => program.slug !== 'dashboard')
           .map((program) => (
             <Link key={program.slug} to={`/${program.slug}`} className="dash__tile">

@@ -9,17 +9,22 @@
  * Go service does not know or care which framework is talking to it.
  */
 
-declare const __AF_CONVERT_API__: string;
+import { convertApiBase } from '../../data/runtimeConfig';
 
 /**
- * Where the assistant lives. Injected at build time from `AF_CONVERT_API`.
+ * Where the assistant lives.
  *
- * Empty is a real state rather than a fallback to localhost: the Flutter build
- * defaulted to `http://localhost:8080`, which on a deployed site resolves to
- * each visitor's own machine and dies as mixed content, silently. Empty makes
- * the page say the API is not configured instead.
+ * Resolved by `runtimeConfig`: the Firestore value when there is one, otherwise
+ * whatever `AF_CONVERT_API` was compiled in as. Re-exported here because this
+ * module was the address's home before it could move, and half the app imports
+ * it from here.
+ *
+ * Empty stays a real state rather than a fallback to localhost: the Flutter
+ * build defaulted to `http://localhost:8080`, which on a deployed site resolves
+ * to each visitor's own machine and dies as mixed content, silently. Empty
+ * makes the page say the API is not configured instead.
  */
-export const apiBase = (__AF_CONVERT_API__ ?? '').replace(/\/+$/, '');
+export { convertApiBase };
 
 export class AiError extends Error {
   /** Rate limited rather than broken. Waiting is the fix; retrying is not. */
@@ -242,14 +247,25 @@ export interface AiClientOptions {
 }
 
 export class AiApi {
-  readonly base: string;
+  private readonly explicitBase?: string;
   private readonly token: () => Promise<string | null>;
   private readonly fetcher: typeof fetch;
 
   constructor(options: AiClientOptions = {}) {
-    this.base = (options.base ?? apiBase).replace(/\/+$/, '');
+    this.explicitBase = options.base;
     this.token = options.token ?? (async () => null);
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
+  }
+
+  /**
+   * Resolved per call rather than captured in the constructor.
+   *
+   * A client built before the runtime config arrives would otherwise hold the
+   * build-time address for the life of the page — which on a deployed site is
+   * precisely the one that has stopped working.
+   */
+  get base(): string {
+    return (this.explicitBase ?? convertApiBase()).replace(/\/+$/, '');
   }
 
   private async headers(json = false): Promise<Record<string, string>> {
@@ -346,7 +362,8 @@ export class AiApi {
   ): Promise<Record<string, unknown>> {
     if (!this.base) {
       throw new AiError(
-        'No assistant is configured for this build. Set AF_CONVERT_API and rebuild.',
+        'No assistant is configured. Set AF_CONVERT_API for the build, or point '
+        + 'config/runtime at a running gateway.',
       );
     }
 

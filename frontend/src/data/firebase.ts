@@ -67,6 +67,29 @@ export const idToken = async (): Promise<string | null> => {
 };
 
 /**
+ * Whether this account holds the `admin` custom claim.
+ *
+ * Read off the decoded ID token, whose signature Firebase has already checked —
+ * so this is not the client deciding it is an admin, it is the client reading
+ * what a signed token says. The claim cannot be written from here at all; only
+ * the Admin SDK can set one, which is what makes it worth trusting.
+ *
+ * What this governs is *drawing*, and drawing is not a security boundary. The
+ * routes refuse a non-admin themselves; hiding the program only avoids
+ * offering a button that would 403.
+ *
+ * `forceRefresh` matters after a claim changes: a token already in hand keeps
+ * its old claims for up to an hour, so a freshly promoted admin would see
+ * nothing until it expired.
+ */
+export const isAdmin = async (forceRefresh = false): Promise<boolean> => {
+  const user = auth().currentUser;
+  if (!user) return false;
+  const result = await user.getIdTokenResult(forceRefresh);
+  return result.claims.admin === true;
+};
+
+/**
  * Errors worth reading, in this app's voice rather than Firebase's.
  *
  * Credential failures are deliberately blurred into one message: a form that

@@ -6,6 +6,7 @@ import { SignIn } from './app/SignIn';
 import { SessionProvider, useSession } from './app/session';
 import { programs } from './app/programs';
 import { AFEmptyState } from './components/AF';
+import { loadRuntimeConfig } from './data/runtimeConfig';
 import './theme/tokens.css';
 
 /**
@@ -42,6 +43,13 @@ function Gate() {
 
 const root = document.getElementById('root');
 if (!root) throw new Error('no #root to mount into');
+
+// Started here and deliberately not awaited. Rendering must not wait on
+// Firestore — the sign-in gate is already an async beat and a second one would
+// show a blank page to anyone whose network is slow or blocking it. Every API
+// client resolves its base per call, so a value arriving a moment from now is
+// picked up by the request that needs it.
+void loadRuntimeConfig();
 
 createRoot(root).render(
   <StrictMode>
