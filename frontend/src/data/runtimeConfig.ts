@@ -1,5 +1,5 @@
 import { doc, getDoc } from 'firebase/firestore';
-import { firestore } from './firebase';
+import { firestore, watchAuth } from './firebase';
 
 /**
  * Where the API lives, decided at run time rather than at build time.
@@ -68,4 +68,27 @@ export async function loadRuntimeConfig(timeoutMs = 4000): Promise<string> {
     // Left on the build-time value on purpose.
   }
   return convertApiBase();
+}
+
+/**
+ * Looks once now, and again if signing in changes the answer.
+ *
+ * The first attempt happens before anybody has signed in, which is right — the
+ * address is not secret and `firestore.rules` in this repo makes `config/`
+ * world-readable. The rules actually deployed are stricter than the repo's and
+ * refuse an unauthenticated read, so that first attempt currently fails and the
+ * app falls back to its build-time address for the whole session.
+ *
+ * Retrying when a user appears removes the dependency on which rules are live:
+ * every consumer of this address is signed in by the time it is used anyway.
+ * Once the repo's rules are deployed the first attempt will simply succeed and
+ * the retry becomes a no-op.
+ */
+export function watchRuntimeConfig(): void {
+  void loadRuntimeConfig();
+
+  watchAuth((user) => {
+    // Only worth re-reading if signing in could change the answer.
+    if (user && !runtimeConfigLoaded()) void loadRuntimeConfig();
+  });
 }

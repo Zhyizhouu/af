@@ -178,21 +178,42 @@ $proc = Start-Process -FilePath $Cloudflared `
 try {
   # cloudflared writes the banner to stderr, and the hostname appears a few
   # seconds after the process starts.
+  # An assigned hostname is several dash-separated words. `api` is the endpoint
+  # cloudflared POSTs to in order to request one, and it appears in the log
+  # whether that request succeeds or fails - matching it once produced a run
+  # that announced a tunnel, published the address, and had no tunnel at all.
+  $hostnamePattern = 'https://(?!api\.)[a-z0-9]+(-[a-z0-9]+)+\.trycloudflare\.com'
+
   $url = $null
+  $failure = $null
   for ($i = 0; $i -lt 60; $i++) {
     Start-Sleep -Milliseconds 800
     if (Test-Path $log) {
-      $match = Select-String -Path $log -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' |
-        Select-Object -First 1
+      $match = Select-String -Path $log -Pattern $hostnamePattern | Select-Object -First 1
       if ($match) { $url = $match.Matches[0].Value; break }
+
+      # cloudflared says so plainly when it cannot get one; surface that rather
+      # than waiting out the full minute for a hostname that is not coming.
+      $failure = Select-String -Path $log -Pattern 'failed to request quick Tunnel|Cannot determine default origin certificate|error' |
+        Select-Object -First 1
+      if ($failure) { break }
     }
     if ($proc.HasExited) { break }
   }
 
   if (-not $url) {
-    Write-Host "`n    No tunnel hostname appeared. Log tail:" -ForegroundColor Red
-    if (Test-Path $log) { Get-Content $log -Tail 20 }
-    throw 'cloudflared did not produce a URL.'
+    Write-Host "`n    No tunnel was created." -ForegroundColor Red
+    if ($failure) { Write-Host "    $($failure.Line.Trim())" -ForegroundColor Red }
+    Write-Host "`n    Log tail:" -ForegroundColor Red
+    if (Test-Path $log) { Get-Content $log -Tail 15 }
+    Write-Host @"
+
+    A timeout reaching api.trycloudflare.com usually means the network is
+    blocking cloudflared - this one already refuses outbound 7844 to one
+    region. Try again; if it keeps failing, --protocol http2 sometimes gets
+    through where QUIC does not.
+"@ -ForegroundColor Yellow
+    throw 'cloudflared did not produce a tunnel hostname.'
   }
   Ok $url
 
@@ -257,6 +278,20 @@ try {
   $published = $false
   $account = Resolve-Credentials $Credentials
 
+  # Publishing points the deployed app at this address for everybody. Refuse to
+  # do that on a tunnel that has already died or never served - a wrong value
+  # here breaks the live site until somebody notices, and it looks like the
+  # gateway being down rather than like a bad publish.
+  if (-not $NoPublish -and $proc.HasExited) {
+    Warn 'cloudflared has exited - not publishing an address nothing is serving'
+    $NoPublish = $true
+  }
+  if (-not $NoPublish -and $through -ne 200) {
+    Warn 'the tunnel never answered from outside - not publishing it'
+    Warn 're-run once it is serving, or pass -NoPublish to skip this deliberately'
+    $NoPublish = $true
+  }
+
   if ($NoPublish) {
     Warn 'skipped (-NoPublish)'
   } elseif (-not $account) {
@@ -313,7 +348,9 @@ Leave this window open - the tunnel dies when this script does.
 Ctrl+C to stop.
 "@ -ForegroundColor Green
 
-  Wait-Process -Id $proc.Id
+  # Wait-Process throws on a pid that has already exited, which turned a failed
+  # tunnel into a confusing second error on the way out.
+  if (-not $proc.HasExited) { Wait-Process -Id $proc.Id }
 } finally {
   if ($proc -and -not $proc.HasExited) {
     Write-Host "`nStopping the tunnel..." -ForegroundColor Yellow

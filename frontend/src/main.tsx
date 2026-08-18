@@ -6,7 +6,7 @@ import { SignIn } from './app/SignIn';
 import { SessionProvider, useSession } from './app/session';
 import { programs } from './app/programs';
 import { AFEmptyState } from './components/AF';
-import { loadRuntimeConfig } from './data/runtimeConfig';
+import { watchRuntimeConfig } from './data/runtimeConfig';
 import './theme/tokens.css';
 
 /**
@@ -49,7 +49,10 @@ if (!root) throw new Error('no #root to mount into');
 // show a blank page to anyone whose network is slow or blocking it. Every API
 // client resolves its base per call, so a value arriving a moment from now is
 // picked up by the request that needs it.
-void loadRuntimeConfig();
+//
+// Watching rather than reading once: the first attempt runs before sign-in, and
+// the deployed rules refuse an unauthenticated read of it.
+watchRuntimeConfig();
 
 createRoot(root).render(
   <StrictMode>
