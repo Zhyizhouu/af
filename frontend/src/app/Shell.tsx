@@ -1,21 +1,21 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { visiblePrograms } from './programs';
 import { SplitView } from './SplitView';
 import { renderProgram } from './registry';
 import { useSession } from './session';
-import { AFButton } from '../components/AF';
+import { AFButton, AFIconButton } from '../components/AF';
+import { ProfileScreen } from '../programs/profile/ProfileScreen';
 import './shell.css';
 
 /**
- * Whether the local database and Firestore currently agree.
- *
- * Shown rather than hidden because AF is local-first: writes land immediately
- * and reconcile a moment later, so "saved" and "saved everywhere" are genuinely
- * different states and only one of them survives losing this device.
+ * Whether the local database and Firestore currently agree — a dot, not a
+ * word: blue reads as settled (synced, or nothing to sync yet), orange as
+ * "something's happening or wrong" (syncing, failed, signed out). The exact
+ * state is still one hover away, in the title.
  */
 function SyncBadge() {
-  const { syncStatus, syncError, syncNow, signOut } = useSession();
+  const { syncStatus, syncError, syncNow } = useSession();
 
   const label: Record<typeof syncStatus, string> = {
     signedOut: 'signed out',
@@ -24,20 +24,18 @@ function SyncBadge() {
     synced: 'synced',
     failed: 'sync failed',
   };
+  const settled = syncStatus === 'synced' || syncStatus === 'idle';
 
   return (
-    <div className="af-nav__session">
-      <button
-        type="button"
-        className={`af-nav__sync${syncStatus === 'failed' ? ' is-failed' : ''}`}
-        title={syncError ?? 'Sync now'}
-        onClick={() => void syncNow()}
-      >
-        <span className="af-nav__dot" aria-hidden />
-        {label[syncStatus]}
-      </button>
-      <AFButton label="Sign out" variant="quiet" onClick={() => void signOut()} />
-    </div>
+    <button
+      type="button"
+      className={`af-nav__sync${settled ? ' is-settled' : ' is-busy'}`}
+      title={syncError ?? label[syncStatus]}
+      aria-label={`Sync status: ${label[syncStatus]}`}
+      onClick={() => void syncNow()}
+    >
+      <span className="af-nav__dot" aria-hidden />
+    </button>
   );
 }
 
@@ -53,9 +51,10 @@ export function Shell() {
   const { slug } = useParams<{ slug: string }>();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const { admin } = useSession();
+  const { admin, settings, signOut } = useSession();
+  const [showProfile, setShowProfile] = useState(false);
 
-  const available = visiblePrograms(admin);
+  const available = visiblePrograms(admin, settings.hiddenPrograms);
 
   // Resolved against the visible list, not the full one, so a deep link to an
   // admin program reads as an unknown slug for everybody else — the same
@@ -118,8 +117,19 @@ export function Shell() {
           </select>
         </label>
 
-        <SyncBadge />
+        <div className="af-nav__session">
+          <SyncBadge />
+          <AFIconButton
+            glyph="⚙"
+            tooltip="Profile and settings"
+            bordered={false}
+            onClick={() => setShowProfile(true)}
+          />
+          <AFButton label="Sign out" variant="quiet" onClick={() => void signOut()} />
+        </div>
       </nav>
+
+      {showProfile && <ProfileScreen onClose={() => setShowProfile(false)} />}
 
       <main className="af-shell__body">
         <SplitView

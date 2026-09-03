@@ -295,6 +295,7 @@ const settingsToDocument = (row: SettingsRow): DocumentData => ({
   theme: row.theme,
   font: row.font,
   dashboardWidgets: row.dashboardWidgets,
+  hiddenPrograms: row.hiddenPrograms,
   updatedAt: stamp(row.updatedAt),
 });
 
@@ -305,9 +306,14 @@ const settingsFromDocument = (id: string, data: DocumentData): SettingsRow => ({
   dashboardWidgets: Array.isArray(data.dashboardWidgets)
     ? (data.dashboardWidgets as unknown[]).map((raw) => {
         const widget = raw as Record<string, unknown>;
-        return { id: String(widget?.id ?? ''), hidden: Boolean(widget?.hidden) };
+        return {
+          id: String(widget?.id ?? ''),
+          hidden: Boolean(widget?.hidden),
+          width: Number(widget?.width ?? 6),
+        };
       })
     : [],
+  hiddenPrograms: Array.isArray(data.hiddenPrograms) ? (data.hiddenPrograms as unknown[]).map(String) : [],
   updatedAt: millis(data.updatedAt),
 });
 

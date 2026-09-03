@@ -34,7 +34,6 @@ export const programs: readonly Program[] = [
   { slug: 'audio', name: 'Audio Converter', mark: '♪', requiresAuth: true, wide: false },
   { slug: 'ai', name: 'AI', mark: '✦', requiresAuth: true, wide: false },
   { slug: 'qr', name: 'QR Generator', mark: '▣', requiresAuth: true, wide: false },
-  { slug: 'profile', name: 'Profile', mark: '⚙', requiresAuth: true, wide: false },
 ];
 
 export const programBySlug = (slug: string | null | undefined): Program | undefined =>
@@ -47,6 +46,18 @@ export const programBySlug = (slug: string | null | undefined): Program | undefi
  * for itself. The nav bar, the dashboard gallery and the split-view picker each
  * remembering separately is precisely the bug one list exists to prevent — and
  * the one that leaks is whichever gets added next.
+ *
+ * `hidden` is the account's own choice — Profile's "Displayed Applications"
+ * section (`settings.hiddenPrograms`) — layered on top of the admin gate.
+ * Never lets `hidden` remove the last program: a self-service preference
+ * should not be able to strand the account with nowhere to land.
  */
-export const visiblePrograms = (admin: boolean): readonly Program[] =>
-  admin ? programs : programs.filter((program) => !program.requiresAdmin);
+export const visiblePrograms = (
+  admin: boolean,
+  hidden: ReadonlySet<string> | readonly string[] = [],
+): readonly Program[] => {
+  const hiddenSet = hidden instanceof Set ? hidden : new Set(hidden);
+  const gated = admin ? programs : programs.filter((program) => !program.requiresAdmin);
+  const chosen = gated.filter((program) => !hiddenSet.has(program.slug));
+  return chosen.length > 0 ? chosen : gated;
+};

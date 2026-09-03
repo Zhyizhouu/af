@@ -88,29 +88,23 @@
 .af-nav__sync {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-family: var(--af-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  color: var(--af-muted);
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 4px 2px;
+  padding: 0;
 }
 
 .af-nav__dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 1px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--af-radius-sm);
   background: var(--af-accent);
 }
 
-.af-nav__sync.is-failed {
-  color: var(--af-warn);
-}
-
-.af-nav__sync.is-failed .af-nav__dot {
+.af-nav__sync.is-busy .af-nav__dot {
   background: var(--af-warn);
 }
 

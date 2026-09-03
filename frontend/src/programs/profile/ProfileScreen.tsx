@@ -1,33 +1,53 @@
 import { useState } from 'react';
 import { AFButton, AFHint, AFPanel } from '../../components/AF';
 import { useSession } from '../../app/session';
+import { programs } from '../../app/programs';
 import { auth, authErrorMessage, type User } from '../../data/firebase';
 import type { SettingsRow } from '../../data/db';
 import { changeEmail, changePassword, hasPasswordProvider, providerLabel } from './store';
 import './profile.css';
 
-const fontOptions: { value: SettingsRow['font']; label: string; family: string }[] = [
-  { value: 'default', label: 'Our current', family: 'var(--af-sans)' },
-  { value: 'times', label: 'Times New Roman', family: "'Times New Roman', Times, Georgia, serif" },
-  { value: 'consolas', label: 'Consolas', family: "Consolas, 'Cascadia Mono', Menlo, monospace" },
+type Tab = 'credentials' | 'font' | 'apps';
+
+const tabs: { id: Tab; label: string }[] = [
+  { id: 'credentials', label: 'Credentials' },
+  { id: 'font', label: 'Font Settings' },
+  { id: 'apps', label: 'Displayed Applications' },
 ];
 
-const themeOptions: { value: SettingsRow['theme']; label: string }[] = [
-  { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-];
-
-/** reAFresh · Profile — credentials and this account's settings. */
-export function ProfileScreen() {
+/**
+ * reAFresh · Profile — reached from the settings icon in the nav bar rather
+ * than a routed program (see `Shell.tsx`); this is account preferences, not
+ * a place to work, so it never earned a slot in `app/programs.ts`'s list.
+ */
+export function ProfileScreen({ onClose }: { onClose: () => void }) {
   const { settings, updateSettings } = useSession();
+  const [tab, setTab] = useState<Tab>('credentials');
 
   return (
-    <div className="page prf">
-      <div className="prf__row">
-        <CredentialsPanel />
-        <SettingsPanel settings={settings} onChange={updateSettings} />
-      </div>
+    <div className="cal__overlay" role="dialog" aria-label="Profile">
+      <AFPanel label="Profile" className="prf__editor">
+        <div className="prf__tabs">
+          {tabs.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={`cal__view${tab === option.id ? ' is-active' : ''}`}
+              onClick={() => setTab(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'credentials' && <CredentialsPanel />}
+        {tab === 'font' && <FontSettingsPanel settings={settings} onChange={updateSettings} />}
+        {tab === 'apps' && <DisplayedAppsPanel settings={settings} onChange={updateSettings} />}
+
+        <div className="cal__editor-actions">
+          <AFButton label="Close" variant="quiet" onClick={onClose} />
+        </div>
+      </AFPanel>
     </div>
   );
 }
@@ -76,7 +96,7 @@ function CredentialsPanel() {
   };
 
   return (
-    <AFPanel label="Credentials" className="prf__panel">
+    <div className="prf__section">
       <div className="prf__field">
         <span className="af-panel-label">Email</span>
         <span className="af-body">{current?.email ?? '—'}</span>
@@ -144,11 +164,23 @@ function CredentialsPanel() {
 
       {message && <AFHint tip>{message}</AFHint>}
       {error && <AFHint>{error}</AFHint>}
-    </AFPanel>
+    </div>
   );
 }
 
-function SettingsPanel({
+const fontOptions: { value: SettingsRow['font']; label: string; family: string }[] = [
+  { value: 'default', label: 'Our current', family: 'var(--af-sans)' },
+  { value: 'times', label: 'Times New Roman', family: "'Times New Roman', Times, Georgia, serif" },
+  { value: 'consolas', label: 'Consolas', family: "Consolas, 'Cascadia Mono', Menlo, monospace" },
+];
+
+const themeOptions: { value: SettingsRow['theme']; label: string }[] = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
+
+function FontSettingsPanel({
   settings,
   onChange,
 }: {
@@ -156,7 +188,7 @@ function SettingsPanel({
   onChange: (patch: Partial<Omit<SettingsRow, 'id'>>) => Promise<void>;
 }) {
   return (
-    <AFPanel label="Settings" className="prf__panel">
+    <div className="prf__section">
       <span className="af-panel-label">Font</span>
       <div className="prf__fonts">
         {fontOptions.map((option) => (
@@ -187,6 +219,41 @@ function SettingsPanel({
           </button>
         ))}
       </div>
-    </AFPanel>
+    </div>
+  );
+}
+
+function DisplayedAppsPanel({
+  settings,
+  onChange,
+}: {
+  settings: SettingsRow;
+  onChange: (patch: Partial<Omit<SettingsRow, 'id'>>) => Promise<void>;
+}) {
+  const hidden = new Set(settings.hiddenPrograms);
+
+  const toggle = (slug: string) => {
+    const next = new Set(hidden);
+    if (next.has(slug)) next.delete(slug);
+    else next.add(slug);
+    void onChange({ hiddenPrograms: [...next] });
+  };
+
+  return (
+    <div className="prf__section">
+      <AFHint>Choose which applications show in the nav bar, the dashboard, and the split picker.</AFHint>
+      <ul className="prf__apps">
+        {programs.map((program) => (
+          <li key={program.slug} className="prf__app-row">
+            <span className="af-mono">{program.mark}</span>
+            <span className="af-body">{program.name}</span>
+            <label className="prf__app-toggle">
+              <input type="checkbox" checked={!hidden.has(program.slug)} onChange={() => toggle(program.slug)} />
+              <span className="af-meta">{hidden.has(program.slug) ? 'Hidden' : 'Shown'}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

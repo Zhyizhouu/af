@@ -179,10 +179,16 @@ export interface SettingsRow {
   /** Overrides `--af-sans` only — the mono stack keeps carrying machinery
    *  regardless of font choice. */
   font: 'default' | 'times' | 'consolas';
-  /** Array order is display order; a widget absent from this list (added
-   *  after the user's settings were seeded) is treated as visible and
-   *  appended at the end — see `programs/dashboard/DashboardScreen.tsx`. */
-  dashboardWidgets: { id: string; hidden: boolean }[];
+  /** Array order is grid order; a widget absent from this list (added after
+   *  the user's settings were seeded) is treated as visible and appended at
+   *  the end — see `programs/dashboard/DashboardScreen.tsx`. `width` is a
+   *  column span out of the dashboard's 12-column grid, dragged from the
+   *  widget's own resize handle. */
+  dashboardWidgets: { id: string; hidden: boolean; width: number }[];
+  /** Program slugs hidden from the nav bar, dashboard gallery and split
+   *  picker — see Profile's "Displayed Applications" section and
+   *  `app/programs.ts`'s `visiblePrograms`. */
+  hiddenPrograms: string[];
   updatedAt: number;
 }
 
@@ -239,6 +245,7 @@ export const defaultSettings = (): SettingsRow => ({
   theme: 'system',
   font: 'default',
   dashboardWidgets: [],
+  hiddenPrograms: [],
   updatedAt: 0,
 });
 

@@ -44,11 +44,100 @@
   color: var(--af-ink);
 }
 
-.dash__row {
+/* Fixed 12 columns rather than `auto-fit` — a widget's `width` is a column
+   span dragged from its own resize handle (`useWidgetResize.ts`), which only
+   means something against a column count that does not silently reflow. */
+.dash__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(12, 1fr);
   gap: 14px;
   align-items: start;
+}
+
+@media (max-width: 720px) {
+  /* Below this width a dragged span stops being legible as fractions of a
+     row anyway — every widget just takes the full row. */
+  .dash__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dash__widget {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+.dash__widget {
+  position: relative;
+  min-width: 0;
+}
+
+.dash__widget-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.dash__widget:hover .dash__widget-toolbar,
+.dash__widget:focus-within .dash__widget-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.dash__widget-hide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--af-line-strong);
+  border-radius: var(--af-radius-sm);
+  background: var(--af-panel);
+  color: var(--af-muted);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.dash__widget-hide:hover {
+  border-color: var(--af-warn);
+  color: var(--af-warn);
+}
+
+/* The resize pivot — a grab strip on the widget's right edge, the same
+   pattern `TasksScreen.tsx` uses for its table columns. */
+.dash__widget-resize {
+  position: absolute;
+  top: 0;
+  right: -7px;
+  bottom: 0;
+  width: 14px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 2;
+}
+
+.dash__widget-resize:hover::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 6px;
+  width: 2px;
+  background: var(--af-accent);
+}
+
+.dash__widget.is-drag-over {
+  outline: 2px dashed var(--af-accent);
+  outline-offset: 4px;
+  border-radius: var(--af-radius);
 }
 
 .dash__habits,
@@ -222,15 +311,8 @@
 .dash__widget-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   padding: 8px 6px;
   border-radius: var(--af-radius-sm);
-}
-
-.dash__widget-toggle {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
 }
