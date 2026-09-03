@@ -285,6 +285,7 @@ describe('stored conversations', () => {
       allDay: false,
       category: '',
       finished: false,
+      reminderMinutes: 0,
     };
 
     const restored = messageFromJson(

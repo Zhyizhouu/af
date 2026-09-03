@@ -25,6 +25,7 @@ export async function createSession(input: {
   courseCode: string;
   courseName: string;
   courseClass: string;
+  reminderMinutes?: number;
 }): Promise<ProctorSessionRow> {
   const now = Date.now();
   const session: ProctorSessionRow = {
@@ -40,6 +41,7 @@ export async function createSession(input: {
     updatedAt: now,
     deleted: false,
     reopened: false,
+    reminderMinutes: input.reminderMinutes ?? 0,
   };
 
   await db().proctorSessions.put(session);

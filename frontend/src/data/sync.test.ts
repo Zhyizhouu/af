@@ -57,6 +57,7 @@ describe('sync', () => {
       createdAt: 1000,
       updatedAt: 2000,
       deleted: false,
+      reminderMinutes: 15,
     });
 
     await syncAll('uid-1');
@@ -68,8 +69,25 @@ describe('sync', () => {
     expect(pushed!.title).toBe('Lunch with Dina');
     expect(pushed!.category).toBe('social');
     expect(pushed!.deleted).toBe(false);
+    expect(pushed!.reminderMinutes).toBe(15);
     expect(pushed!.start).toBeInstanceOf(Timestamp);
     expect((pushed!.updatedAt as Timestamp).toMillis()).toBe(2000);
+  });
+
+  // Written by a build predating reminders, or by the Flutter app, which does
+  // not know the field exists at all.
+  it('defaults a pulled event with no reminderMinutes to off', async () => {
+    remote.set('users/uid-1/events/evt-legacy', {
+      title: 'from before reminders existed',
+      start: Timestamp.fromMillis(0),
+      end: Timestamp.fromMillis(0),
+      updatedAt: Timestamp.fromMillis(5000),
+      deleted: false,
+    });
+
+    await syncAll('uid-1');
+
+    expect((await db().calendarEvents.get('evt-legacy'))!.reminderMinutes).toBe(0);
   });
 
   it('pulls a remote session down, keeping the fields it does not use', async () => {
@@ -112,6 +130,7 @@ describe('sync', () => {
       createdAt: 0,
       updatedAt: 9000,
       deleted: false,
+      reminderMinutes: 0,
     });
     remote.set('users/uid-1/events/evt-2', {
       title: 'remote is older',
@@ -129,6 +148,7 @@ describe('sync', () => {
       createdAt: 0,
       updatedAt: 8000,
       deleted: false,
+      reminderMinutes: 0,
     });
     remote.set('users/uid-1/events/evt-3', {
       title: 'remote wins',
@@ -155,6 +175,7 @@ describe('sync', () => {
       createdAt: 0,
       updatedAt: 3000,
       deleted: true,
+      reminderMinutes: 0,
     });
 
     await syncAll('uid-1');

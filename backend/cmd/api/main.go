@@ -23,6 +23,7 @@ import (
 	"github.com/Zhyizhouu/af/backend/internal/gemini"
 	"github.com/Zhyizhouu/af/backend/internal/httpapi"
 	"github.com/Zhyizhouu/af/backend/internal/storage"
+	"github.com/Zhyizhouu/af/backend/internal/temporalclient"
 )
 
 func main() {
@@ -72,11 +73,17 @@ func run(log *slog.Logger) error {
 		}
 		blobs = seaweed
 
-		dialled, err := client.Dial(client.Options{
-			HostPort:  cfg.TemporalHostPort,
-			Namespace: cfg.TemporalNamespace,
-			Logger:    log,
-		})
+		// Retried rather than a single attempt: a container's network can
+		// still be settling for a moment after Docker starts it, even once
+		// Temporal's own healthcheck has passed, and Dial's eager
+		// GetSystemInfo RPC can miss that window on the very first try.
+		dialled, err := temporalclient.DialWithRetry(ctx, func() (client.Client, error) {
+			return client.Dial(client.Options{
+				HostPort:  cfg.TemporalHostPort,
+				Namespace: cfg.TemporalNamespace,
+				Logger:    log,
+			})
+		}, log, 6, 5*time.Second)
 		if err != nil {
 			return err
 		}

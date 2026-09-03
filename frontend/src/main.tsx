@@ -7,6 +7,7 @@ import { SessionProvider, useSession } from './app/session';
 import { programs } from './app/programs';
 import { AFEmptyState } from './components/AF';
 import { watchRuntimeConfig } from './data/runtimeConfig';
+import { startReminderScheduler } from './data/reminders';
 import './theme/tokens.css';
 
 /**
@@ -53,6 +54,10 @@ if (!root) throw new Error('no #root to mount into');
 // Watching rather than reading once: the first attempt runs before sign-in, and
 // the deployed rules refuse an unauthenticated read of it.
 watchRuntimeConfig();
+
+// Foreground-only: fires while this tab is open, reading whichever account's
+// database `openScope` currently points at. See data/reminders.ts.
+startReminderScheduler();
 
 createRoot(root).render(
   <StrictMode>

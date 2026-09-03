@@ -214,6 +214,9 @@ function entryFromStored(json: Record<string, unknown>): AgendaEntry | null {
     allDay: Boolean(json.allDay),
     category: '',
     finished: false,
+    // Not part of this snapshot's stored shape — a reopened conversation
+    // shows the card as it was, not whatever reminder exists on it today.
+    reminderMinutes: 0,
   };
 }
 

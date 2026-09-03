@@ -10,6 +10,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"time"
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -18,6 +19,7 @@ import (
 	"github.com/Zhyizhouu/af/backend/internal/convert"
 	"github.com/Zhyizhouu/af/backend/internal/media"
 	"github.com/Zhyizhouu/af/backend/internal/storage"
+	"github.com/Zhyizhouu/af/backend/internal/temporalclient"
 )
 
 func main() {
@@ -48,11 +50,17 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	temporalClient, err := client.Dial(client.Options{
-		HostPort:  cfg.TemporalHostPort,
-		Namespace: cfg.TemporalNamespace,
-		Logger:    log,
-	})
+	// Retried rather than a single attempt: a container's network can still
+	// be settling for a moment after Docker starts it, even once Temporal's
+	// own healthcheck has passed, and Dial's eager GetSystemInfo RPC can miss
+	// that window on the very first try.
+	temporalClient, err := temporalclient.DialWithRetry(ctx, func() (client.Client, error) {
+		return client.Dial(client.Options{
+			HostPort:  cfg.TemporalHostPort,
+			Namespace: cfg.TemporalNamespace,
+			Logger:    log,
+		})
+	}, log, 6, 5*time.Second)
 	if err != nil {
 		return err
 	}

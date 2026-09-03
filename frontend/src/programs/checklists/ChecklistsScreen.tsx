@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { AFButton, AFChip, AFEmptyState, AFHint, AFPanel } from '../../components/AF';
 import { useSession } from '../../app/session';
 import type { ChecklistItemRow, ProctorSessionRow } from '../../data/db';
+import { requestNotificationPermission } from '../../data/notifications';
+import { reminderOptions } from '../../data/reminders';
 import {
   bySection,
   createSession,
@@ -241,6 +243,7 @@ function NewSession({
     courseCode: string;
     courseName: string;
     courseClass: string;
+    reminderMinutes: number;
   }) => void;
 }) {
   const [type, setType] = useState('UAP');
@@ -254,6 +257,8 @@ function NewSession({
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [klass, setKlass] = useState('');
+  const [reminderMinutes, setReminderMinutes] = useState(0);
+  const [reminderBlocked, setReminderBlocked] = useState(false);
 
   return (
     <div className="cal__overlay" role="dialog" aria-label="New session">
@@ -289,6 +294,35 @@ function NewSession({
         <label className="af-panel-label" htmlFor="s-class">Class</label>
         <input id="s-class" className="af-input" value={klass} onChange={(e) => setKlass(e.target.value)} />
 
+        <label className="af-panel-label" htmlFor="s-reminder">Remind me</label>
+        <select
+          id="s-reminder"
+          className="af-nav__select"
+          value={reminderMinutes}
+          onChange={async (e) => {
+            const minutes = Number(e.target.value);
+            setReminderMinutes(minutes);
+            if (minutes > 0) {
+              const permission = await requestNotificationPermission();
+              setReminderBlocked(permission === 'denied' || permission === 'unsupported');
+            } else {
+              setReminderBlocked(false);
+            }
+          }}
+        >
+          {reminderOptions.map((option) => (
+            <option key={option.minutes} value={option.minutes}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {reminderBlocked && (
+          <AFHint>
+            Notifications are blocked for this site, so this reminder will not show. Allow them
+            in your browser's site settings to fix that.
+          </AFHint>
+        )}
+
         <div className="cal__editor-actions">
           <AFButton label="Cancel" variant="quiet" onClick={onCancel} />
           <AFButton
@@ -302,6 +336,7 @@ function NewSession({
                 courseCode: code.trim().toUpperCase(),
                 courseName: name.trim(),
                 courseClass: klass.trim().toUpperCase(),
+                reminderMinutes,
               })
             }
           />

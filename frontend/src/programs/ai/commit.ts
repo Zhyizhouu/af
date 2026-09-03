@@ -46,6 +46,9 @@ export async function commitTurn(message: AiMessage): Promise<void> {
       createdAt: now,
       updatedAt: now,
       deleted: false,
+      // The assistant never proposes a reminder; the person setting one does
+      // it themselves afterward, through the ordinary event editor.
+      reminderMinutes: 0,
     });
   }
 

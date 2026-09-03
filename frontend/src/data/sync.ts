@@ -96,6 +96,7 @@ const eventToDocument = (row: CalendarEventRow): DocumentData => ({
   createdAt: stamp(row.createdAt),
   updatedAt: stamp(row.updatedAt),
   deleted: row.deleted,
+  reminderMinutes: row.reminderMinutes,
 });
 
 const eventFromDocument = (id: string, data: DocumentData): CalendarEventRow => ({
@@ -109,6 +110,9 @@ const eventFromDocument = (id: string, data: DocumentData): CalendarEventRow => 
   createdAt: millis(data.createdAt),
   updatedAt: millis(data.updatedAt),
   deleted: Boolean(data.deleted),
+  // Absent on a document written before this existed, or by the Flutter
+  // build, which does not know about reminders at all.
+  reminderMinutes: Number(data.reminderMinutes ?? 0),
 });
 
 const sessionToDocument = (row: ProctorSessionRow): DocumentData => ({
@@ -123,6 +127,7 @@ const sessionToDocument = (row: ProctorSessionRow): DocumentData => ({
   updatedAt: stamp(row.updatedAt),
   deleted: row.deleted,
   reopened: row.reopened,
+  reminderMinutes: row.reminderMinutes,
 });
 
 const sessionFromDocument = (id: string, data: DocumentData): ProctorSessionRow => ({
@@ -138,6 +143,9 @@ const sessionFromDocument = (id: string, data: DocumentData): ProctorSessionRow 
   updatedAt: millis(data.updatedAt),
   deleted: Boolean(data.deleted),
   reopened: Boolean(data.reopened),
+  // Absent on a document written before this existed, or by the Flutter
+  // build, which does not know about reminders at all.
+  reminderMinutes: Number(data.reminderMinutes ?? 0),
 });
 
 const conversationToDocument = (row: AiConversationRow): DocumentData => ({

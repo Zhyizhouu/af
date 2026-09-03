@@ -22,6 +22,9 @@ export interface CalendarEventRow {
   createdAt: number;
   updatedAt: number;
   deleted: boolean;
+  /** Minutes before `start` to show a reminder notification. 0 is off —
+   *  there is no such thing as a reminder due at the event's own start. */
+  reminderMinutes: number;
 }
 
 export interface ProctorSessionRow {
@@ -44,6 +47,8 @@ export interface ProctorSessionRow {
    * on write is a field that vanishes the next time this side syncs.
    */
   reopened: boolean;
+  /** Minutes before `dateTime` to show a reminder notification. 0 is off. */
+  reminderMinutes: number;
 }
 
 export interface ChecklistItemRow {

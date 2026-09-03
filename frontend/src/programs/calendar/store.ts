@@ -85,6 +85,7 @@ export async function saveEvent(input: {
   notes?: string;
   allDay?: boolean;
   category?: string;
+  reminderMinutes?: number;
 }): Promise<CalendarEventRow> {
   const now = Date.now();
   const existing = input.id ? await db().calendarEvents.get(input.id) : undefined;
@@ -100,6 +101,7 @@ export async function saveEvent(input: {
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
     deleted: false,
+    reminderMinutes: input.reminderMinutes ?? existing?.reminderMinutes ?? 0,
   };
 
   await db().calendarEvents.put(row);

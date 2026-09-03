@@ -20,6 +20,8 @@ export interface AgendaEntry {
   allDay: boolean;
   category: string;
   finished: boolean;
+  /** Minutes before `start` to remind, 0 for none. */
+  reminderMinutes: number;
 }
 
 export const entryFromEvent = (row: CalendarEventRow): AgendaEntry => ({
@@ -32,6 +34,7 @@ export const entryFromEvent = (row: CalendarEventRow): AgendaEntry => ({
   allDay: row.allDay,
   category: row.category,
   finished: false,
+  reminderMinutes: row.reminderMinutes,
 });
 
 export const entryFromSession = (row: ProctorSessionRow): AgendaEntry => ({
@@ -45,6 +48,7 @@ export const entryFromSession = (row: ProctorSessionRow): AgendaEntry => ({
   allDay: false,
   category: '',
   finished: row.status === 'archived',
+  reminderMinutes: row.reminderMinutes,
 });
 
 export async function readAgenda(): Promise<AgendaEntry[]> {

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { AFButton, AFHint, AFPanel } from '../../components/AF';
 import type { AgendaEntry } from '../../data/agenda';
+import { notificationPermission, requestNotificationPermission } from '../../data/notifications';
+import { reminderOptions } from '../../data/reminders';
 import { toneColor, type EventCategory } from './categories';
 
 const localInput = (value: Date): string => {
@@ -36,6 +38,7 @@ export function EventEditor({
     notes: string;
     allDay: boolean;
     category: string;
+    reminderMinutes: number;
   }) => void;
   onCancel: () => void;
   onDelete?: () => void;
@@ -47,6 +50,10 @@ export function EventEditor({
   const [from, setFrom] = useState(localInput(initial?.start ?? start));
   const [to, setTo] = useState(
     localInput(initial?.end ?? new Date(start.getTime() + 3600_000)),
+  );
+  const [reminderMinutes, setReminderMinutes] = useState(initial?.reminderMinutes ?? 0);
+  const [reminderBlocked, setReminderBlocked] = useState(
+    (initial?.reminderMinutes ?? 0) > 0 && notificationPermission() === 'denied',
   );
   const [confirming, setConfirming] = useState(false);
 
@@ -121,6 +128,35 @@ export function EventEditor({
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
             />
+
+            <label className="af-panel-label" htmlFor="event-reminder">Remind me</label>
+            <select
+              id="event-reminder"
+              className="af-nav__select"
+              value={reminderMinutes}
+              onChange={async (event) => {
+                const minutes = Number(event.target.value);
+                setReminderMinutes(minutes);
+                if (minutes > 0) {
+                  const permission = await requestNotificationPermission();
+                  setReminderBlocked(permission === 'denied' || permission === 'unsupported');
+                } else {
+                  setReminderBlocked(false);
+                }
+              }}
+            >
+              {reminderOptions.map((option) => (
+                <option key={option.minutes} value={option.minutes}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            {reminderBlocked && (
+              <AFHint>
+                Notifications are blocked for this site, so this reminder will not show. Allow
+                them in your browser's site settings to fix that.
+              </AFHint>
+            )}
           </>
         )}
 
@@ -149,6 +185,7 @@ export function EventEditor({
                   notes,
                   allDay,
                   category,
+                  reminderMinutes,
                 });
               }}
             />
