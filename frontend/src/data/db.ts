@@ -182,9 +182,9 @@ export interface SettingsRow {
   /** Array order is grid order; a widget absent from this list (added after
    *  the user's settings were seeded) is treated as visible and appended at
    *  the end — see `programs/dashboard/DashboardScreen.tsx`. `width` is a
-   *  column span out of the dashboard's 12-column grid, dragged from the
-   *  widget's own resize handle. */
-  dashboardWidgets: { id: string; hidden: boolean; width: number }[];
+   *  column span out of the dashboard's 12-column grid, `height` a pixel
+   *  height — both dragged together from the widget's corner pivot. */
+  dashboardWidgets: { id: string; hidden: boolean; width: number; height: number }[];
   /** Program slugs hidden from the nav bar, dashboard gallery and split
    *  picker — see Profile's "Displayed Applications" section and
    *  `app/programs.ts`'s `visiblePrograms`. */

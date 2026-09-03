@@ -217,7 +217,11 @@ export async function moveOption(propertyId: string, optionId: string, toIndex: 
  *  once created. */
 export async function listPages(): Promise<TaskPageRow[]> {
   const rows = await db().taskPages.filter((row) => !row.deleted).toArray();
-  return rows.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
+  // `?? ''` covers a page stored locally before `body` existed — without it,
+  // `PageBody.tsx` would seed its editor with the literal string "undefined".
+  return rows
+    .map((row) => ({ ...row, body: row.body ?? '' }))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
 }
 
 export async function createPage(title?: string): Promise<TaskPageRow> {

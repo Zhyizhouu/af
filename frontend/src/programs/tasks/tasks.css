@@ -13,6 +13,14 @@
   overflow-x: auto;
   border: 1px solid var(--af-line);
   border-radius: var(--af-radius);
+  /* The table itself is a fixed pixel width now (dragged columns need a real
+     width to drag against) — without this the wrap kept stretching to the
+     page's full width regardless, leaving an empty bordered strip trailing
+     off to the right of a narrower table. `fit-content` hugs the table;
+     `max-width` is what still caps it and turns on the scrollbar once
+     dragged columns actually exceed the page. */
+  width: fit-content;
+  max-width: 100%;
 }
 
 .tsk__table {

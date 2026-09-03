@@ -1,23 +1,31 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
 const columns = 12;
-const minWidth = 3;
+// Low enough that an app-launcher widget (`AppWidget.tsx`) can be dragged
+// down to just its icon — see the `@container` collapse in `dashboard.css`.
+const minWidth = 2;
+const minHeight = 70;
+const maxHeight = 900;
 
 /**
- * Live width-dragging for the dashboard's 12-column widget grid — the same
+ * Live width-and-height dragging from a widget's corner pivot — the same
  * pointer-drag shape `SplitView`'s divider and `TasksScreen`'s column resize
- * already use, just measured in grid columns instead of pixels or a ratio.
+ * already use. Width is measured in grid columns, height in raw pixels,
+ * dragged together from one corner handle the way a window's resize corner
+ * does.
  *
- * Widths are held locally while dragging (so the grid reflows every frame)
+ * Sizes are held locally while dragging (so the grid reflows every frame)
  * and only handed to `commit` on release — the caller decides what "commit"
  * means (here, a synced settings write).
  */
 export function useWidgetResize(
   container: RefObject<HTMLDivElement | null>,
-  commit: (id: string, width: number) => void,
+  commit: (id: string, width: number, height: number) => void,
 ) {
-  const drag = useRef<{ id: string; startX: number; startWidth: number } | null>(null);
-  const [live, setLive] = useState<Record<string, number>>({});
+  const drag = useRef<{ id: string; startX: number; startY: number; startWidth: number; startHeight: number } | null>(
+    null,
+  );
+  const [live, setLive] = useState<Record<string, { width: number; height: number }>>({});
 
   useEffect(() => {
     function onMove(event: globalThis.PointerEvent) {
@@ -25,15 +33,20 @@ export function useWidgetResize(
       if (!current || !container.current) return;
       const colPx = container.current.clientWidth / columns;
       const deltaCols = Math.round((event.clientX - current.startX) / colPx);
-      const next = Math.min(columns, Math.max(minWidth, current.startWidth + deltaCols));
-      setLive((prev) => ({ ...prev, [current.id]: next }));
+      const width = Math.min(columns, Math.max(minWidth, current.startWidth + deltaCols));
+      const height = Math.min(
+        maxHeight,
+        Math.max(minHeight, current.startHeight + (event.clientY - current.startY)),
+      );
+      setLive((prev) => ({ ...prev, [current.id]: { width, height } }));
     }
     function onUp() {
       const current = drag.current;
       if (!current) return;
       drag.current = null;
       setLive((prev) => {
-        if (prev[current.id] !== undefined) commit(current.id, prev[current.id]!);
+        const size = prev[current.id];
+        if (size) commit(current.id, size.width, size.height);
         return prev;
       });
     }
@@ -45,12 +58,15 @@ export function useWidgetResize(
     };
   }, [container, commit]);
 
-  const startResize = (id: string, currentWidth: number) => (event: { preventDefault: () => void; clientX: number }) => {
-    event.preventDefault();
-    drag.current = { id, startX: event.clientX, startWidth: currentWidth };
-  };
+  const startResize =
+    (id: string, currentWidth: number, currentHeight: number) =>
+    (event: { preventDefault: () => void; clientX: number; clientY: number }) => {
+      event.preventDefault();
+      drag.current = { id, startX: event.clientX, startY: event.clientY, startWidth: currentWidth, startHeight: currentHeight };
+    };
 
-  const widthFor = (id: string, fallback: number) => live[id] ?? fallback;
+  const widthFor = (id: string, fallback: number) => live[id]?.width ?? fallback;
+  const heightFor = (id: string, fallback: number) => live[id]?.height ?? fallback;
 
-  return { startResize, widthFor };
+  return { startResize, widthFor, heightFor };
 }

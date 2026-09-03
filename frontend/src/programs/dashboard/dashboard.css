@@ -3,36 +3,29 @@
   align-items: center;
 }
 
-.dash__gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-}
-
-/* Mark plus name, sized so three fit one row on a phone — the Flutter gallery's
-   rule, and the reason there are no descriptions on these. */
+/* An application, as a dashboard widget (`AppWidget.tsx`) — fills whatever
+   space its frame gives it, centered, so it reads the same whether it is
+   sitting at its default tile size or shrunk to an icon. */
 .dash__tile {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
   gap: 10px;
-  padding: 16px;
+  height: 100%;
   background: var(--af-panel);
-  border: 1px solid var(--af-line);
-  border-radius: var(--af-radius);
   text-decoration: none;
   color: inherit;
   transition: border-color 120ms ease, background 120ms ease;
 }
 
 .dash__tile:hover {
-  border-color: var(--af-accent);
   background: var(--af-accent-soft);
 }
 
 .dash__mark {
   font-family: var(--af-mono);
-  font-size: 20px;
+  font-size: 26px;
   color: var(--af-accent);
 }
 
@@ -42,6 +35,20 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--af-ink);
+  text-align: center;
+}
+
+/* Dragged down to its smallest size, an app widget drops its name and keeps
+   only the mark — a launcher shrunk to an icon. Queries `.dash__widget-body`
+   below, not the viewport, so it reacts to that one widget's own size. */
+@container (max-width: 170px) {
+  .dash__name {
+    display: none;
+  }
+
+  .dash__mark {
+    font-size: 34px;
+  }
 }
 
 /* Fixed 12 columns rather than `auto-fit` — a widget's `width` is a column
@@ -68,9 +75,17 @@
 
 .dash__widget {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  /* Not `overflow: hidden` — the resize pivot below sits slightly past this
+     box's own edge, and `.dash__widget-body`'s `overflow-y: auto` already
+     clips the widget's actual content on its own. */
 }
 
+/* The toolbar and the resize pivot are siblings of `.dash__widget-body`, not
+   descendants of it, so they stay put at a fixed position even while the
+   body scrolls internally (see `.dash__widget-body` below). */
 .dash__widget-toolbar {
   position: absolute;
   top: 8px;
@@ -111,27 +126,44 @@
   color: var(--af-warn);
 }
 
-/* The resize pivot — a grab strip on the widget's right edge, the same
-   pattern `TasksScreen.tsx` uses for its table columns. */
+/* A widget's own content — scrolls internally once it no longer fits the
+   dragged height, rather than growing the grid row or clipping silently.
+   `container-type` is what lets `AppWidget`'s tile react to *this* widget's
+   own size rather than the viewport's (see the `@container` rule above). */
+.dash__widget-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  container-type: inline-size;
+}
+
+/* The resize pivot — a corner grip, dragging both the column span and the
+   pixel height together, the same pointer-drag shape `SplitView`'s divider
+   and `TasksScreen`'s column resize already use. */
 .dash__widget-resize {
   position: absolute;
-  top: 0;
-  right: -7px;
-  bottom: 0;
-  width: 14px;
-  cursor: col-resize;
+  right: -6px;
+  bottom: -6px;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
   touch-action: none;
   z-index: 2;
 }
 
-.dash__widget-resize:hover::after {
+.dash__widget-resize::after {
   content: '';
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 6px;
-  width: 2px;
-  background: var(--af-accent);
+  right: 6px;
+  bottom: 6px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--af-line-strong);
+  border-bottom: 2px solid var(--af-line-strong);
+}
+
+.dash__widget-resize:hover::after {
+  border-color: var(--af-accent);
 }
 
 .dash__widget.is-drag-over {

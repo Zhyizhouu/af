@@ -1,31 +1,36 @@
-import { Link } from 'react-router-dom';
 import { useCallback, useRef, useState } from 'react';
 import { AFButton } from '../../components/AF';
 import { useSession } from '../../app/session';
-import { visiblePrograms } from '../../app/programs';
 import { useDragReorder } from '../../components/dragReorder';
-import { widgetCatalog } from './widgets/registry';
+import { widgetCatalogFor } from './widgets/registry';
 import { useWidgetResize } from './widgets/useWidgetResize';
 import { WidgetFrame } from './widgets/WidgetFrame';
 import { WidgetPicker } from './widgets/WidgetPicker';
 import './dashboard.css';
 
-const defaultWidth = 6;
+const defaultWidth = { app: 3, panel: 6 };
+const defaultHeight = { app: 120, panel: 260 };
 
 /**
- * reAFresh — the launcher, plus every widget an account has chosen to keep
- * visible, arranged on a 12-column grid it can drag to reorder and resize.
+ * reAFresh — every widget an account has chosen to keep visible, arranged on
+ * a 12-column grid it can drag to reorder and resize (both width and height,
+ * from each widget's own corner pivot).
  *
- * The layout lives in `settings.dashboardWidgets` (`app/session.tsx`), synced
- * like everything else. A first-time account (an empty array) sees the full
- * catalog in its default order and width — seeded here rather than in
- * `session.tsx`, the same "seed on first read" pattern `seedDefaultProperties`
- * uses for Task Tracker.
+ * Applications are widgets here too (`widgetCatalogFor`'s `app:<slug>`
+ * entries) — added and removed exactly like the functional ones, and
+ * independent of Profile's "Displayed Applications" header setting; the two
+ * lists don't read each other. The layout lives in `settings.dashboardWidgets`
+ * (`app/session.tsx`), synced like everything else. A first-time account (an
+ * empty array) sees the full catalog in its default order and size — seeded
+ * here rather than in `session.tsx`, the same "seed on first read" pattern
+ * `seedDefaultProperties` uses for Task Tracker.
  */
 export function DashboardScreen() {
   const { admin, settings, updateSettings } = useSession();
-  const [showHidden, setShowHidden] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
   const grid = useRef<HTMLDivElement>(null);
+
+  const catalog = widgetCatalogFor(admin);
 
   // A widget the catalog has grown since this account's settings were last
   // saved (or that were never saved at all) is appended visible, at the end
@@ -33,9 +38,14 @@ export function DashboardScreen() {
   const known = new Set(settings.dashboardWidgets.map((widget) => widget.id));
   const configured = [
     ...settings.dashboardWidgets,
-    ...widgetCatalog
+    ...catalog
       .filter((widget) => !known.has(widget.id))
-      .map((widget) => ({ id: widget.id, hidden: false, width: defaultWidth })),
+      .map((widget) => ({
+        id: widget.id,
+        hidden: false,
+        width: widget.app ? defaultWidth.app : defaultWidth.panel,
+        height: widget.app ? defaultHeight.app : defaultHeight.panel,
+      })),
   ];
 
   const visible = configured.filter((widget) => !widget.hidden);
@@ -53,8 +63,8 @@ export function DashboardScreen() {
     writeLayout(next);
   });
 
-  const resize = useWidgetResize(grid, (id, width) => {
-    writeLayout(visible.map((widget) => (widget.id === id ? { ...widget, width } : widget)));
+  const resize = useWidgetResize(grid, (id, width, height) => {
+    writeLayout(visible.map((widget) => (widget.id === id ? { ...widget, width, height } : widget)));
   });
 
   const hideWidget = (id: string) => {
@@ -71,41 +81,21 @@ export function DashboardScreen() {
     <div className="page dash">
       <div className="dash__bar">
         <span className="page__spacer" />
-        {hidden.length > 0 && (
-          <AFButton
-            label={`Hidden widgets (${hidden.length})`}
-            variant="ghost"
-            onClick={() => setShowHidden(true)}
-          />
-        )}
-      </div>
-
-      {/* Mark plus name, no descriptions — the gallery is for getting somewhere,
-          not for reading about where you might go. */}
-      <div className="dash__gallery">
-        {visiblePrograms(admin, settings.hiddenPrograms)
-          .filter((program) => program.slug !== 'dashboard')
-          .map((program) => (
-            <Link key={program.slug} to={`/${program.slug}`} className="dash__tile">
-              <span className="dash__mark" aria-hidden>
-                {program.mark}
-              </span>
-              <span className="dash__name">{program.name}</span>
-            </Link>
-          ))}
+        <AFButton label="Add widgets" variant="ghost" onClick={() => setShowAdd(true)} />
       </div>
 
       <div className="dash__grid" ref={grid}>
         {visible.map((widget, index) => {
-          const catalog = widgetCatalog.find((entry) => entry.id === widget.id);
-          if (!catalog) return null;
-          const Widget = catalog.Component;
+          const entry = catalog.find((candidate) => candidate.id === widget.id);
+          if (!entry) return null;
+          const Widget = entry.Component;
           return (
             <WidgetFrame
               key={widget.id}
               width={resize.widthFor(widget.id, widget.width)}
+              height={resize.heightFor(widget.id, widget.height)}
               dragProps={dragHandlers(index)}
-              onResizeStart={resize.startResize(widget.id, widget.width)}
+              onResizeStart={resize.startResize(widget.id, widget.width, widget.height)}
               onHide={() => hideWidget(widget.id)}
             >
               <Widget />
@@ -114,8 +104,8 @@ export function DashboardScreen() {
         })}
       </div>
 
-      {showHidden && (
-        <WidgetPicker widgets={hidden} onShow={showWidget} onClose={() => setShowHidden(false)} />
+      {showAdd && (
+        <WidgetPicker widgets={hidden} catalog={catalog} onShow={showWidget} onClose={() => setShowAdd(false)} />
       )}
     </div>
   );

@@ -298,7 +298,7 @@ describe('sync', () => {
       id: 'app',
       theme: 'dark',
       font: 'consolas',
-      dashboardWidgets: [{ id: 'habits', hidden: true, width: 4 }],
+      dashboardWidgets: [{ id: 'habits', hidden: true, width: 4, height: 300 }],
       hiddenPrograms: ['audio'],
       updatedAt: 2,
     });
@@ -308,7 +308,7 @@ describe('sync', () => {
     const pushed = written.get('users/uid-1/settings/app');
     expect(pushed!.theme).toBe('dark');
     expect(pushed!.font).toBe('consolas');
-    expect(pushed!.dashboardWidgets).toEqual([{ id: 'habits', hidden: true, width: 4 }]);
+    expect(pushed!.dashboardWidgets).toEqual([{ id: 'habits', hidden: true, width: 4, height: 300 }]);
     expect(pushed!.hiddenPrograms).toEqual(['audio']);
   });
 

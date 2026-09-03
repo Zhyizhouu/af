@@ -267,7 +267,10 @@ const taskPageToDocument = (row: TaskPageRow): DocumentData => ({
   title: row.title,
   icon: row.icon,
   values: row.values,
-  body: row.body,
+  // `?? ''` guards a page written to local storage before `body` existed —
+  // Firestore's `set()` throws on an `undefined` field, which is what
+  // `row.body` would be for one of those records otherwise.
+  body: row.body ?? '',
   sortOrder: row.sortOrder,
   createdAt: stamp(row.createdAt),
   updatedAt: stamp(row.updatedAt),
@@ -310,6 +313,7 @@ const settingsFromDocument = (id: string, data: DocumentData): SettingsRow => ({
           id: String(widget?.id ?? ''),
           hidden: Boolean(widget?.hidden),
           width: Number(widget?.width ?? 6),
+          height: Number(widget?.height ?? 260),
         };
       })
     : [],
