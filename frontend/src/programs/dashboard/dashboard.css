@@ -78,10 +78,28 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  border-radius: var(--af-radius);
   /* Not `overflow: hidden` — the resize pivot below sits slightly past this
      box's own edge, and `.dash__widget-body`'s `overflow-y: auto` already
      clips the widget's actual content on its own. */
 }
+
+/* Lifted while its own drag is live — `WidgetFrame.tsx` also applies the
+   `translate(...)` that keeps it under the pointer regardless of which grid
+   slot it currently occupies. No transition on the transform itself: it has
+   to track the pointer exactly, one frame behind would read as laggy. */
+.dash__widget.is-dragging {
+  z-index: 20;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
+  cursor: grabbing;
+}
+
+.dash__widget.is-resizing {
+  z-index: 15;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  outline: 1px solid var(--af-accent);
+}
+
 
 /* The toolbar and the resize pivot are siblings of `.dash__widget-body`, not
    descendants of it, so they stay put at a fixed position even while the
@@ -106,12 +124,36 @@
   pointer-events: auto;
 }
 
+/* The grab target is the whole strip, not the small glyph inside it — a 14px
+   dot is not reliably grabbable, a 28px-tall strip spanning most of the
+   toolbar is. */
+.dash__widget-handle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--af-radius-sm);
+  background: var(--af-panel);
+  border: 1px solid var(--af-line-strong);
+  color: var(--af-muted);
+  font-family: var(--af-mono);
+  cursor: grab;
+  touch-action: none;
+}
+
+.dash__widget-handle:active {
+  cursor: grabbing;
+}
+
 .dash__widget-hide {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-left: 6px;
   border: 1px solid var(--af-line-strong);
   border-radius: var(--af-radius-sm);
   background: var(--af-panel);

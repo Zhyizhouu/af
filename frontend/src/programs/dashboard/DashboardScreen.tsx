@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { AFButton } from '../../components/AF';
 import { useSession } from '../../app/session';
-import { useDragReorder } from '../../components/dragReorder';
 import { widgetCatalogFor } from './widgets/registry';
+import { useWidgetReorder } from './widgets/useWidgetReorder';
 import { useWidgetResize } from './widgets/useWidgetResize';
 import { WidgetFrame } from './widgets/WidgetFrame';
 import { WidgetPicker } from './widgets/WidgetPicker';
@@ -50,22 +50,49 @@ export function DashboardScreen() {
 
   const visible = configured.filter((widget) => !widget.hidden);
   const hidden = configured.filter((widget) => widget.hidden);
+  const byId = new Map(visible.map((widget) => [widget.id, widget]));
 
   const writeLayout = useCallback(
     (nextVisible: typeof configured) => void updateSettings({ dashboardWidgets: [...nextVisible, ...hidden] }),
     [updateSettings, hidden],
   );
 
-  const dragHandlers = useDragReorder((from, to) => {
-    const next = [...visible];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved!);
-    writeLayout(next);
-  });
+  // `useWidgetReorder`/`useWidgetResize` re-run their pointermove/pointerup
+  // listener effect whenever the commit function they were given changes
+  // identity — and `visible`/`byId` are rebuilt fresh every render, so a
+  // plain `useCallback` closing over them would be a new function on every
+  // single pointermove during a drag, tearing the listeners down and back up
+  // continuously for the length of the gesture. A ref holding the latest
+  // values keeps the callbacks themselves stable — created once — while
+  // still always reading current data when they actually fire.
+  const latest = useRef({ visible, hidden, byId });
+  latest.current = { visible, hidden, byId };
 
-  const resize = useWidgetResize(grid, (id, width, height) => {
-    writeLayout(visible.map((widget) => (widget.id === id ? { ...widget, width, height } : widget)));
-  });
+  const commitOrder = useCallback(
+    (nextIds: readonly string[]) => {
+      const { byId: currentById, hidden: currentHidden } = latest.current;
+      void updateSettings({
+        dashboardWidgets: [...nextIds.map((id) => currentById.get(id)!), ...currentHidden],
+      });
+    },
+    [updateSettings],
+  );
+
+  const commitResize = useCallback(
+    (id: string, width: number, height: number) => {
+      const { visible: currentVisible, hidden: currentHidden } = latest.current;
+      void updateSettings({
+        dashboardWidgets: [
+          ...currentVisible.map((widget) => (widget.id === id ? { ...widget, width, height } : widget)),
+          ...currentHidden,
+        ],
+      });
+    },
+    [updateSettings],
+  );
+
+  const reorder = useWidgetReorder(grid, visible.map((widget) => widget.id), commitOrder);
+  const resize = useWidgetResize(grid, commitResize);
 
   const hideWidget = (id: string) => {
     writeLayout(visible.map((widget) => (widget.id === id ? { ...widget, hidden: true } : widget)));
@@ -85,18 +112,24 @@ export function DashboardScreen() {
       </div>
 
       <div className="dash__grid" ref={grid}>
-        {visible.map((widget, index) => {
-          const entry = catalog.find((candidate) => candidate.id === widget.id);
-          if (!entry) return null;
+        {reorder.order.map((id) => {
+          const widget = byId.get(id);
+          const entry = catalog.find((candidate) => candidate.id === id);
+          if (!widget || !entry) return null;
           const Widget = entry.Component;
+          const isDragging = reorder.dragId === id;
           return (
             <WidgetFrame
-              key={widget.id}
-              width={resize.widthFor(widget.id, widget.width)}
-              height={resize.heightFor(widget.id, widget.height)}
-              dragProps={dragHandlers(index)}
-              onResizeStart={resize.startResize(widget.id, widget.width, widget.height)}
-              onHide={() => hideWidget(widget.id)}
+              key={id}
+              id={id}
+              width={resize.widthFor(id, widget.width)}
+              height={resize.heightFor(id, widget.height)}
+              isDragging={isDragging}
+              isResizing={resize.resizingId === id}
+              dragOffset={isDragging ? reorder.offset : { x: 0, y: 0 }}
+              onDragStart={reorder.startDrag(id)}
+              onResizeStart={resize.startResize(id, widget.width, widget.height)}
+              onHide={() => hideWidget(id)}
             >
               <Widget />
             </WidgetFrame>

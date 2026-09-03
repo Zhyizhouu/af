@@ -45,19 +45,40 @@
 }
 
 /* A grab strip on each column's right edge — dragged widths persist to
-   `localStorage`, see `TasksScreen.tsx`'s `useColumnWidths`. */
+   `localStorage`, see `TasksScreen.tsx`'s `useColumnWidths`. The hit target
+   (10px, centered on the border) is wider than what's drawn (a 2px line),
+   the same asymmetry a window manager's own edge-resize uses — a strip
+   exactly as wide as its visible line is too thin to reliably grab. */
 .tsk__col-resize {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 6px;
+  width: 10px;
   cursor: col-resize;
   touch-action: none;
 }
 
-.tsk__col-resize:hover {
-  background: var(--af-accent-soft);
+.tsk__col-resize::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 4px;
+  width: 2px;
+  background: transparent;
+}
+
+.tsk__col-resize:hover::after {
+  background: var(--af-line-strong);
+}
+
+/* Stays lit for the whole drag — `useColumnWidths` locks the cursor at the
+   same time, so both the pointer icon and this line agree a drag is still
+   happening even once the pointer has moved off the strip itself. */
+.tsk__col-resize.is-dragging::after {
+  background: var(--af-accent);
+  width: 2px;
 }
 
 .tsk__table td {

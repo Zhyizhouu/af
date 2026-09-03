@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { AFButton, AFEmptyState, AFIconButton, AFTag } from '../../components/AF';
+import { lockCursor } from '../../components/pointerDrag';
 import { useSession } from '../../app/session';
 import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../data/db';
 import { FilterPanel } from './FilterPanel';
@@ -42,6 +43,7 @@ const loadColumnWidths = (): Record<string, number> => {
  */
 function useColumnWidths() {
   const [widths, setWidths] = useState<Record<string, number>>(loadColumnWidths);
+  const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const drag = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
 
   const widthFor = useCallback(
@@ -59,6 +61,7 @@ function useColumnWidths() {
     function onUp() {
       if (!drag.current) return;
       drag.current = null;
+      setDraggingKey(null);
       setWidths((prev) => {
         localStorage.setItem(widthsStorageKey, JSON.stringify(prev));
         return prev;
@@ -76,11 +79,18 @@ function useColumnWidths() {
     (key: string, fallback: number) => (event: PointerEvent) => {
       event.preventDefault();
       drag.current = { key, startX: event.clientX, startWidth: widths[key] ?? fallback };
+      setDraggingKey(key);
+      // Locked for the whole drag, not left to `:hover` on the 10px handle —
+      // the pointer is off that strip for nearly the entire gesture, and an
+      // unlocked cursor flickering back to the default arrow is what makes a
+      // drag read as broken.
+      const unlock = lockCursor('col-resize');
+      window.addEventListener('pointerup', unlock, { once: true });
     },
     [widths],
   );
 
-  return { widthFor, startResize };
+  return { widthFor, startResize, draggingKey };
 }
 
 /**
@@ -121,7 +131,7 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
   const visiblePages = pages.filter((page) => matchesFilters(page, filters));
   const openPageRow = openPage ? pages.find((page) => page.id === openPage.id) : undefined;
 
-  const { widthFor, startResize } = useColumnWidths();
+  const { widthFor, startResize, draggingKey } = useColumnWidths();
   const tableWidth = useMemo(
     () =>
       widthFor('title', defaultTitleWidth) +
@@ -164,13 +174,16 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
               <tr>
                 <th className="tsk__col-title">
                   Page
-                  <span className="tsk__col-resize" onPointerDown={startResize('title', defaultTitleWidth)} />
+                  <span
+                    className={`tsk__col-resize${draggingKey === 'title' ? ' is-dragging' : ''}`}
+                    onPointerDown={startResize('title', defaultTitleWidth)}
+                  />
                 </th>
                 {properties.map((property) => (
                   <th key={property.id}>
                     {property.name}
                     <span
-                      className="tsk__col-resize"
+                      className={`tsk__col-resize${draggingKey === property.id ? ' is-dragging' : ''}`}
                       onPointerDown={startResize(property.id, defaultColumnWidth)}
                     />
                   </th>

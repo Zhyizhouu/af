@@ -3,55 +3,55 @@ import type { PointerEvent, ReactNode } from 'react';
 /**
  * The draggable, resizable, hideable frame every dashboard widget sits in.
  *
- * A drag handle (top-left) reorders widgets on the grid, a corner pivot
- * (bottom-right) drags both the column span and the pixel height together —
- * like a window's own resize corner — and a hide button (top-right) removes
- * it from the grid. All mouse-driven, all committed by the caller
+ * A drag handle (the toolbar's left strip) reorders widgets on the grid —
+ * the widget itself visibly lifts and follows the cursor via `dragOffset`
+ * while `useWidgetReorder.ts` live-reflows the others around it. A corner
+ * pivot (bottom-right) drags both the column span and the pixel height
+ * together, like a window's own resize corner. A hide button removes it
+ * from the grid. All mouse-driven, all committed by the caller
  * (`DashboardScreen.tsx`) rather than owned here.
  *
- * The toolbar and the resize handle are laid out as siblings of the
- * scrollable body, not descendants of it, so they stay put at a fixed height
- * even when the widget's own content overflows and scrolls.
+ * The toolbar and the resize pivot are laid out as siblings of the
+ * scrollable body, not descendants of it, so they stay put at a fixed
+ * position even when the widget's own content overflows and scrolls.
  */
 export function WidgetFrame({
+  id,
   width,
   height,
-  dragProps,
+  isDragging,
+  isResizing,
+  dragOffset,
+  onDragStart,
   onResizeStart,
   onHide,
   children,
 }: {
+  id: string;
   width: number;
   height: number;
-  dragProps: {
-    draggable: boolean;
-    onDragStart: (event: React.DragEvent) => void;
-    onDragEnd: () => void;
-    onDragOver: (event: React.DragEvent) => void;
-    onDrop: (event: React.DragEvent) => void;
-    className: string;
-  };
+  isDragging: boolean;
+  isResizing: boolean;
+  dragOffset: { x: number; y: number };
+  onDragStart: (event: PointerEvent) => void;
   onResizeStart: (event: PointerEvent) => void;
   onHide: () => void;
   children: ReactNode;
 }) {
   return (
     <div
-      className={`dash__widget ${dragProps.className}`}
-      style={{ gridColumn: `span ${width}`, height }}
-      onDragOver={dragProps.onDragOver}
-      onDrop={dragProps.onDrop}
+      data-widget-id={id}
+      className={`dash__widget${isDragging ? ' is-dragging' : ''}${isResizing ? ' is-resizing' : ''}`}
+      style={{
+        gridColumn: `span ${width}`,
+        height,
+        transform: isDragging ? `translate(${dragOffset.x}px, ${dragOffset.y}px) scale(1.02)` : undefined,
+      }}
     >
       <div className="dash__widget-toolbar">
-        <span
-          className="af-drag-handle"
-          draggable={dragProps.draggable}
-          onDragStart={dragProps.onDragStart}
-          onDragEnd={dragProps.onDragEnd}
-          title="Drag to reorder"
-        >
-          ⠿
-        </span>
+        <div className="dash__widget-handle" onPointerDown={onDragStart} title="Drag to reorder">
+          <span aria-hidden>⠿</span>
+        </div>
         <button type="button" className="dash__widget-hide" onClick={onHide} title="Hide widget">
           ✕
         </button>
