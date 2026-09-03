@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { AFButton, AFIconButton, AFPanel, AFTag } from '../../components/AF';
+import { useDragReorder } from '../../components/dragReorder';
 import type { TaskPropertyRow, TaskPropertyType } from '../../data/db';
 import { categoryTones } from '../../data/tones';
 import {
   addOption,
   deleteOption,
   deleteProperty,
+  moveOption,
   recolorOption,
   renameOption,
   reorderOption,
@@ -145,75 +147,98 @@ function OptionEditor({
   property: TaskPropertyRow;
   onChange: () => void;
 }) {
-  const [label, setLabel] = useState('');
+  // `null` shows the "Add <Name>" pill; a string is the in-progress label for
+  // the inline input that replaces it once clicked.
+  const [adding, setAdding] = useState<string | null>(null);
+
+  const dragHandlers = useDragReorder((from, to) => {
+    const optionId = property.options[from]?.id;
+    if (optionId) void moveOption(property.id, optionId, to).then(onChange);
+  });
+
+  const commitAdd = () => {
+    if (adding?.trim()) void addOption(property.id, adding).then(onChange);
+    setAdding(null);
+  };
 
   return (
     <div className="tsk__option-editor">
-      {property.options.map((option, index) => (
-        <div key={option.id} className="tsk__option-row">
-          <AFTag label={option.label} toneIndex={option.toneIndex} />
-          <input
-            className="af-input af-input--prose"
-            defaultValue={option.label}
-            onBlur={(event) => {
-              if (event.target.value.trim() && event.target.value !== option.label) {
-                void renameOption(property.id, option.id, event.target.value).then(onChange);
-              }
-            }}
-          />
-          <div className="tsk__tone-grid">
-            {categoryTones.map((tone, toneIndex) => (
-              <button
-                key={tone.name}
-                type="button"
-                className={`tsk__tone${option.toneIndex === toneIndex ? ' is-active' : ''}`}
-                style={{ background: tone.light }}
-                title={tone.name}
-                onClick={() => void recolorOption(property.id, option.id, toneIndex).then(onChange)}
-              />
-            ))}
+      {property.options.map((option, index) => {
+        const { draggable, onDragStart, onDragEnd, onDragOver, onDrop, className } = dragHandlers(index);
+        return (
+          <div
+            key={option.id}
+            className={`tsk__option-row ${className}`}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+          >
+            <span className="af-drag-handle" draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+              ⠿
+            </span>
+            <AFTag label={option.label} toneIndex={option.toneIndex} />
+            <input
+              className="af-input af-input--prose"
+              defaultValue={option.label}
+              onBlur={(event) => {
+                if (event.target.value.trim() && event.target.value !== option.label) {
+                  void renameOption(property.id, option.id, event.target.value).then(onChange);
+                }
+              }}
+            />
+            <div className="tsk__tone-grid">
+              {categoryTones.map((tone, toneIndex) => (
+                <button
+                  key={tone.name}
+                  type="button"
+                  className={`tsk__tone${option.toneIndex === toneIndex ? ' is-active' : ''}`}
+                  style={{ background: tone.light }}
+                  title={tone.name}
+                  onClick={() => void recolorOption(property.id, option.id, toneIndex).then(onChange)}
+                />
+              ))}
+            </div>
+            <AFIconButton
+              glyph="↑"
+              tooltip="Move up"
+              bordered={false}
+              disabled={index === 0}
+              onClick={() => void reorderOption(property.id, option.id, -1).then(onChange)}
+            />
+            <AFIconButton
+              glyph="↓"
+              tooltip="Move down"
+              bordered={false}
+              disabled={index === property.options.length - 1}
+              onClick={() => void reorderOption(property.id, option.id, 1).then(onChange)}
+            />
+            <AFIconButton
+              glyph="✕"
+              tooltip="Delete option"
+              bordered={false}
+              onClick={() => void deleteOption(property.id, option.id).then(onChange)}
+            />
           </div>
-          <AFIconButton
-            glyph="↑"
-            tooltip="Move up"
-            bordered={false}
-            disabled={index === 0}
-            onClick={() => void reorderOption(property.id, option.id, -1).then(onChange)}
-          />
-          <AFIconButton
-            glyph="↓"
-            tooltip="Move down"
-            bordered={false}
-            disabled={index === property.options.length - 1}
-            onClick={() => void reorderOption(property.id, option.id, 1).then(onChange)}
-          />
-          <AFIconButton
-            glyph="✕"
-            tooltip="Delete option"
-            bordered={false}
-            onClick={() => void deleteOption(property.id, option.id).then(onChange)}
-          />
-        </div>
-      ))}
-      <div className="tsk__add-option">
+        );
+      })}
+
+      {adding === null ? (
+        <button type="button" className="tsk__add-option-pill" onClick={() => setAdding('')}>
+          + Add {property.name}
+        </button>
+      ) : (
         <input
           className="af-input af-input--prose"
-          placeholder="New option"
-          value={label}
-          onChange={(event) => setLabel(event.target.value)}
+          autoFocus
+          placeholder={`New ${property.name.toLowerCase()}`}
+          value={adding}
+          onChange={(event) => setAdding(event.target.value)}
+          onBlur={commitAdd}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commitAdd();
+            else if (event.key === 'Escape') setAdding(null);
+          }}
         />
-        <AFButton
-          label="Add"
-          variant="quiet"
-          disabled={!label.trim()}
-          onClick={() =>
-            void addOption(property.id, label).then(() => {
-              setLabel('');
-              onChange();
-            })
-          }
-        />
-      </div>
+      )}
     </div>
   );
 }

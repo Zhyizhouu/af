@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { AFButton, AFEmptyState, AFIconButton, AFTag } from '../../components/AF';
 import { useSession } from '../../app/session';
 import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../data/db';
@@ -17,6 +17,71 @@ import {
 import './tasks.css';
 
 type OpenPage = { id: string; mode: 'peek' | 'fullscreen' };
+
+const widthsStorageKey = 'af.tasks.columnWidths';
+const defaultTitleWidth = 240;
+const defaultColumnWidth = 160;
+const minColumnWidth = 80;
+const actionsColumnWidth = 36;
+
+const loadColumnWidths = (): Record<string, number> => {
+  try {
+    const raw = localStorage.getItem(widthsStorageKey);
+    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Per-device column widths, dragged from a handle on each `<th>`.
+ *
+ * Persisted to `localStorage` rather than synced settings — the same choice
+ * `SplitView`'s remembered divider ratio already made, for the same reason:
+ * this is a display preference for one screen, not data.
+ */
+function useColumnWidths() {
+  const [widths, setWidths] = useState<Record<string, number>>(loadColumnWidths);
+  const drag = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
+
+  const widthFor = useCallback(
+    (key: string, fallback: number) => widths[key] ?? fallback,
+    [widths],
+  );
+
+  useEffect(() => {
+    function onMove(event: globalThis.PointerEvent) {
+      if (!drag.current) return;
+      const { key, startX, startWidth } = drag.current;
+      const next = Math.max(minColumnWidth, startWidth + (event.clientX - startX));
+      setWidths((prev) => ({ ...prev, [key]: next }));
+    }
+    function onUp() {
+      if (!drag.current) return;
+      drag.current = null;
+      setWidths((prev) => {
+        localStorage.setItem(widthsStorageKey, JSON.stringify(prev));
+        return prev;
+      });
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, []);
+
+  const startResize = useCallback(
+    (key: string, fallback: number) => (event: PointerEvent) => {
+      event.preventDefault();
+      drag.current = { key, startX: event.clientX, startWidth: widths[key] ?? fallback };
+    },
+    [widths],
+  );
+
+  return { widthFor, startResize };
+}
 
 /**
  * reAFresh · Task Tracker — a table of user-defined "pages", each one a task
@@ -56,21 +121,23 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
   const visiblePages = pages.filter((page) => matchesFilters(page, filters));
   const openPageRow = openPage ? pages.find((page) => page.id === openPage.id) : undefined;
 
+  const { widthFor, startResize } = useColumnWidths();
+  const tableWidth = useMemo(
+    () =>
+      widthFor('title', defaultTitleWidth) +
+      properties.reduce((sum, property) => sum + widthFor(property.id, defaultColumnWidth), 0) +
+      actionsColumnWidth,
+    [widthFor, properties],
+  );
+
   return (
     <div className={`page page--tall tsk${paneWidth === 'split' ? ' tsk--split' : ''}`}>
-      <header className="page__head">
-        <span className="af-brand">Task Tracker</span>
-      </header>
-
       <div className="tsk__bar">
         <AFButton
           label="New page"
-          onClick={() =>
-            void commit(async () => {
-              const page = await createPage();
-              setOpenPage({ id: page.id, mode: 'peek' });
-            })
-          }
+          // Does not open PageDetail — a "new page" click from the table
+          // creates and stays put, matching the dashboard's Tasks widget.
+          onClick={() => void commit(() => createPage())}
         />
         <AFButton
           label={filters.length > 0 ? `Filter (${filters.length})` : 'Filter'}
@@ -85,12 +152,28 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
         <AFEmptyState glyph="◆" message="No pages yet. New page to get started." />
       ) : (
         <div className="tsk__table-wrap">
-          <table className="tsk__table">
+          <table className="tsk__table" style={{ width: tableWidth }}>
+            <colgroup>
+              <col style={{ width: widthFor('title', defaultTitleWidth) }} />
+              {properties.map((property) => (
+                <col key={property.id} style={{ width: widthFor(property.id, defaultColumnWidth) }} />
+              ))}
+              <col style={{ width: actionsColumnWidth }} />
+            </colgroup>
             <thead>
               <tr>
-                <th className="tsk__col-title">Page</th>
+                <th className="tsk__col-title">
+                  Page
+                  <span className="tsk__col-resize" onPointerDown={startResize('title', defaultTitleWidth)} />
+                </th>
                 {properties.map((property) => (
-                  <th key={property.id}>{property.name}</th>
+                  <th key={property.id}>
+                    {property.name}
+                    <span
+                      className="tsk__col-resize"
+                      onPointerDown={startResize(property.id, defaultColumnWidth)}
+                    />
+                  </th>
                 ))}
                 <th className="tsk__col-actions" />
               </tr>

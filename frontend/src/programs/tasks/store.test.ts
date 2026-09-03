@@ -9,6 +9,7 @@ import {
   listPages,
   listProperties,
   matchesFilters,
+  moveOption,
   recolorOption,
   renameOption,
   reorderOption,
@@ -124,6 +125,37 @@ describe('option CRUD', () => {
     await reorderOption(property.id, reloaded.options[0]!.id, -1);
     reloaded = (await listProperties())[0]!;
     expect(reloaded.options.map((o) => o.label)).toEqual(['Low', 'High']);
+  });
+});
+
+describe('moveOption', () => {
+  async function threeOptions() {
+    const property = await saveProperty({ name: 'Priority', type: 'select' });
+    await addOption(property.id, 'High');
+    await addOption(property.id, 'Medium');
+    await addOption(property.id, 'Low');
+    return (await listProperties())[0]!;
+  }
+
+  it('moves an option to an arbitrary index, not just an adjacent swap', async () => {
+    const property = await threeOptions();
+    const [high] = property.options;
+
+    await moveOption(property.id, high!.id, 2);
+
+    const reloaded = (await listProperties())[0]!;
+    expect(reloaded.options.map((o) => o.label)).toEqual(['Medium', 'Low', 'High']);
+  });
+
+  it('clamps a target past the end rather than dropping the option', async () => {
+    const property = await threeOptions();
+    const [high] = property.options;
+
+    await moveOption(property.id, high!.id, 99);
+
+    const reloaded = (await listProperties())[0]!;
+    expect(reloaded.options).toHaveLength(3);
+    expect(reloaded.options.map((o) => o.label)).toEqual(['Medium', 'Low', 'High']);
   });
 });
 

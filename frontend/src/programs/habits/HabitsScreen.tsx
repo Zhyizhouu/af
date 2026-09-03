@@ -78,11 +78,10 @@ export function HabitsScreen() {
 
   return (
     <div className="page hab">
-      <header className="page__head">
-        <span className="af-brand">Habits</span>
+      <div className="hab__bar">
         <span className="page__spacer" />
         <AFButton label="New habit" onClick={() => setEditing('new')} />
-      </header>
+      </div>
 
       <AFPanel label={dayLabel(today, today)} count={`${done.size}/${habits.length}`}>
         {habits.length === 0 ? (

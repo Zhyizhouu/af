@@ -70,8 +70,7 @@ export function ChecklistsScreen() {
 
   return (
     <div className="page chk">
-      <header className="page__head">
-        <span className="af-brand">Checklists</span>
+      <div className="chk__bar">
         <div className="chk__tabs">
           {(['active', 'archived'] as const).map((option) => (
             <button
@@ -84,8 +83,9 @@ export function ChecklistsScreen() {
             </button>
           ))}
         </div>
+        <span className="page__spacer" />
         <AFButton label="New session" onClick={() => setAdding(true)} />
-      </header>
+      </div>
 
       {sessions.length === 0 ? (
         <AFEmptyState
@@ -176,7 +176,7 @@ function SessionDetail({
 
   return (
     <div className="page chk">
-      <header className="page__head">
+      <header className="chk__detail-head">
         <AFButton label="‹ Back" variant="quiet" onClick={onBack} />
         <span className="af-brand">
           {session.type} · Room {session.room || '—'}

@@ -8,11 +8,23 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { localScope, openScope } from '../data/db';
+import { db, defaultSettings, localScope, openScope, type SettingsRow } from '../data/db';
 import { syncAll } from '../data/sync';
 import { isAdmin, signOutNow, watchAuth, type User } from '../data/firebase';
 
 export type SyncStatus = 'signedOut' | 'idle' | 'syncing' | 'synced' | 'failed';
+
+/** Stamps `data-theme`/`data-font` on the root element so `tokens.css`'s
+ *  attribute selectors take over from the `prefers-color-scheme` fallback
+ *  that only covers first paint before anyone has signed in. */
+function applySettings(settings: SettingsRow) {
+  const root = document.documentElement;
+  if (settings.theme === 'system') delete root.dataset.theme;
+  else root.dataset.theme = settings.theme;
+
+  if (settings.font === 'default') delete root.dataset.font;
+  else root.dataset.font = settings.font;
+}
 
 interface SessionValue {
   user: User | null;
@@ -26,6 +38,9 @@ interface SessionValue {
    * uncertain direction is the closed one.
    */
   admin: boolean;
+  /** This account's preferences — theme, font, dashboard widget layout. */
+  settings: SettingsRow;
+  updateSettings: (patch: Partial<Omit<SettingsRow, 'id'>>) => Promise<void>;
   syncStatus: SyncStatus;
   syncError: string | null;
   /** Bumped whenever a sync pulls something down, so views refetch. */
@@ -49,6 +64,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const [admin, setAdmin] = useState(false);
+  const [settings, setSettings] = useState<SettingsRow>(defaultSettings());
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('signedOut');
   const [syncError, setSyncError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
@@ -56,6 +72,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const running = useRef(false);
   const uid = useRef<string | null>(null);
+
+  /** Reads the local settings row (seeding the default if this is the first
+   *  time) and applies it — called after sign-in and after every sync, since
+   *  a sync can pull a change made on another device. */
+  const loadSettings = useCallback(async () => {
+    const existing = await db().settings.get('app');
+    const next = existing ?? defaultSettings();
+    if (!existing) await db().settings.put(next);
+    setSettings(next);
+    applySettings(next);
+  }, []);
 
   const syncNow = useCallback(async () => {
     const current = uid.current;
@@ -69,6 +96,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setSyncStatus('syncing');
     try {
       await syncAll(current);
+      await loadSettings();
       setSyncStatus('synced');
       setSyncError(null);
       // Dexie is read through one-shot queries, so anything pulled down is
@@ -80,7 +108,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } finally {
       running.current = false;
     }
-  }, []);
+  }, [loadSettings]);
 
   /** Coalesces the burst of writes that a single user action produces. */
   const requestSync = useCallback(() => {
@@ -100,13 +128,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // granted still carries the old claims for up to an hour, and "sign out
         // and back in" is the one remedy a user will actually try.
         setAdmin(next ? await isAdmin(true).catch(() => false) : false);
+        await loadSettings();
         setReady(true);
         setRevision((n) => n + 1);
         if (next) await syncNow();
         else setSyncStatus('signedOut');
       })();
     });
-  }, [syncNow]);
+  }, [syncNow, loadSettings]);
 
   useEffect(
     () => () => {
@@ -119,9 +148,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await signOutNow();
   }, []);
 
+  const updateSettings = useCallback(async (patch: Partial<Omit<SettingsRow, 'id'>>) => {
+    const next: SettingsRow = { ...(await db().settings.get('app') ?? defaultSettings()), ...patch, id: 'app', updatedAt: Date.now() };
+    await db().settings.put(next);
+    setSettings(next);
+    applySettings(next);
+    requestSync();
+  }, [requestSync]);
+
   const value = useMemo<SessionValue>(
-    () => ({ user, ready, admin, syncStatus, syncError, revision, requestSync, syncNow, signOut }),
-    [user, ready, admin, syncStatus, syncError, revision, requestSync, syncNow, signOut],
+    () => ({
+      user,
+      ready,
+      admin,
+      settings,
+      updateSettings,
+      syncStatus,
+      syncError,
+      revision,
+      requestSync,
+      syncNow,
+      signOut,
+    }),
+    [user, ready, admin, settings, updateSettings, syncStatus, syncError, revision, requestSync, syncNow, signOut],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

@@ -196,6 +196,20 @@ export async function reorderOption(
   await db().taskProperties.put({ ...property, options, updatedAt: Date.now() });
 }
 
+/** Moves an option to an arbitrary index — what dragging an option chip in
+ *  `PropertyPanel.tsx` needs; `reorderOption` above stays for the existing
+ *  up/down buttons, which only ever need an adjacent swap. */
+export async function moveOption(propertyId: string, optionId: string, toIndex: number): Promise<void> {
+  const property = await db().taskProperties.get(propertyId);
+  if (!property) return;
+  const options = [...property.options];
+  const from = options.findIndex((option) => option.id === optionId);
+  if (from === -1) return;
+  const [moved] = options.splice(from, 1);
+  options.splice(Math.min(Math.max(toIndex, 0), options.length), 0, moved!);
+  await db().taskProperties.put({ ...property, options, updatedAt: Date.now() });
+}
+
 // ---- pages ----
 
 /** Active pages, in creation order. There is no manual row-reorder — only
@@ -213,6 +227,7 @@ export async function createPage(title?: string): Promise<TaskPageRow> {
     title: title?.trim() || 'Untitled',
     icon: null,
     values: {},
+    body: '',
     sortOrder: await db().taskPages.count(),
     createdAt: now,
     updatedAt: now,
@@ -224,7 +239,7 @@ export async function createPage(title?: string): Promise<TaskPageRow> {
 
 export async function savePageField(
   id: string,
-  patch: { title?: string; icon?: TaskPageIcon | null },
+  patch: { title?: string; icon?: TaskPageIcon | null; body?: string },
 ): Promise<void> {
   const page = await db().taskPages.get(id);
   if (!page) return;
@@ -232,6 +247,7 @@ export async function savePageField(
     ...page,
     ...(patch.title !== undefined ? { title: patch.title.trim() || 'Untitled' } : {}),
     ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
+    ...(patch.body !== undefined ? { body: patch.body } : {}),
     updatedAt: Date.now(),
   });
 }

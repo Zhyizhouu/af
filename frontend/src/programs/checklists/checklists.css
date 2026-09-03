@@ -1,7 +1,25 @@
+.chk__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .chk__tabs {
-  margin-left: auto;
   display: flex;
   gap: 4px;
+}
+
+/* The session detail's own header — back navigation plus its progress chip,
+   not a repeat of the shell's brand, so it keeps its border-rule styling
+   independently of `.page__head` (removed everywhere else). */
+.chk__detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1.5px solid var(--af-ink);
 }
 
 .chk__list {

@@ -160,6 +160,36 @@ export interface TaskPageRow {
    * options up by id and renders a dash when the lookup misses.
    */
   values: Record<string, unknown>;
+  /** Sanitized HTML from the page's rich-text body editor. `''` for a page
+   *  written before this existed, or one whose body was never touched. */
+  body: string;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+  deleted: boolean;
+}
+
+/** One synced row, fixed id `'app'` — per-account preferences that used to
+ *  have nowhere to live. `tokens.css` has anticipated this since the theme
+ *  tokens were written: "the theme is an explicit choice stored in
+ *  settings." */
+export interface SettingsRow {
+  id: string;
+  theme: 'system' | 'light' | 'dark';
+  /** Overrides `--af-sans` only — the mono stack keeps carrying machinery
+   *  regardless of font choice. */
+  font: 'default' | 'times' | 'consolas';
+  /** Array order is display order; a widget absent from this list (added
+   *  after the user's settings were seeded) is treated as visible and
+   *  appended at the end — see `programs/dashboard/DashboardScreen.tsx`. */
+  dashboardWidgets: { id: string; hidden: boolean }[];
+  updatedAt: number;
+}
+
+export interface TodoItemRow {
+  id: string;
+  text: string;
+  checked: boolean;
   sortOrder: number;
   createdAt: number;
   updatedAt: number;
@@ -176,6 +206,8 @@ export class AfDatabase extends Dexie {
   aiConversations!: EntityTable<AiConversationRow, 'id'>;
   taskProperties!: EntityTable<TaskPropertyRow, 'id'>;
   taskPages!: EntityTable<TaskPageRow, 'id'>;
+  settings!: EntityTable<SettingsRow, 'id'>;
+  todoItems!: EntityTable<TodoItemRow, 'id'>;
 
   constructor(name: string) {
     super(name);
@@ -194,8 +226,21 @@ export class AfDatabase extends Dexie {
       taskProperties: 'id, sortOrder, updatedAt, deleted',
       taskPages: 'id, sortOrder, updatedAt, deleted',
     });
+    this.version(4).stores({
+      settings: 'id, updatedAt',
+      todoItems: 'id, sortOrder, updatedAt, deleted',
+    });
   }
 }
+
+/** The one settings row, before anything has ever been saved. */
+export const defaultSettings = (): SettingsRow => ({
+  id: 'app',
+  theme: 'system',
+  font: 'default',
+  dashboardWidgets: [],
+  updatedAt: 0,
+});
 
 export const localScope = 'local';
 

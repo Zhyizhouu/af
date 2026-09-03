@@ -5,10 +5,13 @@ import {
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updatePassword,
+  verifyBeforeUpdateEmail,
   type Auth,
   type User,
 } from 'firebase/auth';
@@ -54,6 +57,38 @@ export const resetPassword = (email: string) =>
   sendPasswordResetEmail(auth(), email.trim());
 
 export const signOutNow = () => signOut(auth());
+
+/**
+ * Re-proves a password-provider account owns its current password.
+ *
+ * Firebase requires a "recent" sign-in before it will honour a password or
+ * email change; the credential form of that check is a fresh reauthentication
+ * rather than a timestamp, so this runs immediately before either.
+ */
+export const reauthenticateWithPassword = (password: string) => {
+  const user = auth().currentUser;
+  if (!user?.email) throw new Error('Not signed in with a password account.');
+  return reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
+};
+
+export const changePassword = async (currentPassword: string, nextPassword: string) => {
+  await reauthenticateWithPassword(currentPassword);
+  const user = auth().currentUser;
+  if (!user) throw new Error('Not signed in.');
+  await updatePassword(user, nextPassword);
+};
+
+/**
+ * Sends a confirmation link to the new address rather than switching it
+ * immediately — `updateEmail` alone increasingly requires this same
+ * verification step anyway, so this is the direct, current-recommended path.
+ */
+export const changeEmail = async (currentPassword: string, nextEmail: string) => {
+  await reauthenticateWithPassword(currentPassword);
+  const user = auth().currentUser;
+  if (!user) throw new Error('Not signed in.');
+  await verifyBeforeUpdateEmail(user, nextEmail.trim());
+};
 
 /**
  * The credential the API asks for.
@@ -118,6 +153,8 @@ export function authErrorMessage(error: unknown): string {
       return 'Too many attempts. Wait a minute and try again.';
     case 'auth/account-exists-with-different-credential':
       return 'That address is already registered with a password. Sign in with it instead.';
+    case 'auth/requires-recent-login':
+      return 'Sign out and back in, then try again.';
     default:
       return 'Sign-in failed. Try again.';
   }

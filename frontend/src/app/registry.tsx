@@ -5,6 +5,7 @@ import { DashboardScreen } from '../programs/dashboard/DashboardScreen';
 import { CalendarScreen } from '../programs/calendar/CalendarScreen';
 import { ChecklistsScreen } from '../programs/checklists/ChecklistsScreen';
 import { HabitsScreen } from '../programs/habits/HabitsScreen';
+import { ProfileScreen } from '../programs/profile/ProfileScreen';
 import { QrScreen } from '../programs/qr/QrScreen';
 import { TasksScreen } from '../programs/tasks/TasksScreen';
 import type { Program } from './programs';
@@ -38,6 +39,8 @@ export function renderProgram(program: Program, options: PaneOptions) {
       return <TasksScreen paneWidth={options.paneWidth} />;
     case 'audio':
       return <AudioScreen />;
+    case 'profile':
+      return <ProfileScreen />;
     default:
       return <NotPorted program={program} />;
   }

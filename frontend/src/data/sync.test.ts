@@ -240,6 +240,7 @@ describe('sync', () => {
       title: 'Ship it',
       icon: { kind: 'preset', value: '★' },
       values: { 'prop-1': 'opt-1', 'prop-2': ['a', 'b'] },
+      body: '',
       sortOrder: 0,
       createdAt: 1,
       updatedAt: 2,
@@ -266,6 +267,62 @@ describe('sync', () => {
     const pulled = await db().taskPages.get('page-2');
     expect(pulled!.icon).toBeNull();
     expect(pulled!.values).toEqual({});
+  });
+
+  it('pushes a task page body and defaults a pulled page with none to empty', async () => {
+    await db().taskPages.put({
+      id: 'page-3',
+      title: 'Notes',
+      icon: null,
+      values: {},
+      body: '<h1>Plan</h1><p>Ship it.</p>',
+      sortOrder: 0,
+      createdAt: 1,
+      updatedAt: 2,
+      deleted: false,
+    });
+    remote.set('users/uid-1/taskPages/page-4', {
+      title: 'Written by Flutter, no body field',
+      sortOrder: 0,
+      updatedAt: Timestamp.fromMillis(5000),
+    });
+
+    await syncAll('uid-1');
+
+    expect(written.get('users/uid-1/taskPages/page-3')!.body).toBe('<h1>Plan</h1><p>Ship it.</p>');
+    expect((await db().taskPages.get('page-4'))!.body).toBe('');
+  });
+
+  it('syncs settings as a single document', async () => {
+    await db().settings.put({
+      id: 'app',
+      theme: 'dark',
+      font: 'consolas',
+      dashboardWidgets: [{ id: 'habits', hidden: true }],
+      updatedAt: 2,
+    });
+
+    await syncAll('uid-1');
+
+    const pushed = written.get('users/uid-1/settings/app');
+    expect(pushed!.theme).toBe('dark');
+    expect(pushed!.font).toBe('consolas');
+    expect(pushed!.dashboardWidgets).toEqual([{ id: 'habits', hidden: true }]);
+  });
+
+  it('pulls a remote to-do item down', async () => {
+    remote.set('users/uid-1/todoItems/todo-1', {
+      text: 'Buy milk',
+      checked: false,
+      sortOrder: 0,
+      updatedAt: Timestamp.fromMillis(5000),
+    });
+
+    await syncAll('uid-1');
+
+    const local = await db().todoItems.get('todo-1');
+    expect(local!.text).toBe('Buy milk');
+    expect(local!.checked).toBe(false);
   });
 
   // Checklist items and habits are still Flutter-only. A pass that pushed an

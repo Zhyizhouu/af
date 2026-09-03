@@ -16,12 +16,13 @@
 }
 
 .tsk__table {
-  width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 13.5px;
 }
 
 .tsk__table th {
+  position: relative;
   font-family: var(--af-mono);
   font-size: 11px;
   letter-spacing: 0.1em;
@@ -31,6 +32,24 @@
   padding: 10px 12px;
   border-bottom: 1.5px solid var(--af-line-strong);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A grab strip on each column's right edge — dragged widths persist to
+   `localStorage`, see `TasksScreen.tsx`'s `useColumnWidths`. */
+.tsk__col-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.tsk__col-resize:hover {
+  background: var(--af-accent-soft);
 }
 
 .tsk__table td {
@@ -238,6 +257,45 @@
   outline: none;
 }
 
+.tsk__detail-settings {
+  position: relative;
+  flex: none;
+}
+
+.tsk__detail-settings-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  background: var(--af-panel);
+  border: 1px solid var(--af-line-strong);
+  border-radius: var(--af-radius);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.tsk__detail-settings-menu button {
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 9px 12px;
+  font-family: var(--af-sans);
+  font-size: 13px;
+  color: var(--af-ink);
+  cursor: pointer;
+}
+
+.tsk__detail-settings-menu button:hover {
+  background: var(--af-sunken);
+}
+
+.tsk__detail-settings-danger {
+  color: var(--af-warn);
+}
+
 .tsk__detail-fields {
   display: flex;
   flex-direction: column;
@@ -268,6 +326,95 @@
 .tsk__option.is-active {
   opacity: 1;
   border-color: var(--af-line-strong);
+}
+
+/* ---- rich-text body ---- */
+
+.tsk__body {
+  position: relative;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--af-line);
+}
+
+.tsk__body-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.tsk__body-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: var(--af-sunken);
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius);
+}
+
+.tsk__body-editor {
+  min-height: 120px;
+  outline: none;
+}
+
+.tsk__body-editor:empty::before {
+  content: 'Write something, or type / for a block…';
+  color: var(--af-muted);
+}
+
+.tsk__body-editor h1,
+.tsk__body-editor h2,
+.tsk__body-editor h3 {
+  font-family: var(--af-sans);
+  margin: 0.6em 0 0.3em;
+}
+
+.tsk__body-editor h1 {
+  font-size: 22px;
+}
+
+.tsk__body-editor h2 {
+  font-size: 18px;
+}
+
+.tsk__body-editor h3 {
+  font-size: 15px;
+}
+
+.tsk__body-editor p {
+  margin: 0 0 0.6em;
+}
+
+.tsk__slash-menu {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  background: var(--af-panel);
+  border: 1px solid var(--af-line-strong);
+  border-radius: var(--af-radius);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.tsk__slash-menu button {
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 8px 12px;
+  font-family: var(--af-sans);
+  font-size: 13px;
+  color: var(--af-ink);
+  cursor: pointer;
+}
+
+.tsk__slash-menu button.is-active,
+.tsk__slash-menu button:hover {
+  background: var(--af-accent-soft);
 }
 
 /* ---- icon picker ---- */
@@ -363,14 +510,22 @@
   border-color: var(--af-ink);
 }
 
-.tsk__add-option {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
+.tsk__add-option-pill {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 4px 10px;
+  border: 1px dashed var(--af-line-strong);
+  border-radius: var(--af-radius);
+  background: none;
+  color: var(--af-muted);
+  font-family: var(--af-mono);
+  font-size: 11px;
+  cursor: pointer;
 }
 
-.tsk__add-option .af-input {
-  flex: 1;
+.tsk__add-option-pill:hover {
+  border-color: var(--af-accent);
+  color: var(--af-accent);
 }
 
 .tsk__add-property {

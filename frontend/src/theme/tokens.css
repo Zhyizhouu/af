@@ -70,6 +70,17 @@
   --af-on-ink: var(--af-desk);
 }
 
+/* Profile's font setting, stamped as `data-font` the same way the theme is —
+   see `app/session.tsx`'s `applySettings`. Only `--af-sans` moves: the mono
+   stack keeps carrying machinery regardless of the prose face chosen. */
+:root[data-font='times'] {
+  --af-sans: 'Times New Roman', Times, Georgia, serif;
+}
+
+:root[data-font='consolas'] {
+  --af-sans: Consolas, 'Cascadia Mono', Menlo, 'Roboto Mono', monospace;
+}
+
 /* The theme is an explicit choice stored in settings, so "system" resolves to
    a stamped attribute at boot rather than being read here. This block only
    covers the first paint before that runs. */

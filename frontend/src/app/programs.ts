@@ -34,6 +34,7 @@ export const programs: readonly Program[] = [
   { slug: 'audio', name: 'Audio Converter', mark: '♪', requiresAuth: true, wide: false },
   { slug: 'ai', name: 'AI', mark: '✦', requiresAuth: true, wide: false },
   { slug: 'qr', name: 'QR Generator', mark: '▣', requiresAuth: true, wide: false },
+  { slug: 'profile', name: 'Profile', mark: '⚙', requiresAuth: true, wide: false },
 ];
 
 export const programBySlug = (slug: string | null | undefined): Program | undefined =>

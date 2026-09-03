@@ -148,6 +148,9 @@ export function AiScreen({
 
       const window: AiEntry[] = [];
       for (const entry of agenda) {
+        // Task Tracker due dates are out of the assistant's window for now —
+        // it knows the calendar and proctor sessions, not Task Tracker.
+        if (entry.kind === 'task') continue;
         if (entry.end < from || entry.start > until) continue;
         const session = entry.kind === 'session' ? sessions.get(entry.id) : undefined;
         window.push({

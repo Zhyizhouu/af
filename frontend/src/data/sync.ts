@@ -15,10 +15,12 @@ import {
   type ChecklistItemRow,
   type HabitRow,
   type ProctorSessionRow,
+  type SettingsRow,
   type TaskPageIcon,
   type TaskPageRow,
   type TaskPropertyRow,
   type TaskPropertyType,
+  type TodoItemRow,
 } from './db';
 
 /**
@@ -265,6 +267,7 @@ const taskPageToDocument = (row: TaskPageRow): DocumentData => ({
   title: row.title,
   icon: row.icon,
   values: row.values,
+  body: row.body,
   sortOrder: row.sortOrder,
   createdAt: stamp(row.createdAt),
   updatedAt: stamp(row.updatedAt),
@@ -280,6 +283,47 @@ const taskPageFromDocument = (id: string, data: DocumentData): TaskPageRow => ({
     data.values && typeof data.values === 'object'
       ? (data.values as Record<string, unknown>)
       : {},
+  // Absent on a page written before the rich-text body existed.
+  body: String(data.body ?? ''),
+  sortOrder: Number(data.sortOrder ?? 0),
+  createdAt: millis(data.createdAt),
+  updatedAt: millis(data.updatedAt),
+  deleted: Boolean(data.deleted),
+});
+
+const settingsToDocument = (row: SettingsRow): DocumentData => ({
+  theme: row.theme,
+  font: row.font,
+  dashboardWidgets: row.dashboardWidgets,
+  updatedAt: stamp(row.updatedAt),
+});
+
+const settingsFromDocument = (id: string, data: DocumentData): SettingsRow => ({
+  id,
+  theme: data.theme === 'light' || data.theme === 'dark' ? data.theme : 'system',
+  font: data.font === 'times' || data.font === 'consolas' ? data.font : 'default',
+  dashboardWidgets: Array.isArray(data.dashboardWidgets)
+    ? (data.dashboardWidgets as unknown[]).map((raw) => {
+        const widget = raw as Record<string, unknown>;
+        return { id: String(widget?.id ?? ''), hidden: Boolean(widget?.hidden) };
+      })
+    : [],
+  updatedAt: millis(data.updatedAt),
+});
+
+const todoItemToDocument = (row: TodoItemRow): DocumentData => ({
+  text: row.text,
+  checked: row.checked,
+  sortOrder: row.sortOrder,
+  createdAt: stamp(row.createdAt),
+  updatedAt: stamp(row.updatedAt),
+  deleted: row.deleted,
+});
+
+const todoItemFromDocument = (id: string, data: DocumentData): TodoItemRow => ({
+  id,
+  text: String(data.text ?? ''),
+  checked: Boolean(data.checked),
   sortOrder: Number(data.sortOrder ?? 0),
   createdAt: millis(data.createdAt),
   updatedAt: millis(data.updatedAt),
@@ -410,5 +454,23 @@ export async function syncAll(uid: string): Promise<void> {
     conversationToDocument,
     conversationFromDocument,
     (row) => db().aiConversations.put(row),
+  );
+
+  await syncCollection(
+    uid,
+    'settings',
+    await db().settings.toArray(),
+    settingsToDocument,
+    settingsFromDocument,
+    (row) => db().settings.put(row),
+  );
+
+  await syncCollection(
+    uid,
+    'todoItems',
+    await db().todoItems.toArray(),
+    todoItemToDocument,
+    todoItemFromDocument,
+    (row) => db().todoItems.put(row),
   );
 }

@@ -81,8 +81,7 @@ export function CalendarScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 's
 
   return (
     <div className="page page--tall cal">
-      <header className="page__head">
-        <span className="af-brand">Calendar</span>
+      <div className="cal__bar">
         <div className="cal__views">
           {views.map((option) => (
             <button
@@ -95,9 +94,6 @@ export function CalendarScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 's
             </button>
           ))}
         </div>
-      </header>
-
-      <div className="cal__bar">
         <AFButton label="‹" variant="ghost" onClick={() => setAnchor(stepAnchor(view, anchor, -1))} />
         <span className="cal__range">{rangeLabel(view, anchor)}</span>
         <AFButton label="›" variant="ghost" onClick={() => setAnchor(stepAnchor(view, anchor, 1))} />
@@ -184,9 +180,9 @@ const withHour = (day: Date, hour: number) =>
   new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour);
 
 const colorFor = (entry: AgendaEntry, categories: EventCategory[]): string =>
-  entry.kind === 'session'
-    ? 'var(--af-accent)'
-    : toneColor(categoryBySlug(categories, entry.category).toneIndex);
+  entry.kind === 'event'
+    ? toneColor(categoryBySlug(categories, entry.category).toneIndex)
+    : 'var(--af-accent)';
 
 /** Twelve mini-months, each marked where something is scheduled. */
 function YearView({
@@ -334,7 +330,7 @@ function DayAgenda({
                   {entry.allDay ? 'all day' : clock.format(entry.start)}
                 </span>
                 <span className="cal__agenda-title af-body">{entry.title}</span>
-                {entry.kind === 'session' && <span className="af-panel-label">session</span>}
+                {entry.kind !== 'event' && <span className="af-panel-label">{entry.kind}</span>}
               </button>
             </li>
           ))}

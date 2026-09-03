@@ -1,0 +1,82 @@
+.prf__row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.prf__panel {
+  flex: 1 1 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.prf__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prf__inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.prf__inline .af-input {
+  flex: 1;
+}
+
+.prf__fonts {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+
+.prf__font {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border: 1px solid var(--af-line-strong);
+  border-radius: var(--af-radius);
+  background: var(--af-sunken);
+  cursor: pointer;
+}
+
+.prf__font.is-active {
+  border-color: var(--af-accent);
+  box-shadow: 0 0 0 1px var(--af-accent);
+}
+
+.prf__font-sample {
+  font-size: 24px;
+  color: var(--af-ink);
+}
+
+.prf__themes {
+  display: flex;
+  gap: 8px;
+}
+
+.prf__theme {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--af-line-strong);
+  border-radius: var(--af-radius);
+  background: var(--af-sunken);
+  color: var(--af-ink);
+  font-family: var(--af-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.prf__theme.is-active {
+  border-color: var(--af-accent);
+  box-shadow: 0 0 0 1px var(--af-accent);
+}

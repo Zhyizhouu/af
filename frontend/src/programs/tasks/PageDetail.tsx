@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { AFButton, AFTag } from '../../components/AF';
+import { AFButton, AFIconButton, AFTag } from '../../components/AF';
 import type { TaskPageIcon, TaskPageRow, TaskPropertyRow } from '../../data/db';
 import { IconPicker } from './IconPicker';
-import { savePageField, savePageValue } from './store';
+import { PageBody } from './PageBody';
+import { deletePage, savePageField, savePageValue } from './store';
 
 /**
  * One page's detail: icon, title, and one field per active property.
@@ -29,10 +30,17 @@ export function PageDetail({
 }) {
   const [title, setTitle] = useState(page.title);
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // A different page opened into the same still-mounted detail view (side-peek
   // to side-peek without a close in between) — resync the local title draft.
   useEffect(() => setTitle(page.title), [page.id, page.title]);
+
+  useEffect(() => {
+    setShowSettings(false);
+    setConfirmingDelete(false);
+  }, [page.id]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -64,6 +72,13 @@ export function PageDetail({
     void savePageField(page.id, { icon }).then(onChange);
   };
 
+  const runDelete = () => {
+    void deletePage(page.id).then(() => {
+      onChange();
+      onClose();
+    });
+  };
+
   const content = (
     <>
       <div className="tsk__detail-head">
@@ -84,6 +99,36 @@ export function PageDetail({
           onChange={(event) => setTitle(event.target.value)}
           onBlur={commitTitle}
         />
+        <div className="tsk__detail-settings">
+          <AFIconButton
+            glyph="⚙"
+            tooltip="Page settings"
+            bordered={false}
+            onClick={() => setShowSettings((open) => !open)}
+          />
+          {showSettings && (
+            <div className="tsk__detail-settings-menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setShowSettings(false);
+                  setShowIconPicker(true);
+                }}
+              >
+                Change icon
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="tsk__detail-settings-danger"
+                onClick={() => (confirmingDelete ? runDelete() : setConfirmingDelete(true))}
+              >
+                {confirmingDelete ? 'Really delete?' : 'Delete page'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="tsk__detail-fields">
@@ -98,6 +143,8 @@ export function PageDetail({
           </div>
         ))}
       </div>
+
+      <PageBody page={page} onChange={onChange} />
 
       {showIconPicker && (
         <IconPicker onPick={pickIcon} onClose={() => setShowIconPicker(false)} />

@@ -1,3 +1,8 @@
+.hab__bar {
+  display: flex;
+  align-items: center;
+}
+
 .hab__list {
   list-style: none;
   margin: 0;
