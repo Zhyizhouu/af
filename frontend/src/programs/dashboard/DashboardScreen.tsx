@@ -4,7 +4,8 @@ import { AFHint, AFPanel } from '../../components/AF';
 import { useSession } from '../../app/session';
 import { visiblePrograms } from '../../app/programs';
 import { readAgenda, type AgendaEntry } from '../../data/agenda';
-import { categoryBySlug, listCategories, toneColor, type EventCategory } from '../calendar/categories';
+import { categoryBySlug, listCategories, type EventCategory } from '../calendar/categories';
+import { toneColor } from '../../data/tones';
 import { completionOver, listHabits, readDay, toggleHabit, todayKey } from '../habits/store';
 import { dayLabel } from '../habits/time';
 import type { HabitRow } from '../../data/db';
@@ -66,12 +67,7 @@ export function DashboardScreen() {
   return (
     <div className="page dash">
       <header className="page__head">
-        {/* The real monogram rather than the nav's accent tick. mark.png rather
-            than the shipped icon: that one carries a ring, a caption and a lot
-            of ground, which at this size reads as a dark blob. This is the same
-            art cropped to the monogram. */}
-        <img className="dash__logo" src="/mark.png" alt="" width={40} height={40} />
-        <span className="af-brand">reAFresh</span>
+        <span className="af-brand">Dashboard</span>
         <span className="page__spacer" />
         <span className="af-panel-label">{dayStamp.format(now)}</span>
       </header>

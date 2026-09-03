@@ -6,9 +6,9 @@ import {
   builtInCategories,
   categoryBySlug,
   listCategories,
-  toneColor,
   type EventCategory,
 } from './categories';
+import { toneColor } from '../../data/tones';
 import {
   addDays,
   dayKey,
@@ -82,7 +82,7 @@ export function CalendarScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 's
   return (
     <div className="page page--tall cal">
       <header className="page__head">
-        <span className="af-brand">reAFresh · Calendar</span>
+        <span className="af-brand">Calendar</span>
         <div className="cal__views">
           {views.map((option) => (
             <button

@@ -112,6 +112,60 @@ export interface AiConversationRow {
   deleted: boolean;
 }
 
+export type TaskPropertyType =
+  | 'text' | 'number' | 'select' | 'multiSelect' | 'status' | 'date' | 'checkbox' | 'url';
+
+export interface TaskPropertyOption {
+  id: string;
+  label: string;
+  /** Index into the shared tone palette (data/tones.ts) — same convention as
+   *  CategoryRow.toneIndex / HabitRow.toneIndex. */
+  toneIndex: number;
+}
+
+export interface TaskPropertyRow {
+  id: string;
+  name: string;
+  /** Fixed at creation. Changing it later would leave every existing page's
+   *  value for it meaningless, so the editor never offers to. */
+  type: TaskPropertyType;
+  /** Only meaningful for select/multiSelect/status; empty otherwise. */
+  options: TaskPropertyOption[];
+  /** Column order in the table. */
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+  deleted: boolean;
+}
+
+export interface TaskPageIcon {
+  kind: 'preset' | 'upload';
+  /** The glyph string for 'preset', the data: URI for 'upload'. */
+  value: string;
+}
+
+export interface TaskPageRow {
+  id: string;
+  title: string;
+  icon: TaskPageIcon | null;
+  /**
+   * Keyed by TaskPropertyRow.id. Shape depends on the property's type at
+   * write time: text/url → string; number → number|null; date → number|null
+   * (epoch ms); checkbox → boolean; select/status → string|null (an option
+   * id); multiSelect → string[] (option ids). Not a discriminated type — the
+   * contract lives in programs/tasks/store.ts, the same way
+   * AiConversationRow.turns' shape lives in programs/ai/message.ts rather
+   * than here. A value whose property or option has since been deleted is
+   * left in place rather than cleaned up; every reader looks properties and
+   * options up by id and renders a dash when the lookup misses.
+   */
+  values: Record<string, unknown>;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+  deleted: boolean;
+}
+
 export class AfDatabase extends Dexie {
   calendarEvents!: EntityTable<CalendarEventRow, 'id'>;
   proctorSessions!: EntityTable<ProctorSessionRow, 'id'>;
@@ -120,6 +174,8 @@ export class AfDatabase extends Dexie {
   habits!: EntityTable<HabitRow, 'id'>;
   habitDays!: EntityTable<HabitDayRow, 'day'>;
   aiConversations!: EntityTable<AiConversationRow, 'id'>;
+  taskProperties!: EntityTable<TaskPropertyRow, 'id'>;
+  taskPages!: EntityTable<TaskPageRow, 'id'>;
 
   constructor(name: string) {
     super(name);
@@ -133,6 +189,10 @@ export class AfDatabase extends Dexie {
       categories: 'id, updatedAt, deleted',
       habits: 'id, sortOrder, updatedAt, deleted',
       habitDays: 'day, updatedAt',
+    });
+    this.version(3).stores({
+      taskProperties: 'id, sortOrder, updatedAt, deleted',
+      taskPages: 'id, sortOrder, updatedAt, deleted',
     });
   }
 }

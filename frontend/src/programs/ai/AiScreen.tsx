@@ -381,7 +381,7 @@ export function AiScreen({
               onClick={() => setSidebarOpen(true)}
             />
           )}
-          <span className="af-brand">reAFresh · AI</span>
+          <span className="af-brand">AI</span>
           <span className="ai__tagline af-panel-label">talk it through, then keep it</span>
         </header>
 

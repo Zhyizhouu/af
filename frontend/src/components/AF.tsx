@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { hexToRgba, toneColor } from '../data/tones';
 import './af.css';
 
 /**
@@ -110,6 +111,21 @@ export function AFHint({ children, tip = false }: { children: ReactNode; tip?: b
 export function AFChip({ label, color }: { label: string; color?: string }) {
   return (
     <span className="af-chip" style={{ color: color ?? 'var(--af-accent)' }}>
+      {label}
+    </span>
+  );
+}
+
+/**
+ * A filled, coloured pill — for a property option's value, not for anything
+ * `AFChip` already covers. `AFChip` colours its text only; option values
+ * (Select/Multi-select/Status/Priority) need to read as a tinted background
+ * at a glance, which is the one thing it can't do.
+ */
+export function AFTag({ label, toneIndex }: { label: string; toneIndex: number }) {
+  const color = toneColor(toneIndex);
+  return (
+    <span className="af-tag" style={{ color, background: hexToRgba(color, 0.16) }}>
       {label}
     </span>
   );

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AFButton, AFEmptyState, AFHint, AFPanel } from '../../components/AF';
 import { useSession } from '../../app/session';
 import type { HabitRow } from '../../data/db';
-import { categoryTones, toneColor } from '../calendar/categories';
+import { categoryTones, toneColor } from '../../data/tones';
 import {
   completionOver,
   deleteHabit,
@@ -79,7 +79,7 @@ export function HabitsScreen() {
   return (
     <div className="page hab">
       <header className="page__head">
-        <span className="af-brand">reAFresh · Habits</span>
+        <span className="af-brand">Habits</span>
         <span className="page__spacer" />
         <AFButton label="New habit" onClick={() => setEditing('new')} />
       </header>

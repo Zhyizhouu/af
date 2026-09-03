@@ -178,6 +178,19 @@
   white-space: nowrap;
 }
 
+/* ---- tag ---- */
+
+/* Filled where af-chip is outlined — a property option's value reads as a
+   tinted background, not just coloured text. */
+.af-tag {
+  display: inline-block;
+  font-family: var(--af-mono);
+  font-size: 11px;
+  border-radius: var(--af-radius);
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
 /* ---- masthead ---- */
 
 .af-masthead {

@@ -30,6 +30,7 @@ export const programs: readonly Program[] = [
   { slug: 'checklists', name: 'Checklists', mark: '☑', requiresAuth: true, wide: false },
   { slug: 'calendar', name: 'Calendar', mark: '▦', requiresAuth: true, wide: true },
   { slug: 'habits', name: 'Habits', mark: '◈', requiresAuth: true, wide: false },
+  { slug: 'tasks', name: 'Task Tracker', mark: '◆', requiresAuth: true, wide: true },
   { slug: 'audio', name: 'Audio Converter', mark: '♪', requiresAuth: true, wide: false },
   { slug: 'ai', name: 'AI', mark: '✦', requiresAuth: true, wide: false },
   { slug: 'qr', name: 'QR Generator', mark: '▣', requiresAuth: true, wide: false },

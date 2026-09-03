@@ -200,6 +200,74 @@ describe('sync', () => {
     expect(pushed!.turns).toEqual(['{"role":"user","text":"hi"}']);
   });
 
+  it('pushes a task property with its options', async () => {
+    await db().taskProperties.put({
+      id: 'prop-1',
+      name: 'Priority',
+      type: 'select',
+      options: [{ id: 'opt-1', label: 'High', toneIndex: 5 }],
+      sortOrder: 0,
+      createdAt: 1,
+      updatedAt: 2,
+      deleted: false,
+    });
+
+    await syncAll('uid-1');
+
+    const pushed = written.get('users/uid-1/taskProperties/prop-1');
+    expect(pushed!.name).toBe('Priority');
+    expect(pushed!.type).toBe('select');
+    expect(pushed!.options).toEqual([{ id: 'opt-1', label: 'High', toneIndex: 5 }]);
+  });
+
+  it('pulls a task property, defaulting an unrecognised type to text', async () => {
+    remote.set('users/uid-1/taskProperties/prop-2', {
+      name: 'Weird',
+      type: 'nonsense',
+      options: [],
+      sortOrder: 0,
+      updatedAt: Timestamp.fromMillis(5000),
+    });
+
+    await syncAll('uid-1');
+
+    expect((await db().taskProperties.get('prop-2'))!.type).toBe('text');
+  });
+
+  it('pushes a task page with its icon and values map intact', async () => {
+    await db().taskPages.put({
+      id: 'page-1',
+      title: 'Ship it',
+      icon: { kind: 'preset', value: '★' },
+      values: { 'prop-1': 'opt-1', 'prop-2': ['a', 'b'] },
+      sortOrder: 0,
+      createdAt: 1,
+      updatedAt: 2,
+      deleted: false,
+    });
+
+    await syncAll('uid-1');
+
+    const pushed = written.get('users/uid-1/taskPages/page-1');
+    expect(pushed!.title).toBe('Ship it');
+    expect(pushed!.icon).toEqual({ kind: 'preset', value: '★' });
+    expect(pushed!.values).toEqual({ 'prop-1': 'opt-1', 'prop-2': ['a', 'b'] });
+  });
+
+  it('pulls a task page with no icon or values as empty defaults', async () => {
+    remote.set('users/uid-1/taskPages/page-2', {
+      title: 'Bare',
+      sortOrder: 0,
+      updatedAt: Timestamp.fromMillis(5000),
+    });
+
+    await syncAll('uid-1');
+
+    const pulled = await db().taskPages.get('page-2');
+    expect(pulled!.icon).toBeNull();
+    expect(pulled!.values).toEqual({});
+  });
+
   // Checklist items and habits are still Flutter-only. A pass that pushed an
   // empty local table over them would be a data loss, not a no-op.
   it('leaves collections it does not model alone', async () => {

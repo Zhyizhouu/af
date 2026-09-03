@@ -3,7 +3,8 @@ import { AFButton, AFHint, AFPanel } from '../../components/AF';
 import type { AgendaEntry } from '../../data/agenda';
 import { notificationPermission, requestNotificationPermission } from '../../data/notifications';
 import { reminderOptions } from '../../data/reminders';
-import { toneColor, type EventCategory } from './categories';
+import { type EventCategory } from './categories';
+import { toneColor } from '../../data/tones';
 
 const localInput = (value: Date): string => {
   const pad = (n: number) => String(n).padStart(2, '0');

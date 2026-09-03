@@ -115,7 +115,7 @@ export function AudioScreen({ api }: { api?: AudioApi }) {
   return (
     <div className="page aud">
       <header className="page__head">
-        <span className="af-brand">reAFresh · Audio Converter</span>
+        <span className="af-brand">Audio Converter</span>
       </header>
 
       {limits && !limits.configured && (

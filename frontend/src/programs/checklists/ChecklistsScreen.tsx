@@ -71,7 +71,7 @@ export function ChecklistsScreen() {
   return (
     <div className="page chk">
       <header className="page__head">
-        <span className="af-brand">reAFresh · Checklists</span>
+        <span className="af-brand">Checklists</span>
         <div className="chk__tabs">
           {(['active', 'archived'] as const).map((option) => (
             <button

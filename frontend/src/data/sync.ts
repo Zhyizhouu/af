@@ -15,6 +15,10 @@ import {
   type ChecklistItemRow,
   type HabitRow,
   type ProctorSessionRow,
+  type TaskPageIcon,
+  type TaskPageRow,
+  type TaskPropertyRow,
+  type TaskPropertyType,
 } from './db';
 
 /**
@@ -222,6 +226,66 @@ const habitFromDocument = (id: string, data: DocumentData): HabitRow => ({
   deleted: Boolean(data.deleted),
 });
 
+const taskPropertyTypes: readonly TaskPropertyType[] =
+  ['text', 'number', 'select', 'multiSelect', 'status', 'date', 'checkbox', 'url'];
+
+const taskPropertyToDocument = (row: TaskPropertyRow): DocumentData => ({
+  name: row.name,
+  type: row.type,
+  options: row.options,
+  sortOrder: row.sortOrder,
+  createdAt: stamp(row.createdAt),
+  updatedAt: stamp(row.updatedAt),
+  deleted: row.deleted,
+});
+
+const taskPropertyFromDocument = (id: string, data: DocumentData): TaskPropertyRow => ({
+  id,
+  name: String(data.name ?? 'Untitled'),
+  type: taskPropertyTypes.includes(data.type as TaskPropertyType)
+    ? (data.type as TaskPropertyType)
+    : 'text',
+  options: Array.isArray(data.options)
+    ? (data.options as unknown[]).map((raw) => {
+        const option = raw as Record<string, unknown>;
+        return {
+          id: String(option?.id ?? crypto.randomUUID()),
+          label: String(option?.label ?? ''),
+          toneIndex: Number(option?.toneIndex ?? 0),
+        };
+      })
+    : [],
+  sortOrder: Number(data.sortOrder ?? 0),
+  createdAt: millis(data.createdAt),
+  updatedAt: millis(data.updatedAt),
+  deleted: Boolean(data.deleted),
+});
+
+const taskPageToDocument = (row: TaskPageRow): DocumentData => ({
+  title: row.title,
+  icon: row.icon,
+  values: row.values,
+  sortOrder: row.sortOrder,
+  createdAt: stamp(row.createdAt),
+  updatedAt: stamp(row.updatedAt),
+  deleted: row.deleted,
+});
+
+const taskPageFromDocument = (id: string, data: DocumentData): TaskPageRow => ({
+  id,
+  title: String(data.title ?? 'Untitled'),
+  icon:
+    data.icon && typeof data.icon === 'object' ? (data.icon as TaskPageIcon) : null,
+  values:
+    data.values && typeof data.values === 'object'
+      ? (data.values as Record<string, unknown>)
+      : {},
+  sortOrder: Number(data.sortOrder ?? 0),
+  createdAt: millis(data.createdAt),
+  updatedAt: millis(data.updatedAt),
+  deleted: Boolean(data.deleted),
+});
+
 /**
  * Day records, keyed `YYYY-MM-DD` in Jakarta.
  *
@@ -265,10 +329,13 @@ async function syncHabitDays(uid: string): Promise<void> {
 /**
  * Reconciles everything.
  *
- * Order matters in two places, both inherited from the Flutter build: sessions
- * before their checklist items, and categories before events — an event's
- * colour resolves through its category, so pulling events first would show them
- * all as "Other" until the next pass.
+ * Order matters in three places: sessions before their checklist items, and
+ * categories before events and task properties before task pages for the
+ * same reason — an event's colour resolves through its category, and a
+ * page's option values resolve through its property's option list, so
+ * pulling the dependent collection first would show everything unresolved
+ * until the next pass. The category/event ordering is inherited from the
+ * Flutter build; task properties/pages are new but follow the same rule.
  */
 export async function syncAll(uid: string): Promise<void> {
   await syncCollection(
@@ -317,6 +384,24 @@ export async function syncAll(uid: string): Promise<void> {
   );
 
   await syncHabitDays(uid);
+
+  await syncCollection(
+    uid,
+    'taskProperties',
+    await db().taskProperties.toArray(),
+    taskPropertyToDocument,
+    taskPropertyFromDocument,
+    (row) => db().taskProperties.put(row),
+  );
+
+  await syncCollection(
+    uid,
+    'taskPages',
+    await db().taskPages.toArray(),
+    taskPageToDocument,
+    taskPageFromDocument,
+    (row) => db().taskPages.put(row),
+  );
 
   await syncCollection(
     uid,
