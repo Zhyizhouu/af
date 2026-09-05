@@ -6,9 +6,10 @@ import type { Program } from '../../../app/programs';
  * right — sized and shown/hidden exactly like any other widget, and
  * independent of Profile's "Displayed Applications" (header) setting.
  *
- * At its smallest dragged size the name is dropped by a container query in
- * `dashboard.css` (`.dash__widget-body`'s `container-type: inline-size`),
- * leaving just the mark — a launcher shrunk down to an icon.
+ * One line — mark then name — so it costs a button's worth of space rather
+ * than a card's. At its smallest dragged size the name is dropped by a
+ * container query in `dashboard.css` (`.dash__widget-body`'s
+ * `container-type: inline-size`), leaving just the mark.
  */
 export function AppWidget({ program }: { program: Program }) {
   return (

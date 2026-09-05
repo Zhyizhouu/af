@@ -47,9 +47,9 @@ export function WidgetFrame({
       }}
     >
       <div className="dash__gutter">
-        <span className="dash__grip" onPointerDown={onDragStart} title="Drag to move">
-          ⠿
-        </span>
+        {/* No glyph: the grip is drawn in CSS, because the braille character
+            this used renders as `#` in the mono fallback stack. */}
+        <span className="dash__grip" onPointerDown={onDragStart} title="Drag to move" aria-hidden />
         <button type="button" className="dash__gutter-btn" onClick={onHide} title="Remove from dashboard">
           ✕
         </button>

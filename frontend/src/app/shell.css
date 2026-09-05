@@ -5,27 +5,47 @@
   min-height: 0;
 }
 
+/*
+ * One line, always. It used to wrap, which dropped the sync dot, the
+ * settings icon and Sign out onto a second row at the far left, orphaned
+ * from everything and reading as broken layout. The links are the only
+ * elastic part: they shrink and scroll, and every fixed control keeps its
+ * place on the right.
+ */
 .af-nav {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 12px 20px;
-  border-bottom: 1.5px solid var(--af-ink);
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--af-line);
   background: var(--af-panel);
   flex: none;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .af-nav__brand {
   margin-right: 6px;
 }
 
+/* The one elastic element in the bar: shrinks first, scrolls rather than
+   wraps, and hides its scrollbar so it still reads as a row of links. */
 .af-nav__links {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
+  gap: 2px;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.af-nav__links::-webkit-scrollbar {
+  display: none;
+}
+
+.af-nav__link {
+  flex: none;
 }
 
 .af-nav__link {
@@ -55,7 +75,7 @@
 }
 
 .af-nav__split {
-  margin-left: auto;
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -80,9 +100,10 @@
 }
 
 .af-nav__session {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .af-nav__sync {

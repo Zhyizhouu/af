@@ -39,7 +39,13 @@ export function DashboardScreen() {
   const layout = useMemo(() => {
     const stored = settings.dashboard;
     if (stored.rows.length === 0 && stored.hidden.length === 0) {
-      return seed(catalog.map((widget) => widget.id));
+      // Launchers three to a row, panels two — a compact strip of buttons
+      // above the things that actually carry information, rather than a
+      // launcher paired off against a tall panel and leaving a hole under
+      // itself.
+      const apps = catalog.filter((widget) => widget.app).map((widget) => widget.id);
+      const panels = catalog.filter((widget) => !widget.app).map((widget) => widget.id);
+      return { rows: [...seed(apps, 3).rows, ...seed(panels, 2).rows], hidden: [] };
     }
     const known = new Set([...visibleIds(stored), ...stored.hidden]);
     const missing = catalog.filter((widget) => !known.has(widget.id));

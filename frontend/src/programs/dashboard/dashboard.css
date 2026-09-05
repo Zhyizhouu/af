@@ -3,51 +3,66 @@
   align-items: center;
 }
 
-/* An application, as a dashboard widget (`AppWidget.tsx`) — fills whatever
-   space its frame gives it, centered, so it reads the same whether it is
-   sitting at its default tile size or shrunk to an icon. */
+/*
+ * An application, as a dashboard widget (`AppWidget.tsx`).
+ *
+ * A single line — mark, then name — rather than a tall stack. As a centered
+ * column it was a ~100px card holding one small glyph and one word, and six
+ * of them ate the entire top half of the dashboard before any actual
+ * information appeared. A launcher is a button; it should take a button's
+ * worth of room.
+ */
 .dash__tile {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 10px;
   height: 100%;
+  padding: 13px 15px;
   background: var(--af-panel);
+  border: 1px solid var(--af-line);
+  border-radius: var(--af-radius);
   text-decoration: none;
   color: inherit;
   transition: border-color 120ms ease, background 120ms ease;
 }
 
 .dash__tile:hover {
-  background: var(--af-accent-soft);
+  border-color: var(--af-line-strong);
+  background: var(--af-sunken);
 }
 
 .dash__mark {
   font-family: var(--af-mono);
-  font-size: 26px;
+  font-size: 15px;
   color: var(--af-accent);
+  flex: none;
 }
 
 .dash__name {
   font-family: var(--af-mono);
-  font-size: 12px;
-  letter-spacing: 0.1em;
+  font-size: 11px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--af-ink);
-  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Dragged down to its smallest size, an app widget drops its name and keeps
-   only the mark — a launcher shrunk to an icon. Queries `.dash__widget-body`
-   below, not the viewport, so it reacts to that one widget's own size. */
-@container (max-width: 170px) {
+/* Dragged narrow, an app widget drops its name and centres on the mark — a
+   launcher shrunk to an icon. Queries `.dash__widget-body`, not the
+   viewport, so it reacts to that one widget's own width. */
+@container (max-width: 150px) {
   .dash__name {
     display: none;
   }
 
+  .dash__tile {
+    justify-content: center;
+  }
+
   .dash__mark {
-    font-size: 34px;
+    font-size: 19px;
   }
 }
 /* ---- rows of columns ---- */
@@ -71,9 +86,18 @@
   padding-left: 22px;
 }
 
+/*
+ * Cards are their own height and hang from the top of the row.
+ *
+ * `stretch` was borrowed from Notion, where blocks carry no border and an
+ * uneven column is invisible. Here it inflated "Nothing scheduled today"
+ * into a card as tall as whatever sat beside it, and flattened the
+ * Completion sparkline into a line at the bottom of an empty box — bar
+ * heights are a percentage of a container that had no business being tall.
+ */
 .dash__row {
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
   gap: 0;
   min-width: 0;
 }
@@ -106,13 +130,20 @@
   transition: flex-basis 120ms ease;
 }
 
-/* Lifted and following the pointer. `WidgetFrame.tsx` supplies the
-   `translate(...)`; nothing else on the grid moves until release, so the
-   drop indicator is the only thing claiming where it will land. */
+/*
+ * Lifted and following the pointer. `WidgetFrame.tsx` supplies the
+ * `translate(...)`; nothing else on the grid moves until release, so the
+ * drop indicator is the only thing claiming where it will land.
+ *
+ * Opaque, not translucent: a pale card over a pale page read as a rendering
+ * artefact rather than as something being held. Weight is what says "you
+ * have this" — a solid ground and a real shadow.
+ */
 .dash__widget.is-dragging {
   z-index: 20;
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
-  opacity: 0.92;
+  background: var(--af-panel);
+  border-radius: var(--af-radius);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
   transition: none;
   cursor: grabbing;
 }
@@ -143,23 +174,47 @@
   opacity: 1;
 }
 
+/*
+ * Drawn, not typed. `⠿` (braille) fell outside the Geometric Shapes block
+ * this project keeps its marks in, and rendered as `#` in the mono fallback
+ * — exactly the tofu trap already written down in the environment notes.
+ * Two columns of 2px squares owe nothing to a font.
+ */
 .dash__grip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
+  display: block;
   width: 18px;
   height: 26px;
   border-radius: var(--af-radius-sm);
-  color: var(--af-muted);
-  font-family: var(--af-mono);
-  font-size: 12px;
+  color: var(--af-line-strong);
   cursor: grab;
   touch-action: none;
   user-select: none;
 }
 
+.dash__grip::before,
+.dash__grip::after {
+  content: '';
+  position: absolute;
+  top: 7px;
+  width: 2px;
+  height: 12px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    currentColor 0 2px,
+    transparent 2px 5px
+  );
+}
+
+.dash__grip::before {
+  left: 6px;
+}
+
+.dash__grip::after {
+  left: 10px;
+}
+
 .dash__grip:hover {
-  background: var(--af-accent-soft);
   color: var(--af-accent);
 }
 
@@ -309,15 +364,14 @@
   transition: background 140ms ease;
 }
 
+/* Shorter, and no sunken well around it. At 120px inside a stretched card
+   seven bars read as a line at the bottom of an empty box; the chart should
+   be the size of the data it carries. */
 .dash__spark {
   display: flex;
   align-items: flex-end;
   gap: 4px;
-  height: 120px;
-  padding: 8px;
-  background: var(--af-sunken);
-  border: 1px solid var(--af-line);
-  border-radius: var(--af-radius);
+  height: 64px;
 }
 
 .dash__spark-bar {
