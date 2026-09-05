@@ -1,20 +1,18 @@
 import { AFButton, AFHint, AFPanel } from '../../../components/AF';
-import type { SettingsRow } from '../../../data/db';
 import type { DashboardWidget } from './registry';
 
 /**
- * "Add Widgets" — the one place a hidden widget (an application launcher or
- * a functional panel alike) comes back from. Everything else — reorder,
- * resize, hide — happens directly on the widget's own frame in
- * `DashboardScreen.tsx`, so this only ever lists what is currently hidden.
+ * "Add widgets" — where a removed widget comes back from. Everything else
+ * (move, resize, remove) happens on the widget itself, so this only ever
+ * lists what is currently off the grid.
  */
 export function WidgetPicker({
-  widgets,
+  hidden,
   catalog,
   onShow,
   onClose,
 }: {
-  widgets: SettingsRow['dashboardWidgets'];
+  hidden: readonly string[];
   catalog: readonly DashboardWidget[];
   onShow: (id: string) => void;
   onClose: () => void;
@@ -22,17 +20,17 @@ export function WidgetPicker({
   return (
     <div className="cal__overlay" role="dialog" aria-label="Add widgets">
       <AFPanel label="Add widgets" className="cal__editor">
-        {widgets.length === 0 ? (
+        {hidden.length === 0 ? (
           <AFHint>Every widget is already on the dashboard.</AFHint>
         ) : (
           <ul className="dash__widget-list">
-            {widgets.map((widget) => {
-              const entry = catalog.find((candidate) => candidate.id === widget.id);
+            {hidden.map((id) => {
+              const entry = catalog.find((candidate) => candidate.id === id);
               if (!entry) return null;
               return (
-                <li key={widget.id} className="dash__widget-row">
+                <li key={id} className="dash__widget-row">
                   <span className="af-body">{entry.label}</span>
-                  <AFButton label="Add" variant="quiet" onClick={() => onShow(widget.id)} />
+                  <AFButton label="Add" variant="quiet" onClick={() => onShow(id)} />
                 </li>
               );
             })}

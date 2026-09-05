@@ -1,29 +1,29 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { AFButton } from '../../components/AF';
 import { useSession } from '../../app/session';
+import type { DashboardLayout } from '../../data/db';
+import { hideWidget, moveWidget, resizeAt, seed, setHeight, showWidget, visibleIds, type DropTarget } from './layout';
 import { widgetCatalogFor } from './widgets/registry';
-import { useWidgetReorder } from './widgets/useWidgetReorder';
-import { useWidgetResize } from './widgets/useWidgetResize';
+import { useDashboardDrag } from './widgets/useDashboardDrag';
+import { useHeightPin, useRowResize } from './widgets/useDashboardResize';
 import { WidgetFrame } from './widgets/WidgetFrame';
 import { WidgetPicker } from './widgets/WidgetPicker';
 import './dashboard.css';
 
-const defaultWidth = { app: 3, panel: 6 };
-const defaultHeight = { app: 120, panel: 260 };
-
 /**
- * reAFresh — every widget an account has chosen to keep visible, arranged on
- * a 12-column grid it can drag to reorder and resize (both width and height,
- * from each widget's own corner pivot).
+ * reAFresh — a dashboard of rows and columns the account arranges itself.
  *
- * Applications are widgets here too (`widgetCatalogFor`'s `app:<slug>`
- * entries) — added and removed exactly like the functional ones, and
- * independent of Profile's "Displayed Applications" header setting; the two
- * lists don't read each other. The layout lives in `settings.dashboardWidgets`
- * (`app/session.tsx`), synced like everything else. A first-time account (an
- * empty array) sees the full catalog in its default order and size — seeded
- * here rather than in `session.tsx`, the same "seed on first read" pattern
- * `seedDefaultProperties` uses for Task Tracker.
+ * The layout model is Notion's: a widget dropped on a row's middle joins it
+ * as a column, dropped near a row's edge becomes a row of its own, and the
+ * dividers between columns trade width continuously. Every arrangement is
+ * reachable and none of them can come out broken, because `layout.ts` holds
+ * the two invariants — a row's widths sum to 100, and no row sits empty —
+ * rather than the interaction constraining what the pointer is allowed to do.
+ *
+ * It lives in `settings.dashboard` (`app/session.tsx`), synced like
+ * everything else. Applications are widgets here too (`widgetCatalogFor`'s
+ * `app:<slug>` entries), independent of Profile's "Displayed Applications"
+ * header setting; the two lists don't read each other.
  */
 export function DashboardScreen() {
   const { admin, settings, updateSettings } = useSession();
@@ -32,77 +32,59 @@ export function DashboardScreen() {
 
   const catalog = widgetCatalogFor(admin);
 
-  // A widget the catalog has grown since this account's settings were last
-  // saved (or that were never saved at all) is appended visible, at the end
-  // — never silently dropped.
-  const known = new Set(settings.dashboardWidgets.map((widget) => widget.id));
-  const configured = [
-    ...settings.dashboardWidgets,
-    ...catalog
-      .filter((widget) => !known.has(widget.id))
-      .map((widget) => ({
-        id: widget.id,
-        hidden: false,
-        width: widget.app ? defaultWidth.app : defaultWidth.panel,
-        height: widget.app ? defaultHeight.app : defaultHeight.panel,
-      })),
-  ];
+  // Seeded on first read rather than in `session.tsx` — the same pattern
+  // `seedDefaultProperties` uses for Task Tracker. A widget the catalog has
+  // grown since this account last saved is appended in a row of its own
+  // rather than silently dropped.
+  const layout = useMemo(() => {
+    const stored = settings.dashboard;
+    if (stored.rows.length === 0 && stored.hidden.length === 0) {
+      return seed(catalog.map((widget) => widget.id));
+    }
+    const known = new Set([...visibleIds(stored), ...stored.hidden]);
+    const missing = catalog.filter((widget) => !known.has(widget.id));
+    return missing.reduce((current, widget) => showWidget(current, widget.id), stored);
+  }, [settings.dashboard, catalog]);
 
-  const visible = configured.filter((widget) => !widget.hidden);
-  const hidden = configured.filter((widget) => widget.hidden);
-  const byId = new Map(visible.map((widget) => [widget.id, widget]));
-
-  const writeLayout = useCallback(
-    (nextVisible: typeof configured) => void updateSettings({ dashboardWidgets: [...nextVisible, ...hidden] }),
-    [updateSettings, hidden],
-  );
-
-  // `useWidgetReorder`/`useWidgetResize` re-run their pointermove/pointerup
-  // listener effect whenever the commit function they were given changes
-  // identity — and `visible`/`byId` are rebuilt fresh every render, so a
-  // plain `useCallback` closing over them would be a new function on every
-  // single pointermove during a drag, tearing the listeners down and back up
-  // continuously for the length of the gesture. A ref holding the latest
-  // values keeps the callbacks themselves stable — created once — while
-  // still always reading current data when they actually fire.
-  const latest = useRef({ visible, hidden, byId });
-  latest.current = { visible, hidden, byId };
-
-  const commitOrder = useCallback(
-    (nextIds: readonly string[]) => {
-      const { byId: currentById, hidden: currentHidden } = latest.current;
-      void updateSettings({
-        dashboardWidgets: [...nextIds.map((id) => currentById.get(id)!), ...currentHidden],
-      });
-    },
+  const write = useCallback(
+    (next: DashboardLayout) => void updateSettings({ dashboard: next }),
     [updateSettings],
   );
 
-  const commitResize = useCallback(
-    (id: string, width: number, height: number) => {
-      const { visible: currentVisible, hidden: currentHidden } = latest.current;
-      void updateSettings({
-        dashboardWidgets: [
-          ...currentVisible.map((widget) => (widget.id === id ? { ...widget, width, height } : widget)),
-          ...currentHidden,
-        ],
-      });
-    },
-    [updateSettings],
+  // The drag and resize hooks re-run their pointer-listener effects whenever
+  // the callback they were handed changes identity, so these read the live
+  // layout through a ref rather than closing over it — otherwise every
+  // pointermove would rebuild the listeners it is being delivered through.
+  const latest = useRef(layout);
+  latest.current = layout;
+
+  const onDrop = useCallback(
+    (id: string, target: DropTarget) => write(moveWidget(latest.current, id, target)),
+    [write],
+  );
+  const onResize = useCallback(
+    (row: number, divider: number, basis: number) => write(resizeAt(latest.current, row, divider, basis)),
+    [write],
+  );
+  const onPin = useCallback(
+    (id: string, height: number) => write(setHeight(latest.current, id, height)),
+    [write],
   );
 
-  const reorder = useWidgetReorder(grid, visible.map((widget) => widget.id), commitOrder);
-  const resize = useWidgetResize(grid, commitResize);
+  const drag = useDashboardDrag(grid, onDrop);
+  const rowResize = useRowResize(onResize);
+  const heightPin = useHeightPin(onPin);
 
-  const hideWidget = (id: string) => {
-    writeLayout(visible.map((widget) => (widget.id === id ? { ...widget, hidden: true } : widget)));
-  };
-
-  const showWidget = (id: string) => {
-    void updateSettings({
-      dashboardWidgets: configured.map((widget) => (widget.id === id ? { ...widget, hidden: false } : widget)),
-    });
-  };
+  // What is actually on screen right now: the stored layout with whichever
+  // gesture is mid-flight applied over the top of it.
+  const rendered = useMemo(() => {
+    let current = layout;
+    if (rowResize.live) {
+      current = resizeAt(current, rowResize.live.row, rowResize.live.divider, rowResize.live.basis);
+    }
+    if (heightPin.live) current = setHeight(current, heightPin.live.id, heightPin.live.height);
+    return current;
+  }, [layout, rowResize.live, heightPin.live]);
 
   return (
     <div className="page dash">
@@ -112,33 +94,64 @@ export function DashboardScreen() {
       </div>
 
       <div className="dash__grid" ref={grid}>
-        {reorder.order.map((id) => {
-          const widget = byId.get(id);
-          const entry = catalog.find((candidate) => candidate.id === id);
-          if (!widget || !entry) return null;
-          const Widget = entry.Component;
-          const isDragging = reorder.dragId === id;
-          return (
-            <WidgetFrame
-              key={id}
-              id={id}
-              width={resize.widthFor(id, widget.width)}
-              height={resize.heightFor(id, widget.height)}
-              isDragging={isDragging}
-              isResizing={resize.resizingId === id}
-              dragOffset={isDragging ? reorder.offset : { x: 0, y: 0 }}
-              onDragStart={reorder.startDrag(id)}
-              onResizeStart={resize.startResize(id, widget.width, widget.height)}
-              onHide={() => hideWidget(id)}
-            >
-              <Widget />
-            </WidgetFrame>
-          );
-        })}
+        {rendered.rows.map((row, rowIndex) => (
+          <div className="dash__row" data-row-index={rowIndex} key={row.widgets.map((w) => w.id).join('+')}>
+            {row.widgets.map((placement, columnIndex) => {
+              const entry = catalog.find((candidate) => candidate.id === placement.id);
+              if (!entry) return null;
+              const Widget = entry.Component;
+              return [
+                columnIndex > 0 && (
+                  <span
+                    key={`${placement.id}-divider`}
+                    className="dash__divider"
+                    title="Drag to resize"
+                    onPointerDown={rowResize.startResize(
+                      rowIndex,
+                      columnIndex - 1,
+                      row.widgets[columnIndex - 1]!.basis,
+                    )}
+                  />
+                ),
+                <WidgetFrame
+                  key={placement.id}
+                  id={placement.id}
+                  basis={placement.basis}
+                  height={placement.height}
+                  isDragging={drag.dragId === placement.id}
+                  dragOffset={drag.dragId === placement.id ? drag.offset : { x: 0, y: 0 }}
+                  onDragStart={drag.startDrag(placement.id)}
+                  onPinStart={heightPin.startPin(placement.id)}
+                  onUnpin={() => write(setHeight(layout, placement.id, null))}
+                  onHide={() => write(hideWidget(layout, placement.id))}
+                >
+                  <Widget />
+                </WidgetFrame>,
+              ];
+            })}
+          </div>
+        ))}
+
+        {drag.indicator && (
+          <span
+            className="dash__drop"
+            style={{
+              left: drag.indicator.x,
+              top: drag.indicator.y,
+              width: drag.indicator.width,
+              height: drag.indicator.height,
+            }}
+          />
+        )}
       </div>
 
       {showAdd && (
-        <WidgetPicker widgets={hidden} catalog={catalog} onShow={showWidget} onClose={() => setShowAdd(false)} />
+        <WidgetPicker
+          hidden={layout.hidden}
+          catalog={catalog}
+          onShow={(id) => write(showWidget(layout, id))}
+          onClose={() => setShowAdd(false)}
+        />
       )}
     </div>
   );

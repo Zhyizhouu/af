@@ -7,6 +7,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { firestore } from './firebase';
+import { readDashboardLayout } from '../programs/dashboard/layout';
 import {
   db,
   type AiConversationRow,
@@ -297,7 +298,7 @@ const taskPageFromDocument = (id: string, data: DocumentData): TaskPageRow => ({
 const settingsToDocument = (row: SettingsRow): DocumentData => ({
   theme: row.theme,
   font: row.font,
-  dashboardWidgets: row.dashboardWidgets,
+  dashboard: row.dashboard,
   hiddenPrograms: row.hiddenPrograms,
   updatedAt: stamp(row.updatedAt),
 });
@@ -306,17 +307,9 @@ const settingsFromDocument = (id: string, data: DocumentData): SettingsRow => ({
   id,
   theme: data.theme === 'light' || data.theme === 'dark' ? data.theme : 'system',
   font: data.font === 'times' || data.font === 'consolas' ? data.font : 'default',
-  dashboardWidgets: Array.isArray(data.dashboardWidgets)
-    ? (data.dashboardWidgets as unknown[]).map((raw) => {
-        const widget = raw as Record<string, unknown>;
-        return {
-          id: String(widget?.id ?? ''),
-          hidden: Boolean(widget?.hidden),
-          width: Number(widget?.width ?? 6),
-          height: Number(widget?.height ?? 260),
-        };
-      })
-    : [],
+  // `dashboardWidgets` is the flat pre-rows shape; a document written by a
+  // build from before this migrates on read rather than being dropped.
+  dashboard: readDashboardLayout(data.dashboard ?? data.dashboardWidgets),
   hiddenPrograms: Array.isArray(data.hiddenPrograms) ? (data.hiddenPrograms as unknown[]).map(String) : [],
   updatedAt: millis(data.updatedAt),
 });

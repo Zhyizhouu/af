@@ -50,26 +50,48 @@
     font-size: 34px;
   }
 }
+/* ---- rows of columns ---- */
 
-/* Fixed 12 columns rather than `auto-fit` — a widget's `width` is a column
-   span dragged from its own resize handle (`useWidgetResize.ts`), which only
-   means something against a column count that does not silently reflow. */
+/*
+ * The layout model is Notion's: the dashboard is a stack of rows, each row a
+ * flex line of widgets whose `flex-basis` percentages sum to 100 (an
+ * invariant `layout.ts` holds, not this stylesheet). `align-items: stretch`
+ * is what keeps a row tidy without constraining anybody to preset sizes —
+ * every card in a row takes the height of the tallest, so content-driven
+ * heights never come out ragged.
+ */
 .dash__grid {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
+  position: relative;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
-  align-items: start;
+  /* Room for the gutter, which hangs off each widget's left edge. Without
+     it the handles on the first column of every row would sit outside the
+     page's own padding. */
+  padding-left: 22px;
+}
+
+.dash__row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-width: 0;
 }
 
 @media (max-width: 720px) {
-  /* Below this width a dragged span stops being legible as fractions of a
-     row anyway — every widget just takes the full row. */
-  .dash__grid {
-    grid-template-columns: 1fr;
+  /* Below this a two-column split is two unusable columns — rows collapse
+     and every widget takes the full width, the same call `SplitView` makes
+     at the same breakpoint. */
+  .dash__row {
+    flex-direction: column;
   }
 
   .dash__widget {
-    grid-column: 1 / -1 !important;
+    flex-basis: auto !important;
+  }
+
+  .dash__divider {
+    display: none;
   }
 }
 
@@ -79,99 +101,92 @@
   flex-direction: column;
   min-width: 0;
   border-radius: var(--af-radius);
-  /* Not `overflow: hidden` — the resize pivot below sits slightly past this
-     box's own edge, and `.dash__widget-body`'s `overflow-y: auto` already
-     clips the widget's actual content on its own. */
+  /* Animates a divider settling on release; the drag itself overrides this
+     with its own transform, which must not be transitioned. */
+  transition: flex-basis 120ms ease;
 }
 
-/* Lifted while its own drag is live — `WidgetFrame.tsx` also applies the
-   `translate(...)` that keeps it under the pointer regardless of which grid
-   slot it currently occupies. No transition on the transform itself: it has
-   to track the pointer exactly, one frame behind would read as laggy. */
+/* Lifted and following the pointer. `WidgetFrame.tsx` supplies the
+   `translate(...)`; nothing else on the grid moves until release, so the
+   drop indicator is the only thing claiming where it will land. */
 .dash__widget.is-dragging {
   z-index: 20;
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
+  opacity: 0.92;
+  transition: none;
   cursor: grabbing;
 }
 
-.dash__widget.is-resizing {
-  z-index: 15;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-  outline: 1px solid var(--af-accent);
-}
+/* ---- gutter ---- */
 
-
-/* The toolbar and the resize pivot are siblings of `.dash__widget-body`, not
-   descendants of it, so they stay put at a fixed position even while the
-   body scrolls internally (see `.dash__widget-body` below). */
-.dash__widget-toolbar {
+/*
+ * Controls live beside the widget, never on top of it. That is the whole
+ * reason this needs no edit mode: a handle that cannot overlap the content
+ * cannot be hit by accident, so it is free to be permanent.
+ */
+.dash__gutter {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  left: 8px;
+  top: 0;
+  left: -22px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  gap: 2px;
   opacity: 0;
   transition: opacity 120ms ease;
-  pointer-events: none;
-  z-index: 2;
+  z-index: 3;
 }
 
-.dash__widget:hover .dash__widget-toolbar,
-.dash__widget:focus-within .dash__widget-toolbar {
+.dash__widget:hover .dash__gutter,
+.dash__widget:focus-within .dash__gutter,
+.dash__widget.is-dragging .dash__gutter {
   opacity: 1;
-  pointer-events: auto;
 }
 
-/* The grab target is the whole strip, not the small glyph inside it — a 14px
-   dot is not reliably grabbable, a 28px-tall strip spanning most of the
-   toolbar is. */
-.dash__widget-handle {
-  flex: 1;
+.dash__grip {
   display: flex;
   align-items: center;
-  height: 28px;
-  padding: 0 8px;
+  justify-content: center;
+  width: 18px;
+  height: 26px;
   border-radius: var(--af-radius-sm);
-  background: var(--af-panel);
-  border: 1px solid var(--af-line-strong);
   color: var(--af-muted);
   font-family: var(--af-mono);
+  font-size: 12px;
   cursor: grab;
   touch-action: none;
+  user-select: none;
 }
 
-.dash__widget-handle:active {
-  cursor: grabbing;
+.dash__grip:hover {
+  background: var(--af-accent-soft);
+  color: var(--af-accent);
 }
 
-.dash__widget-hide {
-  display: inline-flex;
+.dash__gutter-btn {
+  display: flex;
   align-items: center;
   justify-content: center;
-  flex: none;
-  width: 28px;
-  height: 28px;
-  margin-left: 6px;
-  border: 1px solid var(--af-line-strong);
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
   border-radius: var(--af-radius-sm);
-  background: var(--af-panel);
+  background: none;
   color: var(--af-muted);
   font-size: 10px;
   cursor: pointer;
-  padding: 0;
 }
 
-.dash__widget-hide:hover {
-  border-color: var(--af-warn);
-  color: var(--af-warn);
+.dash__gutter-btn:hover {
+  background: var(--af-accent-soft);
+  color: var(--af-accent);
 }
 
-/* A widget's own content — scrolls internally once it no longer fits the
-   dragged height, rather than growing the grid row or clipping silently.
-   `container-type` is what lets `AppWidget`'s tile react to *this* widget's
-   own size rather than the viewport's (see the `@container` rule above). */
+/* ---- body ---- */
+
+/* `container-type` is what lets `AppWidget`'s tile react to this widget's
+   own width rather than the viewport's — see the `@container` rule above. */
 .dash__widget-body {
   flex: 1;
   min-height: 0;
@@ -179,39 +194,83 @@
   container-type: inline-size;
 }
 
-/* The resize pivot — a corner grip, dragging both the column span and the
-   pixel height together, the same pointer-drag shape `SplitView`'s divider
-   and `TasksScreen`'s column resize already use. */
-.dash__widget-resize {
-  position: absolute;
-  right: -6px;
-  bottom: -6px;
-  width: 18px;
-  height: 18px;
-  cursor: nwse-resize;
+/* ---- divider ---- */
+
+/* Sits between two widgets and trades width between exactly those two. The
+   hit target is 14px; what is drawn is a 2px line, the same asymmetry the
+   Task Tracker's column edges use. */
+.dash__divider {
+  flex: none;
+  position: relative;
+  width: 14px;
+  align-self: stretch;
+  cursor: col-resize;
   touch-action: none;
-  z-index: 2;
 }
 
-.dash__widget-resize::after {
+.dash__divider::after {
   content: '';
   position: absolute;
-  right: 6px;
-  bottom: 6px;
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid var(--af-line-strong);
-  border-bottom: 2px solid var(--af-line-strong);
+  top: 8px;
+  bottom: 8px;
+  left: 6px;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background 120ms ease;
 }
 
-.dash__widget-resize:hover::after {
-  border-color: var(--af-accent);
+.dash__divider:hover::after,
+.dash__divider:active::after {
+  background: var(--af-accent);
 }
 
-.dash__widget.is-drag-over {
-  outline: 2px dashed var(--af-accent);
-  outline-offset: 4px;
-  border-radius: var(--af-radius);
+/* ---- height pin ---- */
+
+/* Content-driven height until this is dragged. Invisible until hovered, for
+   the same reason the gutter is: nothing should sit on the content by
+   default. */
+.dash__pin {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -5px;
+  height: 10px;
+  cursor: ns-resize;
+  touch-action: none;
+  z-index: 3;
+}
+
+.dash__pin::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 4px;
+  width: 34px;
+  height: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.dash__pin:hover::after,
+.dash__pin:active::after {
+  background: var(--af-accent);
+}
+
+/* ---- drop indicator ---- */
+
+/* The line that says where a dragged widget lands, before it lands. This is
+   the single thing that makes a freeform drag legible: without it, a drop is
+   a guess. */
+.dash__drop {
+  position: absolute;
+  border-radius: 1px;
+  background: var(--af-accent);
+  box-shadow: 0 0 0 3px var(--af-accent-soft);
+  pointer-events: none;
+  z-index: 30;
 }
 
 .dash__habits,

@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { db, defaultSettings, localScope, openScope, type SettingsRow } from '../data/db';
+import { readDashboardLayout } from '../programs/dashboard/layout';
 import { syncAll } from '../data/sync';
 import { isAdmin, signOutNow, watchAuth, type User } from '../data/firebase';
 
@@ -24,6 +25,26 @@ function applySettings(settings: SettingsRow) {
 
   if (settings.font === 'default') delete root.dataset.font;
   else root.dataset.font = settings.font;
+}
+
+/**
+ * A stored row brought up to the current shape.
+ *
+ * Every read of the settings row goes through here — both the initial load
+ * and the read-modify-write in `updateSettings` — because a row written by
+ * a build before the dashboard used rows carries the flat `dashboardWidgets`
+ * shape, and spreading that into a write without migrating it first would
+ * quietly persist a record with no layout at all.
+ */
+function normalizeSettings(existing: SettingsRow | undefined): SettingsRow {
+  if (!existing) return defaultSettings();
+  const legacy = (existing as unknown as { dashboardWidgets?: unknown }).dashboardWidgets;
+  return {
+    ...defaultSettings(),
+    ...existing,
+    dashboard: readDashboardLayout(existing.dashboard ?? legacy),
+    hiddenPrograms: existing.hiddenPrograms ?? [],
+  };
 }
 
 interface SessionValue {
@@ -78,7 +99,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
    *  a sync can pull a change made on another device. */
   const loadSettings = useCallback(async () => {
     const existing = await db().settings.get('app');
-    const next = existing ?? defaultSettings();
+    const next = normalizeSettings(existing);
     if (!existing) await db().settings.put(next);
     setSettings(next);
     applySettings(next);
@@ -149,7 +170,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateSettings = useCallback(async (patch: Partial<Omit<SettingsRow, 'id'>>) => {
-    const next: SettingsRow = { ...(await db().settings.get('app') ?? defaultSettings()), ...patch, id: 'app', updatedAt: Date.now() };
+    const next: SettingsRow = {
+      ...normalizeSettings(await db().settings.get('app')),
+      ...patch,
+      id: 'app',
+      updatedAt: Date.now(),
+    };
     await db().settings.put(next);
     setSettings(next);
     applySettings(next);

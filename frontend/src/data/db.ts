@@ -169,6 +169,29 @@ export interface TaskPageRow {
   deleted: boolean;
 }
 
+/**
+ * One widget's place on the dashboard.
+ *
+ * `basis` is a percentage of its own row's width, and a row's placements
+ * always sum to 100 — the invariant that makes every reachable arrangement a
+ * valid one, so there is no such thing as a half-filled row or an orphaned
+ * column. `height` is null by default: a widget is as tall as its content,
+ * and every card in a row stretches to match the tallest, which is what
+ * keeps rows from going ragged without constraining anybody to preset
+ * sizes. A number pins it, and the widget scrolls inside that height.
+ */
+export interface DashboardPlacement {
+  id: string;
+  basis: number;
+  height: number | null;
+}
+
+export interface DashboardLayout {
+  rows: { widgets: DashboardPlacement[] }[];
+  /** Ids removed from the grid, still offered by "Add widgets". */
+  hidden: string[];
+}
+
 /** One synced row, fixed id `'app'` — per-account preferences that used to
  *  have nowhere to live. `tokens.css` has anticipated this since the theme
  *  tokens were written: "the theme is an explicit choice stored in
@@ -179,15 +202,12 @@ export interface SettingsRow {
   /** Overrides `--af-sans` only — the mono stack keeps carrying machinery
    *  regardless of font choice. */
   font: 'default' | 'times' | 'consolas';
-  /** Array order is grid order; a widget absent from this list (added after
-   *  the user's settings were seeded) is treated as visible and appended at
-   *  the end — see `programs/dashboard/DashboardScreen.tsx`. `width` is a
-   *  column span out of the dashboard's 12-column grid, `height` a pixel
-   *  height — both dragged together from the widget's corner pivot. */
-  dashboardWidgets: { id: string; hidden: boolean; width: number; height: number }[];
-  /** Program slugs hidden from the nav bar, dashboard gallery and split
-   *  picker — see Profile's "Displayed Applications" section and
-   *  `app/programs.ts`'s `visiblePrograms`. */
+  /** Rows of columns, the same shape Notion's own block layout takes — see
+   *  `programs/dashboard/layout.ts` for every operation on it. */
+  dashboard: DashboardLayout;
+  /** Program slugs hidden from the nav bar and split picker — see Profile's
+   *  "Displayed Applications" section and `app/programs.ts`'s
+   *  `visiblePrograms`. Deliberately unrelated to `dashboard.hidden`. */
   hiddenPrograms: string[];
   updatedAt: number;
 }
@@ -244,7 +264,7 @@ export const defaultSettings = (): SettingsRow => ({
   id: 'app',
   theme: 'system',
   font: 'default',
-  dashboardWidgets: [],
+  dashboard: { rows: [], hidden: [] },
   hiddenPrograms: [],
   updatedAt: 0,
 });

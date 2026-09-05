@@ -298,7 +298,10 @@ describe('sync', () => {
       id: 'app',
       theme: 'dark',
       font: 'consolas',
-      dashboardWidgets: [{ id: 'habits', hidden: true, width: 4, height: 300 }],
+      dashboard: {
+        rows: [{ widgets: [{ id: 'habits', basis: 100, height: null }] }],
+        hidden: ['todo'],
+      },
       hiddenPrograms: ['audio'],
       updatedAt: 2,
     });
@@ -308,8 +311,32 @@ describe('sync', () => {
     const pushed = written.get('users/uid-1/settings/app');
     expect(pushed!.theme).toBe('dark');
     expect(pushed!.font).toBe('consolas');
-    expect(pushed!.dashboardWidgets).toEqual([{ id: 'habits', hidden: true, width: 4, height: 300 }]);
+    expect(pushed!.dashboard).toEqual({
+      rows: [{ widgets: [{ id: 'habits', basis: 100, height: null }] }],
+      hidden: ['todo'],
+    });
     expect(pushed!.hiddenPrograms).toEqual(['audio']);
+  });
+
+  // Written by a build from before the dashboard used rows. Dropping it on
+  // the way in would silently reset somebody's layout.
+  it('migrates a legacy flat dashboard layout on the way in', async () => {
+    remote.set('users/uid-1/settings/app', {
+      theme: 'light',
+      dashboardWidgets: [
+        { id: 'habits', hidden: false, width: 6, height: 260 },
+        { id: 'today', hidden: false, width: 6, height: 260 },
+        { id: 'todo', hidden: true, width: 6, height: 260 },
+      ],
+      updatedAt: Timestamp.fromMillis(5000),
+    });
+
+    await syncAll('uid-1');
+
+    const local = await db().settings.get('app');
+    expect(local!.dashboard.rows).toHaveLength(1);
+    expect(local!.dashboard.rows[0]!.widgets.map((widget) => widget.id)).toEqual(['habits', 'today']);
+    expect(local!.dashboard.hidden).toEqual(['todo']);
   });
 
   it('pulls a remote to-do item down', async () => {
