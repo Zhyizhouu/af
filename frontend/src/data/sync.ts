@@ -298,6 +298,7 @@ const taskPageFromDocument = (id: string, data: DocumentData): TaskPageRow => ({
 const settingsToDocument = (row: SettingsRow): DocumentData => ({
   theme: row.theme,
   font: row.font,
+  fullWidth: row.fullWidth,
   dashboard: row.dashboard,
   hiddenPrograms: row.hiddenPrograms,
   updatedAt: stamp(row.updatedAt),
@@ -307,6 +308,7 @@ const settingsFromDocument = (id: string, data: DocumentData): SettingsRow => ({
   id,
   theme: data.theme === 'light' || data.theme === 'dark' ? data.theme : 'system',
   font: data.font === 'times' || data.font === 'consolas' ? data.font : 'default',
+  fullWidth: Boolean(data.fullWidth),
   // `dashboardWidgets` is the flat pre-rows shape; a document written by a
   // build from before this migrates on read rather than being dropped.
   dashboard: readDashboardLayout(data.dashboard ?? data.dashboardWidgets),

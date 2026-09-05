@@ -298,6 +298,7 @@ describe('sync', () => {
       id: 'app',
       theme: 'dark',
       font: 'consolas',
+      fullWidth: true,
       dashboard: {
         rows: [{ widgets: [{ id: 'habits', basis: 100, height: null }] }],
         hidden: ['todo'],
@@ -311,6 +312,7 @@ describe('sync', () => {
     const pushed = written.get('users/uid-1/settings/app');
     expect(pushed!.theme).toBe('dark');
     expect(pushed!.font).toBe('consolas');
+    expect(pushed!.fullWidth).toBe(true);
     expect(pushed!.dashboard).toEqual({
       rows: [{ widgets: [{ id: 'habits', basis: 100, height: null }] }],
       hidden: ['todo'],

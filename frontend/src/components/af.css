@@ -278,6 +278,14 @@
   min-height: 0;
 }
 
+/* Profile's "Page width" setting, stamped as `data-width` the same way the
+   theme and font are — see `app/session.tsx`'s `applySettings`. Set on the
+   root so it lifts the column for every program at once, which is the whole
+   point of there being one `.page` in the first place. */
+:root[data-width='full'] .page {
+  max-width: none;
+}
+
 .page--tall {
   height: 100%;
 }

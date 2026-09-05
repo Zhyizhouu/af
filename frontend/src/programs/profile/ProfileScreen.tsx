@@ -180,6 +180,11 @@ const themeOptions: { value: SettingsRow['theme']; label: string }[] = [
   { value: 'dark', label: 'Dark' },
 ];
 
+const widthOptions: { value: boolean; label: string }[] = [
+  { value: false, label: 'Reading' },
+  { value: true, label: 'Full page' },
+];
+
 function FontSettingsPanel({
   settings,
   onChange,
@@ -219,6 +224,28 @@ function FontSettingsPanel({
           </button>
         ))}
       </div>
+
+      {/* Applies to every program at once, deliberately — one page width is
+          the rule `.page` exists to keep, and a per-screen override would be
+          the drift it was introduced to stop. */}
+      <span className="af-panel-label">Page width</span>
+      <div className="prf__themes">
+        {widthOptions.map((option) => (
+          <button
+            key={String(option.value)}
+            type="button"
+            className={`prf__theme${settings.fullWidth === option.value ? ' is-active' : ''}`}
+            onClick={() => void onChange({ fullWidth: option.value })}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <AFHint>
+        {settings.fullWidth
+          ? 'Every program fills the window.'
+          : 'Every program sits in a reading column.'}
+      </AFHint>
     </div>
   );
 }

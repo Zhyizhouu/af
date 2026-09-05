@@ -25,6 +25,9 @@ function applySettings(settings: SettingsRow) {
 
   if (settings.font === 'default') delete root.dataset.font;
   else root.dataset.font = settings.font;
+
+  if (settings.fullWidth) root.dataset.width = 'full';
+  else delete root.dataset.width;
 }
 
 /**

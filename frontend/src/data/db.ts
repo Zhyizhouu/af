@@ -202,6 +202,10 @@ export interface SettingsRow {
   /** Overrides `--af-sans` only — the mono stack keeps carrying machinery
    *  regardless of font choice. */
   font: 'default' | 'times' | 'consolas';
+  /** Lets every program's page fill the window instead of sitting in the
+   *  shared `--af-page-width` reading column. Applies app-wide, so no screen
+   *  can end up wider than its neighbours — the rule `.page` exists for. */
+  fullWidth: boolean;
   /** Rows of columns, the same shape Notion's own block layout takes — see
    *  `programs/dashboard/layout.ts` for every operation on it. */
   dashboard: DashboardLayout;
@@ -264,6 +268,7 @@ export const defaultSettings = (): SettingsRow => ({
   id: 'app',
   theme: 'system',
   font: 'default',
+  fullWidth: false,
   dashboard: { rows: [], hidden: [] },
   hiddenPrograms: [],
   updatedAt: 0,

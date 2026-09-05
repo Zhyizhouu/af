@@ -2,6 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, t
 import { AFButton, AFEmptyState, AFIconButton, AFTag } from '../../components/AF';
 import { lockCursor } from '../../components/pointerDrag';
 import { useSession } from '../../app/session';
+import {
+  actionsColumnWidth,
+  defaultColumnWidth,
+  defaultTitleWidth,
+  fitColumnWidths,
+  minColumnWidth,
+  titleColumnKey,
+} from './columns';
 import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../data/db';
 import { FilterPanel } from './FilterPanel';
 import { PageDetail } from './PageDetail';
@@ -20,10 +28,6 @@ import './tasks.css';
 type OpenPage = { id: string; mode: 'peek' | 'fullscreen' };
 
 const widthsStorageKey = 'af.tasks.columnWidths';
-const defaultTitleWidth = 240;
-const defaultColumnWidth = 160;
-const minColumnWidth = 80;
-const actionsColumnWidth = 36;
 
 const loadColumnWidths = (): Record<string, number> => {
   try {
@@ -75,6 +79,12 @@ function useColumnWidths() {
     };
   }, []);
 
+  /** Replaces every column width at once — what "Fit columns" commits. */
+  const applyWidths = useCallback((next: Record<string, number>) => {
+    setWidths(next);
+    localStorage.setItem(widthsStorageKey, JSON.stringify(next));
+  }, []);
+
   const startResize = useCallback(
     (key: string, fallback: number) => (event: PointerEvent) => {
       event.preventDefault();
@@ -90,7 +100,7 @@ function useColumnWidths() {
     [widths],
   );
 
-  return { widthFor, startResize, draggingKey };
+  return { widthFor, startResize, draggingKey, applyWidths };
 }
 
 /**
@@ -131,18 +141,25 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
   const visiblePages = pages.filter((page) => matchesFilters(page, filters));
   const openPageRow = openPage ? pages.find((page) => page.id === openPage.id) : undefined;
 
-  const { widthFor, startResize, draggingKey } = useColumnWidths();
+  const { widthFor, startResize, draggingKey, applyWidths } = useColumnWidths();
   const tableWidth = useMemo(
     () =>
-      widthFor('title', defaultTitleWidth) +
+      widthFor(titleColumnKey, defaultTitleWidth) +
       properties.reduce((sum, property) => sum + widthFor(property.id, defaultColumnWidth), 0) +
       actionsColumnWidth,
     [widthFor, properties],
   );
 
+  // The toolbar spans exactly the content width available to the table, so
+  // it is what "Fit columns" measures against — the table's own wrapper
+  // hugs the table and would only ever report the width it already has.
+  const bar = useRef<HTMLDivElement>(null);
+  const fitColumns = () =>
+    applyWidths(fitColumnWidths(properties, bar.current?.clientWidth ?? 0));
+
   return (
     <div className={`page page--tall tsk${paneWidth === 'split' ? ' tsk--split' : ''}`}>
-      <div className="tsk__bar">
+      <div className="tsk__bar" ref={bar}>
         <AFButton
           label="New page"
           // Does not open PageDetail — a "new page" click from the table
@@ -155,6 +172,12 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
           onClick={() => setShowFilters(true)}
         />
         <span className="page__spacer" />
+        <AFButton
+          label="Fit columns"
+          variant="ghost"
+          title="Size every column to the table's width"
+          onClick={fitColumns}
+        />
         <AFButton label="Manage properties" variant="ghost" onClick={() => setShowProperties(true)} />
       </div>
 
@@ -164,7 +187,7 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
         <div className="tsk__table-wrap">
           <table className="tsk__table" style={{ width: tableWidth }}>
             <colgroup>
-              <col style={{ width: widthFor('title', defaultTitleWidth) }} />
+              <col style={{ width: widthFor(titleColumnKey, defaultTitleWidth) }} />
               {properties.map((property) => (
                 <col key={property.id} style={{ width: widthFor(property.id, defaultColumnWidth) }} />
               ))}
@@ -175,8 +198,8 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
                 <th className="tsk__col-title">
                   Page
                   <span
-                    className={`tsk__col-resize${draggingKey === 'title' ? ' is-dragging' : ''}`}
-                    onPointerDown={startResize('title', defaultTitleWidth)}
+                    className={`tsk__col-resize${draggingKey === titleColumnKey ? ' is-dragging' : ''}`}
+                    onPointerDown={startResize(titleColumnKey, defaultTitleWidth)}
                   />
                 </th>
                 {properties.map((property) => (

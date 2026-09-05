@@ -107,6 +107,45 @@
   box-sizing: border-box;
 }
 
+/*
+ * Scrollbars.
+ *
+ * The platform's own is a chunky tray with stepper arrows that lands right
+ * across the bottom of anything scrollable — on a table it reads as a piece
+ * of furniture rather than a control. This is the same bar reduced to its
+ * job: a thumb, no track, no arrows, inset from the edge by a transparent
+ * border so it never touches the content it belongs to.
+ *
+ * `scrollbar-width`/`scrollbar-color` cover Firefox; the `::-webkit-`
+ * rules cover Chromium and Safari, which ignore the standard ones.
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--af-line-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--af-line-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--af-radius);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--af-muted);
+  background-clip: content-box;
+}
+
 html,
 body,
 #root {
