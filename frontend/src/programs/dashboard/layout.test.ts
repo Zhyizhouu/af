@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  autoArrange,
   fromLegacy,
   hideWidget,
   moveWidget,
@@ -30,6 +31,52 @@ describe('seed', () => {
 
   it('starts every widget content-driven rather than pinned', () => {
     expect(seed(['a']).rows[0]!.widgets[0]!.height).toBeNull();
+  });
+});
+
+describe('autoArrange', () => {
+  const app = (id: string, rank: number) => ({ id, app: true, rank });
+  const panel = (id: string, rank: number) => ({ id, app: false, rank });
+
+  it('puts the launcher dock first, then panels two to a row in rank order', () => {
+    const layout = autoArrange([
+      panel('completion', 6),
+      app('app:calendar', 1),
+      panel('today', 1),
+      app('app:tasks', 2),
+      panel('upNext', 2),
+    ]);
+
+    expect(layout.rows.map((row) => row.widgets.map((w) => w.id))).toEqual([
+      ['app:calendar', 'app:tasks'],
+      ['today', 'upNext'],
+      ['completion'],
+    ]);
+    expect(sums(layout)).toEqual([100, 100, 100]);
+  });
+
+  it('releases every pinned height', () => {
+    const pinned = [panel('today', 1), panel('upNext', 2)];
+    const layout = autoArrange(pinned);
+    expect(layout.rows.flatMap((row) => row.widgets).every((w) => w.height === null)).toBe(true);
+  });
+
+  it('splits a launcher dock evenly rather than lopsidedly', () => {
+    const many = Array.from({ length: 10 }, (_, index) => app(`app:${index}`, index));
+    const layout = autoArrange(many);
+
+    // Ten launchers become 5 + 5, never 8 + 2.
+    expect(layout.rows.map((row) => row.widgets.length)).toEqual([5, 5]);
+  });
+
+  it('keeps hidden widgets hidden', () => {
+    const layout = autoArrange([panel('today', 1)], ['todo']);
+    expect(layout.hidden).toEqual(['todo']);
+    expect(visibleIds(layout)).toEqual(['today']);
+  });
+
+  it('handles an empty dashboard without inventing rows', () => {
+    expect(autoArrange([])).toEqual({ rows: [], hidden: [] });
   });
 });
 

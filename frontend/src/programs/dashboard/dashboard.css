@@ -1,6 +1,7 @@
 .dash__bar {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
 /*
@@ -240,13 +241,39 @@
 
 /* ---- body ---- */
 
-/* `container-type` is what lets `AppWidget`'s tile react to this widget's
-   own width rather than the viewport's — see the `@container` rule above. */
+/*
+ * `container-type` is what lets `AppWidget`'s tile react to this widget's
+ * own width rather than the viewport's — see the `@container` rule above.
+ *
+ * The flex column below is what makes a pinned height mean anything. The
+ * frame grew but its panel kept its own content height, so dragging the pin
+ * bought nothing but invisible empty space under an unchanged card.
+ */
 .dash__widget-body {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   container-type: inline-size;
+}
+
+/* `1 0 auto`, deliberately: grow into a pinned height, but never shrink
+   below the content's own size — that is what leaves taller content to
+   scroll the body rather than being silently squashed into it. */
+.dash__widget-body > * {
+  flex: 1 0 auto;
+}
+
+/* A panel that fills the frame lays its own content out the same way, so
+   anything inside it that can use the room gets the chance to. */
+.dash__widget-body > .af-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.dash__widget-body > .af-panel > .af-panel__head {
+  flex: none;
 }
 
 /* ---- divider ---- */
@@ -364,20 +391,39 @@
   transition: background 140ms ease;
 }
 
-/* Shorter, and no sunken well around it. At 120px inside a stretched card
-   seven bars read as a line at the bottom of an empty box; the chart should
-   be the size of the data it carries. */
+/* No sunken well, and no fixed height: the chart is the one thing in this
+   panel that can actually use a dragged height, so it takes whatever the
+   frame gives it and never falls below a readable minimum. */
+/* `stretch`, not `flex-end`: the day tracks fill the chart's height and the
+   bar inside each one is what sits at the bottom. Aligning to `flex-end`
+   here left the tracks sized by their content, so their `height: 100%` had
+   no definite height to resolve against and collapsed them to nothing. */
 .dash__spark {
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 4px;
-  height: 64px;
+  flex: 1 1 auto;
+  min-height: 64px;
+}
+
+/* One track per day, always visible, with the bar sitting in it.
+   `--af-line` rather than `--af-sunken`: sunken is #fbfbfc against a #ffffff
+   panel, which is no contrast at all — the tracks were rendering and simply
+   could not be seen. */
+.dash__spark-slot {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  background: var(--af-line);
+  border-radius: var(--af-radius-sm);
+  overflow: hidden;
 }
 
 .dash__spark-bar {
-  flex: 1;
+  width: 100%;
   background: var(--af-accent);
-  border-radius: 2px 2px 0 0;
+  border-radius: var(--af-radius-sm) var(--af-radius-sm) 0 0;
+  transition: height 200ms ease;
 }
 
 .dash__entry {

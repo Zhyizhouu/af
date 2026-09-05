@@ -2,7 +2,16 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { AFButton } from '../../components/AF';
 import { useSession } from '../../app/session';
 import type { DashboardLayout } from '../../data/db';
-import { hideWidget, moveWidget, resizeAt, seed, setHeight, showWidget, visibleIds, type DropTarget } from './layout';
+import {
+  autoArrange,
+  hideWidget,
+  moveWidget,
+  resizeAt,
+  setHeight,
+  showWidget,
+  visibleIds,
+  type DropTarget,
+} from './layout';
 import { widgetCatalogFor } from './widgets/registry';
 import { useDashboardDrag } from './widgets/useDashboardDrag';
 import { useHeightPin, useRowResize } from './widgets/useDashboardResize';
@@ -36,16 +45,25 @@ export function DashboardScreen() {
   // `seedDefaultProperties` uses for Task Tracker. A widget the catalog has
   // grown since this account last saved is appended in a row of its own
   // rather than silently dropped.
+  /** Whatever is on the grid right now, described for `autoArrange`. */
+  const entriesFor = useCallback(
+    (ids: readonly string[]) =>
+      ids
+        .map((id) => catalog.find((widget) => widget.id === id))
+        .filter((widget): widget is (typeof catalog)[number] => Boolean(widget))
+        .map((widget) => ({ id: widget.id, app: widget.app, rank: widget.rank })),
+    [catalog],
+  );
+
   const layout = useMemo(() => {
     const stored = settings.dashboard;
+    // A first-time account gets the same arrangement "Auto-adjust" would
+    // produce, so the default and the tidy-up never disagree about what
+    // good looks like.
     if (stored.rows.length === 0 && stored.hidden.length === 0) {
-      // Launchers three to a row, panels two — a compact strip of buttons
-      // above the things that actually carry information, rather than a
-      // launcher paired off against a tall panel and leaving a hole under
-      // itself.
-      const apps = catalog.filter((widget) => widget.app).map((widget) => widget.id);
-      const panels = catalog.filter((widget) => !widget.app).map((widget) => widget.id);
-      return { rows: [...seed(apps, 3).rows, ...seed(panels, 2).rows], hidden: [] };
+      return autoArrange(
+        catalog.map((widget) => ({ id: widget.id, app: widget.app, rank: widget.rank })),
+      );
     }
     const known = new Set([...visibleIds(stored), ...stored.hidden]);
     const missing = catalog.filter((widget) => !known.has(widget.id));
@@ -96,6 +114,12 @@ export function DashboardScreen() {
     <div className="page dash">
       <div className="dash__bar">
         <span className="page__spacer" />
+        <AFButton
+          label="Auto-adjust"
+          variant="ghost"
+          title="Rearrange every widget into a tidy layout"
+          onClick={() => write(autoArrange(entriesFor(visibleIds(layout)), layout.hidden))}
+        />
         <AFButton label="Add widgets" variant="ghost" onClick={() => setShowAdd(true)} />
       </div>
 

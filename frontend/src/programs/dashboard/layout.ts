@@ -165,6 +165,73 @@ export function setHeight(layout: DashboardLayout, id: string, height: number | 
   };
 }
 
+export interface ArrangeEntry {
+  id: string;
+  app: boolean;
+  /** Lower sorts earlier. See `widgets/registry.tsx` for the running order. */
+  rank: number;
+}
+
+/**
+ * Splits items into rows as evenly as the count allows.
+ *
+ * `ceil(n / max)` rows, then the remainder spread one-per-row from the top,
+ * so seven launchers become 4+3 rather than 4+3 by accident and six become
+ * 3+3 rather than 4+2. A short final row is fine; a lopsided one looks like
+ * a mistake.
+ */
+function chunkEvenly<T>(items: readonly T[], maxPerRow: number): T[][] {
+  if (items.length === 0) return [];
+  const rowCount = Math.ceil(items.length / maxPerRow);
+  const base = Math.floor(items.length / rowCount);
+  let extra = items.length % rowCount;
+
+  const rows: T[][] = [];
+  let index = 0;
+  for (let row = 0; row < rowCount; row += 1) {
+    const size = base + (extra > 0 ? 1 : 0);
+    if (extra > 0) extra -= 1;
+    rows.push(items.slice(index, index + size));
+    index += size;
+  }
+  return rows;
+}
+
+/**
+ * Rearranges everything currently on the grid into the layout I'd want if I
+ * were arranging it by hand.
+ *
+ * Three judgements are baked in, and they are judgements rather than rules:
+ *
+ * - **Launchers first, in one strip.** They are a dock: small, uniform, and
+ *   scanned rather than read. Grouping them keeps them out of the way of
+ *   the panels instead of one stray launcher leaving a hole beside a tall
+ *   panel.
+ * - **Panels in priority order, two to a row.** What is happening now, then
+ *   what is owed, then the ambient stuff — the order you would actually ask
+ *   the questions in. The pairs that fall out of it are meant: Today beside
+ *   Up next, Tasks beside To-do, and Habits beside Completion, which is the
+ *   chart *of* those habits.
+ * - **Every pinned height released.** A height someone dragged for a layout
+ *   that no longer exists is the single thing most likely to make a tidy
+ *   grid look untidy. Content-driven is the clean slate; re-pin what you
+ *   want back.
+ */
+export function autoArrange(
+  entries: readonly ArrangeEntry[],
+  hidden: readonly string[] = [],
+): DashboardLayout {
+  const byRank = (a: ArrangeEntry, b: ArrangeEntry) => a.rank - b.rank;
+  const apps = entries.filter((entry) => entry.app).sort(byRank);
+  const panels = entries.filter((entry) => !entry.app).sort(byRank);
+
+  const rows = [...chunkEvenly(apps, 8), ...chunkEvenly(panels, 2)].map((group) => ({
+    widgets: group.map((entry) => place(entry.id, 100 / group.length)),
+  }));
+
+  return normalize({ rows, hidden: [...hidden] });
+}
+
 /** A first-time layout: the given widgets, `perRow` to a row. */
 export function seed(ids: readonly string[], perRow = 2): DashboardLayout {
   const rows: DashboardLayout['rows'] = [];

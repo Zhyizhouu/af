@@ -14,15 +14,26 @@ export interface DashboardWidget {
   Component: () => ReactElement;
   /** App-launcher widgets default smaller — a tile, not a content panel. */
   app: boolean;
+  /** Running order for the seed and for "Auto-adjust". Lower comes first. */
+  rank: number;
 }
 
+/**
+ * Panels in the order the questions actually get asked: what is happening
+ * now, then what is owed, then the ambient stuff you glance at rather than
+ * act on.
+ *
+ * Two to a row, the pairs fall out of this deliberately — Today beside Up
+ * next (both agenda), Tasks beside To-do (both lists of work), and Habits
+ * beside Completion, which is the chart of those very habits.
+ */
 const functionalWidgets: readonly DashboardWidget[] = [
-  { id: 'habits', label: 'Habits today', Component: HabitsWidget, app: false },
-  { id: 'completion', label: 'Completion', Component: CompletionWidget, app: false },
-  { id: 'today', label: 'Today', Component: TodayWidget, app: false },
-  { id: 'upNext', label: 'Up next', Component: UpNextWidget, app: false },
-  { id: 'tasks', label: 'Tasks', Component: TasksWidget, app: false },
-  { id: 'todo', label: 'To-do', Component: TodoWidget, app: false },
+  { id: 'today', label: 'Today', Component: TodayWidget, app: false, rank: 1 },
+  { id: 'upNext', label: 'Up next', Component: UpNextWidget, app: false, rank: 2 },
+  { id: 'tasks', label: 'Tasks', Component: TasksWidget, app: false, rank: 3 },
+  { id: 'todo', label: 'To-do', Component: TodoWidget, app: false, rank: 4 },
+  { id: 'habits', label: 'Habits today', Component: HabitsWidget, app: false, rank: 5 },
+  { id: 'completion', label: 'Completion', Component: CompletionWidget, app: false, rank: 6 },
 ];
 
 /**
@@ -40,11 +51,14 @@ const functionalWidgets: readonly DashboardWidget[] = [
 export function widgetCatalogFor(admin: boolean): readonly DashboardWidget[] {
   const appWidgets: DashboardWidget[] = programs
     .filter((program) => program.slug !== 'dashboard' && (!program.requiresAdmin || admin))
-    .map((program) => ({
+    .map((program, index) => ({
       id: `app:${program.slug}`,
       label: program.name,
       Component: () => <AppWidget program={program} />,
       app: true,
+      // Launchers keep the nav bar's own running order, so the dock and the
+      // nav never disagree about where a program sits.
+      rank: index,
     }));
   return [...appWidgets, ...functionalWidgets];
 }
