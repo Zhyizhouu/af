@@ -50,6 +50,26 @@
   gap: 14px;
 }
 
+/*
+ * Panels keep their own height and the body scrolls. `.af-panel` clips its
+ * overflow, and as shrinkable flex items a busy day's agenda squeezed the
+ * month grid until its last week vanished and the list below was cut off
+ * with nothing to scroll to — zooming the browser out was the only way to
+ * see it.
+ */
+.cal__body > .af-panel {
+  flex-shrink: 0;
+}
+
+/* The time grid is the exception: it fills the body and scrolls inside
+   itself, with a floor so a short window still shows a few hours. */
+.cal__body > .cal__timepanel {
+  flex: 1 1 0;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+}
+
 /* ---- year ---- */
 
 .cal__year {
@@ -140,6 +160,13 @@
   display: inline-block;
 }
 
+.cal__more {
+  font-family: var(--af-mono);
+  font-size: 9.5px;
+  line-height: 6px;
+  color: var(--af-muted);
+}
+
 /* ---- agenda ---- */
 
 .cal__agenda {
@@ -197,10 +224,13 @@
   text-align: center;
 }
 
+/* Fills whatever the panel is given rather than a fixed 60vh, which left
+   the page half empty below a grid that still made you scroll. */
 .cal__timegrid {
   display: grid;
   gap: 4px;
-  max-height: 60vh;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
   /* Scrolls inside the page column rather than widening it — the calendar used
      to be the one program that spanned the whole window. */

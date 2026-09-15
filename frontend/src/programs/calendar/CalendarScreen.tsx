@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AFButton, AFEmptyState, AFHint, AFPanel } from '../../components/AF';
 import { useSession } from '../../app/session';
 import { readAgenda, type AgendaEntry } from '../../data/agenda';
@@ -240,6 +240,8 @@ function monthCells(year: number, month: number): (Date | null)[] {
   ];
 }
 
+const maxDots = 4;
+
 function MonthView({
   anchor,
   selected,
@@ -266,8 +268,10 @@ function MonthView({
         ))}
       </div>
       <div className="cal__grid">
-        {cells.map((cell, index) =>
-          cell ? (
+        {cells.map((cell, index) => {
+          if (!cell) return <span key={index} className="cal__cell cal__cell--blank" />;
+          const onDay = entries.filter((entry) => isSameDay(entry.start, cell));
+          return (
             <button
               key={index}
               type="button"
@@ -280,22 +284,22 @@ function MonthView({
             >
               <span className="cal__cell-date">{cell.getDate()}</span>
               <span className="cal__dots">
-                {entries
-                  .filter((entry) => isSameDay(entry.start, cell))
-                  .slice(0, 4)
-                  .map((entry) => (
-                    <span
-                      key={entry.id}
-                      className="cal__dot"
-                      style={{ background: colorFor(entry, categories) }}
-                    />
-                  ))}
+                {onDay.slice(0, maxDots).map((entry) => (
+                  <span
+                    key={entry.id}
+                    className="cal__dot"
+                    style={{ background: colorFor(entry, categories) }}
+                  />
+                ))}
+                {/* Four dots and silence read as "four things"; a busy day
+                    has to say it is busier than the cell can draw. */}
+                {onDay.length > maxDots && (
+                  <span className="cal__more">+{onDay.length - maxDots}</span>
+                )}
               </span>
             </button>
-          ) : (
-            <span key={index} className="cal__cell cal__cell--blank" />
-          ),
-        )}
+          );
+        })}
       </div>
     </AFPanel>
   );
@@ -358,9 +362,26 @@ function TimeGrid({
   for (let day = range.start; day <= range.end; day = addDays(day, 1)) days.push(day);
 
   const now = new Date();
+  const scroller = useRef<HTMLDivElement>(null);
+
+  // The grid always starts at midnight, so a day whose first entry is at
+  // 08:00 opened on eight empty hours and put every event below the fold.
+  // Open at the earliest timed entry instead — or the current hour when the
+  // range holds today and nothing is scheduled, 08:00 otherwise.
+  const firstHour = useMemo(() => {
+    const timed = entries.filter((entry) => !entry.allDay);
+    if (timed.length > 0) return Math.min(...timed.map((entry) => entry.start.getHours()));
+    const current = new Date();
+    const holdsToday = current >= range.start && current < addDays(range.end, 1);
+    return holdsToday ? current.getHours() : 8;
+  }, [entries, range]);
+
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: Math.max(0, firstHour - 1) * hourHeight });
+  }, [range, firstHour]);
 
   return (
-    <AFPanel label="Time grid">
+    <AFPanel label="Time grid" className="cal__timepanel">
       <div className="cal__grid-head" style={{ gridTemplateColumns: `48px repeat(${days.length}, 1fr)` }}>
         <span />
         {days.map((day) => (
@@ -370,7 +391,11 @@ function TimeGrid({
         ))}
       </div>
 
-      <div className="cal__timegrid" style={{ gridTemplateColumns: `48px repeat(${days.length}, 1fr)` }}>
+      <div
+        ref={scroller}
+        className="cal__timegrid"
+        style={{ gridTemplateColumns: `48px repeat(${days.length}, 1fr)` }}
+      >
         <div className="cal__axis">
           {hours.map((hour) => (
             <span key={hour} style={{ height: hourHeight }} className="cal__hour">

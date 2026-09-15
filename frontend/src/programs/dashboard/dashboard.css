@@ -107,8 +107,14 @@
   /* Below this a two-column split is two unusable columns — rows collapse
      and every widget takes the full width, the same call `SplitView` makes
      at the same breakpoint. */
+  /* `stretch` is load-bearing here. In a column the cross axis is width, and
+     `flex-start` sizes each widget to its content — but `.dash__widget-body`
+     is an inline-size container, which contributes no content width at all.
+     Every widget computed to 0px wide and the dashboard rendered blank on
+     phones. */
   .dash__row {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .dash__widget {
