@@ -1,36 +1,37 @@
 .aud__file {
-  font-family: var(--af-mono);
-  font-size: 12px;
-  color: var(--af-muted);
-  width: 100%;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
-.aud__formats,
-.aud__bitrates {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-/* One cell per phase rather than a percentage: a conversion has stages, and
-   which stage it is stuck in is the useful thing to see. */
-.aud__phases {
-  display: flex;
-  gap: 3px;
-  margin-bottom: 12px;
-}
-
-.aud__phase {
-  flex: 1;
+.aud__track {
   height: 6px;
-  background: var(--af-sunken);
-  border: 1px solid var(--af-line);
-  border-radius: 1px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
 }
 
-.aud__phase.is-done {
-  background: var(--af-accent);
-  border-color: var(--af-accent);
+.aud__fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.aud__fill.is-running {
+  background: linear-gradient(90deg, #fdba74, var(--glow));
+  box-shadow: 0 0 12px var(--glow);
+}
+
+.aud__fill.is-done {
+  background: #34d399;
+}
+
+.aud__fill.is-failed {
+  background: #fb7185;
 }

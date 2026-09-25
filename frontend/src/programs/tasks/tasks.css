@@ -5,14 +5,14 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
 /* ---- table ---- */
 
 .tsk__table-wrap {
   overflow-x: auto;
-  border: 1px solid var(--af-line);
-  border-radius: var(--af-radius);
+  border-radius: 16px;
   /* The table itself is a fixed pixel width now (dragged columns need a real
      width to drag against) — without this the wrap kept stretching to the
      page's full width regardless, leaving an empty bordered strip trailing
@@ -31,14 +31,13 @@
 
 .tsk__table th {
   position: relative;
-  font-family: var(--af-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
+  font-size: 12px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--af-muted);
+  color: var(--color-subtle-foreground);
   text-align: left;
   padding: 10px 12px;
-  border-bottom: 1.5px solid var(--af-line-strong);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -46,15 +45,16 @@
 
 /* A grab strip on each column's right edge — dragged widths persist to
    `localStorage`, see `TasksScreen.tsx`'s `useColumnWidths`. The hit target
-   (10px, centered on the border) is wider than what's drawn (a 2px line),
-   the same asymmetry a window manager's own edge-resize uses — a strip
-   exactly as wide as its visible line is too thin to reliably grab. */
+   is wider than what's drawn (a 2px bar), the same asymmetry a window
+   manager's own edge-resize uses — a strip exactly as wide as its visible
+   line is too thin to reliably grab. */
 .tsk__col-resize {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
   width: 10px;
+  min-width: 8px;
   cursor: col-resize;
   touch-action: none;
 }
@@ -62,28 +62,31 @@
 .tsk__col-resize::after {
   content: '';
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 4px;
+  bottom: 4px;
   right: 4px;
   width: 2px;
-  background: transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  transition: background 120ms ease, box-shadow 120ms ease;
 }
 
 .tsk__col-resize:hover::after {
-  background: var(--af-line-strong);
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
 }
 
 /* Stays lit for the whole drag — `useColumnWidths` locks the cursor at the
-   same time, so both the pointer icon and this line agree a drag is still
+   same time, so both the pointer icon and this bar agree a drag is still
    happening even once the pointer has moved off the strip itself. */
 .tsk__col-resize.is-dragging::after {
-  background: var(--af-accent);
-  width: 2px;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
 }
 
 .tsk__table td {
   padding: 8px 12px;
-  border-bottom: 1px solid var(--af-line);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   vertical-align: middle;
 }
 
@@ -92,7 +95,7 @@
 }
 
 .tsk__table tbody tr:hover {
-  background: var(--af-sunken);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .tsk__col-title {
@@ -108,19 +111,14 @@
   text-align: right;
 }
 
+.tsk__cell-empty {
+  color: var(--af-muted);
+}
+
 .tsk__tags {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-}
-
-.tsk__check {
-  font-family: var(--af-mono);
-  color: var(--af-muted);
-}
-
-.tsk__check.is-yes {
-  color: var(--af-ok);
 }
 
 .tsk__url {
@@ -130,6 +128,32 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: bottom;
+}
+
+/* ---- tinted option pills / chips ---- */
+
+.tsk__pill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.tsk__chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid;
+  font-size: 11.5px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 /* ---- row title + icon + side-peek reveal ---- */
@@ -166,6 +190,7 @@
   width: 20px;
   height: 20px;
   font-size: 15px;
+  color: var(--af-muted);
 }
 
 .tsk__icon-img {
@@ -182,6 +207,63 @@
 
 .tsk__title-row:hover .tsk__peek-actions {
   opacity: 1;
+}
+
+.tsk__peek-open,
+.tsk__delete,
+.tsk__ghost-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--af-muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.tsk__peek-open:hover,
+.tsk__delete:hover,
+.tsk__ghost-icon:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--af-ink);
+}
+
+.tsk__delete.is-confirming {
+  color: var(--af-warn);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tsk__ghost-icon:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ---- "New page" ghost row ---- */
+
+.tsk__new-row td {
+  padding: 0;
+}
+
+.tsk__new-page {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 9px 12px;
+  color: var(--af-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.tsk__new-page:hover {
+  color: var(--af-ink);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 /* ---- side peek ---- */
@@ -472,10 +554,6 @@
 
 /* ---- property panel ---- */
 
-.tsk__property-panel {
-  max-width: 560px;
-}
-
 .tsk__property-list {
   list-style: none;
   margin: 0 0 14px;
@@ -489,8 +567,10 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--af-line);
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .tsk__property-row .af-body {
@@ -500,7 +580,7 @@
 .tsk__property-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .tsk__option-editor {
@@ -516,13 +596,31 @@
   gap: 8px;
 }
 
-.tsk__option-row .af-input {
-  flex: 1;
+/* A CSS-drawn grip, matching the dashboard widget's own drag handle — a
+   2x3 dot grid rather than a glyph, so it reads the same way everywhere a
+   list can be reordered. */
+.tsk__grip {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 3px;
+  padding: 4px;
+  border-radius: 6px;
+  cursor: grab;
+  flex: none;
+  touch-action: none;
+}
+
+.tsk__grip-dot {
+  width: 2px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--af-muted);
 }
 
 .tsk__tone-grid {
   display: flex;
   gap: 4px;
+  flex: none;
 }
 
 .tsk__tone {
@@ -543,11 +641,10 @@
   align-self: flex-start;
   margin-top: 2px;
   padding: 4px 10px;
-  border: 1px dashed var(--af-line-strong);
-  border-radius: var(--af-radius);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
   background: none;
   color: var(--af-muted);
-  font-family: var(--af-mono);
   font-size: 11px;
   cursor: pointer;
 }
@@ -574,9 +671,9 @@
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border: 1px solid var(--af-line);
-  border-radius: var(--af-radius);
-  background: var(--af-sunken);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
   cursor: pointer;
   font-family: var(--af-sans);
   font-size: 13px;
@@ -584,21 +681,37 @@
 }
 
 .tsk__type-option.is-active {
-  border-color: var(--af-accent);
-  background: var(--af-accent-soft);
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tsk__section-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-subtle-foreground);
+}
+
+.tsk__panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
 }
 
 /* ---- filter panel ---- */
 
-.tsk__filter-panel {
-  max-width: 480px;
+.tsk__filter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 6px;
 }
 
 .tsk__filter-row {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 14px;
 }
 
 .tsk__filter-options {

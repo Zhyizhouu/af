@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AFButton, AFEmptyState, AFHint, AFIconButton, AFPanel } from '../../components/AF';
+import { cn } from 'cn';
+import { ArrowUp, Menu, Paperclip, Plus } from 'lucide-react';
+import { Button } from '../../components/ui/button';
+import { AIMark } from '../../components/brand/AIMark';
 import { readAgenda, readSessionsById, type AgendaEntry } from '../../data/agenda';
 import { idToken } from '../../data/firebase';
 import { useSession } from '../../app/session';
@@ -30,7 +33,7 @@ import {
   saveConversation,
 } from './conversations';
 import { commitTurn } from './commit';
-import { EventCard, HabitTickCard, QrArtifactCard, RemovalCard, SessionCard } from './cards';
+import { EventCard, HabitTickCard, ProposalsSummary, QrArtifactCard, RemovalCard, SessionCard } from './cards';
 import { readHabitsForAssistant } from '../habits/store';
 import type { AiConversationRow } from '../../data/db';
 import './ai.css';
@@ -294,6 +297,23 @@ export function AiScreen({
     [],
   );
 
+  /** Drops every proposal a turn still has kept — the "Dismiss" footer button. */
+  const dismissAll = useCallback((index: number) => {
+    setMessages((current) =>
+      current.map((m, i) =>
+        i === index
+          ? {
+              ...m,
+              droppedSessions: new Set([...m.droppedSessions, ...m.sessions.keys()]),
+              droppedEvents: new Set([...m.droppedEvents, ...m.events.keys()]),
+              droppedHabitTicks: new Set([...m.droppedHabitTicks, ...m.habitTicks.keys()]),
+              droppedRemovals: new Set([...m.droppedRemovals, ...m.removals.keys()]),
+            }
+          : m,
+      ),
+    );
+  }, []);
+
   /**
    * Steps through this conversation's own prompts: -1 back, +1 forward.
    *
@@ -362,7 +382,7 @@ export function AiScreen({
   const enabled = !busy && configured;
 
   return (
-    <div className={`ai${sidebarOpen ? ' ai--with-sidebar' : ''}`}>
+    <div className="ai flex h-full min-h-0 bg-[#050506] font-sans text-foreground">
       {sidebarOpen && (
         <Sidebar
           conversations={saved}
@@ -374,45 +394,67 @@ export function AiScreen({
         />
       )}
 
-      <div className="ai__main">
-        <header className="ai__head">
-          {!sidebarOpen && (
-            <AFIconButton
-              glyph="☰"
-              tooltip="Show conversations"
-              bordered={false}
-              onClick={() => setSidebarOpen(true)}
-            />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header
+          className={cn(
+            'flex h-16 shrink-0 items-center gap-3 border-b border-white/[0.07] px-4 md:px-8',
+            paneWidth === 'split' && 'pr-12',
           )}
-          <span className="af-brand">AI</span>
-          <span className="ai__tagline af-panel-label">talk it through, then keep it</span>
+        >
+          {!sidebarOpen && (
+            <Button
+              variant="raised"
+              size="icon-sm"
+              aria-label="Show conversations"
+              title="Show conversations"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu size={16} aria-hidden />
+            </Button>
+          )}
+          <span className="text-[16px] font-semibold">AI</span>
+          <span className="ml-auto flex items-center gap-2 text-[12px] text-muted-foreground">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" aria-hidden />
+            <span className="hidden sm:inline">Sees your next two months</span>
+          </span>
         </header>
 
         {limits && !limits.configured && (
-          <AFPanel label="Not configured">
-            <span className="ai__warn">
-              This server has no Gemini API key, so the assistant cannot answer. Set
-              AF_GEMINI_API_KEY on the API and restart it.
-            </span>
-          </AFPanel>
+          <div className="mx-auto mt-4 w-full max-w-[720px] shrink-0 px-4 md:px-0">
+            <div className="surface-3d rounded-2xl p-4">
+              <div className="mb-1.5 text-[12px] uppercase tracking-[0.08em] text-subtle-foreground">
+                Not configured
+              </div>
+              <p className="text-[13px] leading-relaxed text-rose-400">
+                This server has no Gemini API key, so the assistant cannot answer. Set
+                AF_GEMINI_API_KEY on the API and restart it.
+              </p>
+            </div>
+          </div>
         )}
-        {limitsError && <AFHint>{limitsError}</AFHint>}
+        {limitsError && (
+          <div className="mx-auto mt-4 w-full max-w-[720px] shrink-0 px-4 md:px-0">
+            <div className="surface-3d rounded-2xl p-4">
+              <p className="text-[13px] leading-relaxed text-muted-foreground">{limitsError}</p>
+            </div>
+          </div>
+        )}
 
-        <div className="ai__transcript" ref={transcript} data-testid="transcript">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8" ref={transcript} data-testid="transcript">
           {messages.length === 0 && !busy ? (
-            <div className="ai__empty">
-              <AFEmptyState
-                glyph="✦"
-                message={'Say what you need scheduled.\nNothing changes until you confirm it.'}
-              />
-              <AFHint>
+            <div className="mx-auto flex h-full w-full max-w-[440px] flex-col items-center justify-center gap-3 text-center">
+              <AIMark size={40} />
+              <p className="whitespace-pre-line text-[14px] leading-relaxed text-foreground">
+                Say what you need scheduled.{'\n'}Nothing changes until you confirm it.
+              </p>
+              <p className="text-[13px] leading-relaxed text-muted-foreground">
                 It can see the next two months of your calendar, so you can say “move my
                 Monday exam to 10am” or “cancel the lunch tomorrow” as easily as you can
                 add something new.
-              </AFHint>
+              </p>
             </div>
           ) : (
-            <>
+            <div className="mx-auto flex w-full max-w-[720px] flex-col">
               {messages.map((message, index) => (
                 <Turn
                   key={index}
@@ -420,113 +462,137 @@ export function AiScreen({
                   logo={latestLogo(messages.slice(0, index + 1))}
                   busy={busy}
                   onCommit={() => void commit(index)}
+                  onDismiss={() => dismissAll(index)}
                   onDrop={(field, at) => drop(index, field, at)}
                 />
               ))}
               {busy && <Thinking />}
-            </>
+            </div>
           )}
         </div>
 
-        <div className="ai__composer">
-          <textarea
-            className="af-input af-input--prose ai__input"
-            rows={2}
-            ref={composer}
-            value={draft}
-            disabled={!enabled}
-            placeholder="Write a message…"
-            onChange={(event) => {
-              setDraft(event.target.value);
-              // Typing is how you leave history — from here the draft is yours.
-              setHistoryIndex(null);
-            }}
-            onKeyDown={(event) => {
-              // Up recalls, Down goes forward again. Entering history needs the
-              // caret at the matching edge so a multi-line draft can still be
-              // navigated; once browsing, the arrows belong to history.
-              if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-                const el = event.currentTarget;
-                const collapsed = el.selectionStart === el.selectionEnd;
-                const browsing = historyIndex !== null;
-                const entering =
-                  event.key === 'ArrowUp' && collapsed && el.selectionStart === 0;
-                // Down only means anything once there is somewhere to go back to.
-                if (browsing || entering) {
-                  if (recall(event.key === 'ArrowUp' ? -1 : 1)) event.preventDefault();
+        <div className="mx-auto w-full max-w-[720px] shrink-0 px-4 md:px-8">
+          <div className="raised rounded-[18px] border border-white/10 px-3.5 pt-3 pb-2.5 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_20px_60px_-20px_rgba(255,255,255,0.12)]">
+            <textarea
+              className="max-h-[180px] min-h-[48px] w-full resize-none bg-transparent text-[14px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none"
+              rows={2}
+              ref={composer}
+              value={draft}
+              disabled={!enabled}
+              placeholder="Write a message…"
+              onChange={(event) => {
+                setDraft(event.target.value);
+                // Typing is how you leave history — from here the draft is yours.
+                setHistoryIndex(null);
+              }}
+              onKeyDown={(event) => {
+                // Up recalls, Down goes forward again. Entering history needs the
+                // caret at the matching edge so a multi-line draft can still be
+                // navigated; once browsing, the arrows belong to history.
+                if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                  const el = event.currentTarget;
+                  const collapsed = el.selectionStart === el.selectionEnd;
+                  const browsing = historyIndex !== null;
+                  const entering =
+                    event.key === 'ArrowUp' && collapsed && el.selectionStart === 0;
+                  // Down only means anything once there is somewhere to go back to.
+                  if (browsing || entering) {
+                    if (recall(event.key === 'ArrowUp' ? -1 : 1)) event.preventDefault();
+                  }
+                  return;
                 }
-                return;
-              }
 
-              // Enter sends, Shift+Enter breaks the line. preventDefault is what
-              // stops the newline landing as well as the message going — without
-              // it you send and are left holding a blank second line.
-              if (event.key !== 'Enter' || event.shiftKey) return;
-              event.preventDefault();
-              if (enabled) void send();
-            }}
-          />
-          {pending.length > 0 && (
-            <div className="ai__pending">
-              {pending.map((file, index) => (
-                <span key={`${file.name}-${index}`} className="ai__attachment">
-                  {file.kind.startsWith('image/') && (
-                    <img src={file.data} alt="" className="ai__attachment-thumb" />
-                  )}
-                  {file.name}
-                  <button
-                    type="button"
-                    className="ai__attachment-drop"
-                    aria-label={`Remove ${file.name}`}
-                    onClick={() =>
-                      setPending((current) => current.filter((_, i) => i !== index))
-                    }
-                  >
-                    ✕
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-          {attachError && <AFHint>{attachError}</AFHint>}
-
-          <div className="ai__composer-row">
-            <AFIconButton
-              glyph="+"
-              tooltip="New chat"
-              bordered={false}
-              disabled={busy || messages.length === 0}
-              onClick={startNew}
+                // Enter sends, Shift+Enter breaks the line. preventDefault is what
+                // stops the newline landing as well as the message going — without
+                // it you send and are left holding a blank second line.
+                if (event.key !== 'Enter' || event.shiftKey) return;
+                event.preventDefault();
+                if (enabled) void send();
+              }}
             />
-            {/* The native file input is unstylable, so it is made transparent
-                and laid over a label styled as one of the kit's icon buttons.
-                The accessible name goes on the input, not the label: the label
-                also contains the glyph, and a name of "⌷Attach an image" is
-                what a screen reader would then announce. */}
-            <label className="af-icon-btn af-icon-btn--bare ai__attach">
-              <span aria-hidden>▤</span>
-              <input
-                type="file"
-                accept="image/*"
-                aria-label="Attach an image"
-                title="Attach an image"
-                disabled={!enabled}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) attach(file);
-                  event.target.value = '';
-                }}
-              />
-            </label>
-            <span className="ai__spacer" />
-            {messages.length > 0 && (
-              <span className="af-panel-count">{messages.length} turns</span>
+            {pending.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {pending.map((file, index) => (
+                  <span
+                    key={`${file.name}-${index}`}
+                    className="inline-flex max-w-[220px] items-center gap-1.5 overflow-hidden rounded-md border border-white/10 px-1.5 py-0.5 text-[11px] text-ellipsis whitespace-nowrap text-muted-foreground"
+                  >
+                    {file.kind.startsWith('image/') && (
+                      <img src={file.data} alt="" className="h-4 w-4 shrink-0 rounded-sm object-contain" />
+                    )}
+                    {file.name}
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-rose-400"
+                      aria-label={`Remove ${file.name}`}
+                      onClick={() =>
+                        setPending((current) => current.filter((_, i) => i !== index))
+                      }
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
             )}
-            <AFButton label="Send" disabled={!enabled} onClick={() => void send()} />
+            {attachError && <p className="mt-2 text-[12px] text-rose-400">{attachError}</p>}
+
+            <div className="mt-2.5 flex items-center gap-2.5">
+              <Button
+                variant="raised"
+                size="icon-sm"
+                aria-label="New chat"
+                title="New chat"
+                disabled={busy || messages.length === 0}
+                onClick={startNew}
+              >
+                <Plus size={16} aria-hidden />
+              </Button>
+              {/* The native file input is unstylable, so it is made transparent
+                  and laid over a label styled as an icon button. The accessible
+                  name goes on the input, not the label: the label also holds the
+                  glyph, and a name of "⌷Attach an image" is what a screen reader
+                  would then announce. */}
+              <label className="relative inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-white/10 text-muted-foreground hover:bg-white/5 hover:text-foreground">
+                <Paperclip size={16} aria-hidden />
+                <input
+                  type="file"
+                  accept="image/*"
+                  aria-label="Attach an image"
+                  title="Attach an image"
+                  disabled={!enabled}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) attach(file);
+                    event.target.value = '';
+                  }}
+                />
+              </label>
+              <span className="flex-1 truncate text-[11px] text-muted-foreground">
+                Enter to send, Shift+Enter for a new line
+              </span>
+              {messages.length > 0 && (
+                <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">
+                  {messages.length} turns
+                </span>
+              )}
+              <button
+                type="button"
+                aria-label="Send"
+                disabled={!enabled}
+                onClick={() => void send()}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black transition hover:brightness-95 disabled:pointer-events-none disabled:opacity-50"
+              >
+                <ArrowUp size={16} aria-hidden />
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="af-footer">Nothing changes until you confirm it.</div>
+        <div className="mx-auto w-full max-w-[720px] shrink-0 px-4 pt-2 pb-3 text-center text-[11px] text-subtle-foreground md:px-8">
+          Nothing changes until you confirm it.
+        </div>
       </div>
     </div>
   );
@@ -537,6 +603,7 @@ function Turn({
   logo,
   busy,
   onCommit,
+  onDismiss,
   onDrop,
 }: {
   message: AiMessage;
@@ -544,93 +611,97 @@ function Turn({
   logo: string | null;
   busy: boolean;
   onCommit: () => void;
+  onDismiss: () => void;
   onDrop: (field: 'droppedSessions' | 'droppedEvents' | 'droppedRemovals' | 'droppedHabitTicks', at: number) => void;
 }) {
   if (message.role === 'user') {
     return (
-      <div className="ai__turn ai__turn--user">
-        <AFPanel accented className="ai__bubble">
-          <span className="af-body">{message.text}</span>
+      <div className="mb-5 flex justify-end">
+        <div className="max-w-[520px] rounded-[14px] border border-white/10 bg-[#18181b] px-4 py-3">
+          <p className="text-[14px] leading-relaxed whitespace-pre-wrap text-foreground">{message.text}</p>
           {message.attachments.length > 0 && (
-            <div className="ai__attached">
+            <div className="mt-2 flex flex-wrap gap-1.5">
               {message.attachments.map((file) => (
-                <span key={file.name} className="ai__attachment">
+                <span
+                  key={file.name}
+                  className="inline-flex max-w-[220px] items-center gap-1.5 overflow-hidden rounded-md border border-white/10 px-1.5 py-0.5 text-[11px] text-ellipsis whitespace-nowrap text-muted-foreground"
+                >
                   {file.kind.startsWith('image/') && (
-                    <img src={file.data} alt="" className="ai__attachment-thumb" />
+                    <img src={file.data} alt="" className="h-4 w-4 shrink-0 rounded-sm object-contain" />
                   )}
                   {file.name}
                 </span>
               ))}
             </div>
           )}
-        </AFPanel>
+        </div>
       </div>
     );
   }
 
   if (message.failed) {
     return (
-      <AFPanel label="Problem" className="ai__turn">
-        <span className="ai__warn">{message.text}</span>
-      </AFPanel>
+      <div className="surface-3d mb-5 rounded-2xl p-4">
+        <div className="mb-1.5 text-[11px] uppercase tracking-[0.08em] text-subtle-foreground">Problem</div>
+        <p className="text-[13px] leading-relaxed text-rose-400">{message.text}</p>
+      </div>
     );
   }
 
   const locked = busy || message.committed;
 
   return (
-    <div className="ai__turn">
-      <div className="ai__attribution">
-        <span className="ai__tick" />
-        <span className="af-panel-label">Assistant</span>
+    <div className="mb-6 flex gap-3.5">
+      <AIMark size={36} thinking={false} />
+      <div className="min-w-0 flex-1">
+        <p className="mb-3.5 text-[14px] leading-relaxed whitespace-pre-wrap text-foreground/90">{message.text}</p>
+
+        {message.qrCodes.map((code, i) => (
+          <QrArtifactCard key={`q${i}`} code={code} logo={logo} />
+        ))}
+
+        {hasProposals(message) && (
+          <>
+            {message.sessions.map((proposal, i) =>
+              message.droppedSessions.has(i) ? null : (
+                <SessionCard
+                  key={`s${i}`}
+                  proposal={proposal}
+                  onRemove={locked ? undefined : () => onDrop('droppedSessions', i)}
+                />
+              ),
+            )}
+            {message.events.map((proposal, i) =>
+              message.droppedEvents.has(i) ? null : (
+                <EventCard
+                  key={`e${i}`}
+                  proposal={proposal}
+                  onRemove={locked ? undefined : () => onDrop('droppedEvents', i)}
+                />
+              ),
+            )}
+            {message.habitTicks.map((tick, i) =>
+              message.droppedHabitTicks.has(i) ? null : (
+                <HabitTickCard
+                  key={`h${i}`}
+                  tick={tick}
+                  onRemove={locked ? undefined : () => onDrop('droppedHabitTicks', i)}
+                />
+              ),
+            )}
+            {message.removals.map((entry, i) =>
+              message.droppedRemovals.has(i) ? null : (
+                <RemovalCard
+                  key={`r${i}`}
+                  entry={entry}
+                  onKeep={locked ? undefined : () => onDrop('droppedRemovals', i)}
+                />
+              ),
+            )}
+            <CommitControl message={message} busy={busy} onCommit={onCommit} onDismiss={onDismiss} />
+          </>
+        )}
       </div>
-      <p className="af-body ai__reply">{message.text}</p>
-
-      {message.qrCodes.map((code, i) => (
-        <QrArtifactCard key={`q${i}`} code={code} logo={logo} />
-      ))}
-
-      {hasProposals(message) && (
-        <>
-          {message.sessions.map((proposal, i) =>
-            message.droppedSessions.has(i) ? null : (
-              <SessionCard
-                key={`s${i}`}
-                proposal={proposal}
-                onRemove={locked ? undefined : () => onDrop('droppedSessions', i)}
-              />
-            ),
-          )}
-          {message.events.map((proposal, i) =>
-            message.droppedEvents.has(i) ? null : (
-              <EventCard
-                key={`e${i}`}
-                proposal={proposal}
-                onRemove={locked ? undefined : () => onDrop('droppedEvents', i)}
-              />
-            ),
-          )}
-          {message.habitTicks.map((tick, i) =>
-            message.droppedHabitTicks.has(i) ? null : (
-              <HabitTickCard
-                key={`h${i}`}
-                tick={tick}
-                onRemove={locked ? undefined : () => onDrop('droppedHabitTicks', i)}
-              />
-            ),
-          )}
-          {message.removals.map((entry, i) =>
-            message.droppedRemovals.has(i) ? null : (
-              <RemovalCard
-                key={`r${i}`}
-                entry={entry}
-                onKeep={locked ? undefined : () => onDrop('droppedRemovals', i)}
-              />
-            ),
-          )}
-          <CommitControl message={message} busy={busy} onCommit={onCommit} />
-        </>
-      )}
     </div>
   );
 }
@@ -663,12 +734,14 @@ function CommitControl({
   message,
   busy,
   onCommit,
+  onDismiss,
 }: {
   message: AiMessage;
   busy: boolean;
   onCommit: () => void;
+  onDismiss: () => void;
 }) {
-  if (message.committed) return <AFHint tip>{summarise(message)}</AFHint>;
+  if (message.committed) return <p className="mt-1 text-[12.5px] text-emerald-400">{summarise(message)}</p>;
 
   const adding = keptSessions(message).length + keptEvents(message).length;
   const deleting = keptRemovals(message).length;
@@ -701,12 +774,13 @@ function CommitControl({
       : clauses.join(' and ').replace(/^./, (c) => c.toUpperCase());
 
   return (
-    <AFButton
-      label={label}
-      expand
-      variant={deleting > 0 ? 'danger' : 'solid'}
+    <ProposalsSummary
+      count={keptCount(message)}
+      confirmLabel={label}
+      danger={deleting > 0}
       disabled={busy || keptCount(message) === 0}
-      onClick={onCommit}
+      onConfirm={onCommit}
+      onDismiss={onDismiss}
     />
   );
 }
@@ -714,16 +788,14 @@ function CommitControl({
 /**
  * The gap between sending and hearing back.
  *
- * Three squares rather than a spinner: nothing else in AF spins, and the mark's
- * own vocabulary is square ticks on a rule.
+ * The mark itself carries the wait — its orbit speeds up while `thinking` is
+ * true — so this is the mark plus a word, not a spinner of its own.
  */
 function Thinking() {
   return (
-    <div className="ai__thinking">
-      <span className="ai__pip" />
-      <span className="ai__pip" />
-      <span className="ai__pip" />
-      <span className="af-panel-label">Thinking…</span>
+    <div className="mb-6 flex items-center gap-3.5">
+      <AIMark size={36} thinking />
+      <span className="text-[12px] text-muted-foreground">Thinking…</span>
     </div>
   );
 }

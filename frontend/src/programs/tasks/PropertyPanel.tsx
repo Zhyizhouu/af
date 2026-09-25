@@ -1,8 +1,11 @@
 import { useState } from 'react';
-import { AFButton, AFIconButton, AFPanel, AFTag } from '../../components/AF';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
 import { useDragReorder } from '../../components/dragReorder';
 import type { TaskPropertyRow, TaskPropertyType } from '../../data/db';
-import { categoryTones } from '../../data/tones';
+import { categoryTones, hexToRgba, toneColor } from '../../data/tones';
 import {
   addOption,
   deleteOption,
@@ -52,53 +55,70 @@ export function PropertyPanel({
   };
 
   return (
-    <div className="cal__overlay" role="dialog" aria-label="Manage properties">
-      <AFPanel label="Properties" className="cal__editor tsk__property-panel">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="surface-3d rounded-2xl border-0 bg-transparent p-5 sm:max-w-xl" aria-label="Manage properties">
+        <DialogHeader>
+          <DialogTitle>Properties</DialogTitle>
+        </DialogHeader>
+
         <ul className="tsk__property-list">
           {properties.map((property, index) => (
             <li key={property.id}>
               <div className="tsk__property-row">
                 <span className="af-body">{property.name}</span>
-                <span className="af-meta">
+                <span className="text-xs text-muted-foreground">
                   {typeOptions.find((option) => option.type === property.type)?.label}
                 </span>
                 <div className="tsk__property-actions">
-                  <AFIconButton
-                    glyph="↑"
-                    tooltip="Move up"
-                    bordered={false}
+                  <button
+                    type="button"
+                    className="tsk__ghost-icon"
+                    aria-label="Move up"
+                    title="Move up"
                     disabled={index === 0}
                     onClick={() => void reorderProperty(property.id, -1).then(onChange)}
-                  />
-                  <AFIconButton
-                    glyph="↓"
-                    tooltip="Move down"
-                    bordered={false}
+                  >
+                    <ChevronUp size={14} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="tsk__ghost-icon"
+                    aria-label="Move down"
+                    title="Move down"
                     disabled={index === properties.length - 1}
                     onClick={() => void reorderProperty(property.id, 1).then(onChange)}
-                  />
+                  >
+                    <ChevronDown size={14} aria-hidden />
+                  </button>
                   {hasOptions(property.type) && (
-                    <AFButton
-                      label="Options"
-                      variant="quiet"
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       onClick={() =>
                         setEditingOptionsFor(editingOptionsFor === property.id ? null : property.id)
                       }
-                    />
+                    >
+                      Options
+                    </Button>
                   )}
                   {confirmingDelete === property.id ? (
-                    <AFButton
-                      label="Really delete"
-                      variant="danger"
+                    <Button
+                      size="sm"
+                      variant="destructive"
                       onClick={() => void deleteProperty(property.id).then(onChange)}
-                    />
+                    >
+                      Really delete
+                    </Button>
                   ) : (
-                    <AFIconButton
-                      glyph="✕"
-                      tooltip="Delete property"
-                      bordered={false}
+                    <button
+                      type="button"
+                      className="tsk__ghost-icon"
+                      aria-label="Delete property"
+                      title="Delete property"
                       onClick={() => setConfirmingDelete(property.id)}
-                    />
+                    >
+                      <X size={14} aria-hidden />
+                    </button>
                   )}
                 </div>
               </div>
@@ -111,8 +131,8 @@ export function PropertyPanel({
         </ul>
 
         <div className="tsk__add-property">
-          <input
-            className="af-input af-input--prose"
+          <Input
+            className="inset-field rounded-[10px]"
             placeholder="Property name"
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -129,14 +149,18 @@ export function PropertyPanel({
               </button>
             ))}
           </div>
-          <AFButton label="Add property" onClick={addProperty} disabled={!name.trim()} />
+          <Button variant="raised" onClick={addProperty} disabled={!name.trim()}>
+            Add property
+          </Button>
         </div>
 
-        <div className="cal__editor-actions">
-          <AFButton label="Close" variant="quiet" onClick={onClose} />
+        <div className="tsk__panel-actions">
+          <Button variant="ghost" onClick={onClose}>
+            Close
+          </Button>
         </div>
-      </AFPanel>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -165,6 +189,7 @@ function OptionEditor({
     <div className="tsk__option-editor">
       {property.options.map((option, index) => {
         const { draggable, onDragStart, onDragEnd, onDragOver, onDrop, className } = dragHandlers(index);
+        const color = toneColor(option.toneIndex);
         return (
           <div
             key={option.id}
@@ -172,12 +197,23 @@ function OptionEditor({
             onDragOver={onDragOver}
             onDrop={onDrop}
           >
-            <span className="af-drag-handle" draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-              ⠿
+            <span className="tsk__grip" draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+              {Array.from({ length: 6 }, (_, dot) => (
+                <span key={dot} className="tsk__grip-dot" />
+              ))}
             </span>
-            <AFTag label={option.label} toneIndex={option.toneIndex} />
-            <input
-              className="af-input af-input--prose"
+            <span
+              className="tsk__pill"
+              style={{
+                background: hexToRgba(color, 0.14),
+                borderColor: hexToRgba(color, 0.35),
+                color: `color-mix(in srgb, ${color} 70%, white)`,
+              }}
+            >
+              {option.label}
+            </span>
+            <Input
+              className="inset-field rounded-[10px] flex-1"
               defaultValue={option.label}
               onBlur={(event) => {
                 if (event.target.value.trim() && event.target.value !== option.label) {
@@ -197,26 +233,35 @@ function OptionEditor({
                 />
               ))}
             </div>
-            <AFIconButton
-              glyph="↑"
-              tooltip="Move up"
-              bordered={false}
+            <button
+              type="button"
+              className="tsk__ghost-icon"
+              aria-label="Move up"
+              title="Move up"
               disabled={index === 0}
               onClick={() => void reorderOption(property.id, option.id, -1).then(onChange)}
-            />
-            <AFIconButton
-              glyph="↓"
-              tooltip="Move down"
-              bordered={false}
+            >
+              <ChevronUp size={14} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="tsk__ghost-icon"
+              aria-label="Move down"
+              title="Move down"
               disabled={index === property.options.length - 1}
               onClick={() => void reorderOption(property.id, option.id, 1).then(onChange)}
-            />
-            <AFIconButton
-              glyph="✕"
-              tooltip="Delete option"
-              bordered={false}
+            >
+              <ChevronDown size={14} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="tsk__ghost-icon"
+              aria-label="Delete option"
+              title="Delete option"
               onClick={() => void deleteOption(property.id, option.id).then(onChange)}
-            />
+            >
+              <X size={14} aria-hidden />
+            </button>
           </div>
         );
       })}
@@ -226,8 +271,8 @@ function OptionEditor({
           + Add {property.name}
         </button>
       ) : (
-        <input
-          className="af-input af-input--prose"
+        <Input
+          className="inset-field rounded-[10px]"
           autoFocus
           placeholder={`New ${property.name.toLowerCase()}`}
           value={adding}

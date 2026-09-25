@@ -1,5 +1,23 @@
 import { useState } from 'react';
-import { AFButton, AFHint, AFPanel } from '../../components/AF';
+import { cn } from 'cn';
+import { Button } from '../../components/ui/button';
+import { Checkbox } from '../../components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
 import type { AgendaEntry } from '../../data/agenda';
 import { notificationPermission, requestNotificationPermission } from '../../data/notifications';
 import { reminderOptions } from '../../data/reminders';
@@ -61,118 +79,164 @@ export function EventEditor({
   const readOnly = initial?.kind === 'session';
 
   return (
-    <div className="cal__overlay" role="dialog" aria-label="Event">
-      <AFPanel label={readOnly ? 'Session' : initial ? 'Edit event' : 'New event'} className="cal__editor">
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent
+        className="surface-3d rounded-2xl border-white/[0.07] font-sans text-foreground sm:max-w-[420px]"
+        aria-label="Event"
+      >
+        <DialogHeader>
+          <DialogTitle className="text-[15px] font-semibold">
+            {readOnly ? 'Session' : initial ? 'Edit event' : 'New event'}
+          </DialogTitle>
+        </DialogHeader>
+
         {readOnly ? (
-          <AFHint>
+          <p className="text-[13px] text-muted-foreground">
             This is a proctor session. Edit it in Checklists — the calendar shows it but
             does not own it.
-          </AFHint>
+          </p>
         ) : (
-          <>
-            <label className="af-panel-label" htmlFor="event-title">Title</label>
-            <input
-              id="event-title"
-              className="af-input af-input--prose"
-              value={title}
-              autoFocus
-              onChange={(event) => setTitle(event.target.value)}
-            />
-
-            <label className="af-panel-label" htmlFor="event-start">Start</label>
-            <input
-              id="event-start"
-              className="af-input"
-              type="datetime-local"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
-            />
-
-            <label className="af-panel-label" htmlFor="event-end">End</label>
-            <input
-              id="event-end"
-              className="af-input"
-              type="datetime-local"
-              value={to}
-              onChange={(event) => setTo(event.target.value)}
-            />
-
-            <label className="cal__check">
-              <input
-                type="checkbox"
-                checked={allDay}
-                onChange={(event) => setAllDay(event.target.checked)}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="event-title" className="text-[12px] text-muted-foreground">
+                Title
+              </Label>
+              <Input
+                id="event-title"
+                className="inset-field rounded-[10px]"
+                value={title}
+                autoFocus
+                onChange={(event) => setTitle(event.target.value)}
               />
-              <span className="af-panel-label">All day</span>
-            </label>
-
-            <span className="af-panel-label">Category</span>
-            <div className="cal__categories">
-              {categories.map((option) => (
-                <button
-                  key={option.slug}
-                  type="button"
-                  className={`cal__category${category === option.slug ? ' is-active' : ''}`}
-                  onClick={() => setCategory(option.slug)}
-                >
-                  <span className="cal__dot" style={{ background: toneColor(option.toneIndex) }} />
-                  {option.label}
-                </button>
-              ))}
             </div>
 
-            <label className="af-panel-label" htmlFor="event-notes">Notes</label>
-            <textarea
-              id="event-notes"
-              className="af-input af-input--prose"
-              rows={2}
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-            />
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="event-start" className="text-[12px] text-muted-foreground">
+                Start
+              </Label>
+              <Input
+                id="event-start"
+                className="inset-field rounded-[10px]"
+                type="datetime-local"
+                value={from}
+                onChange={(event) => setFrom(event.target.value)}
+              />
+            </div>
 
-            <label className="af-panel-label" htmlFor="event-reminder">Remind me</label>
-            <select
-              id="event-reminder"
-              className="af-nav__select"
-              value={reminderMinutes}
-              onChange={async (event) => {
-                const minutes = Number(event.target.value);
-                setReminderMinutes(minutes);
-                if (minutes > 0) {
-                  const permission = await requestNotificationPermission();
-                  setReminderBlocked(permission === 'denied' || permission === 'unsupported');
-                } else {
-                  setReminderBlocked(false);
-                }
-              }}
-            >
-              {reminderOptions.map((option) => (
-                <option key={option.minutes} value={option.minutes}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="event-end" className="text-[12px] text-muted-foreground">
+                End
+              </Label>
+              <Input
+                id="event-end"
+                className="inset-field rounded-[10px]"
+                type="datetime-local"
+                value={to}
+                onChange={(event) => setTo(event.target.value)}
+              />
+            </div>
+
+            <Label className="flex items-center gap-2">
+              <Checkbox
+                checked={allDay}
+                onCheckedChange={(checked) => setAllDay(checked === true)}
+              />
+              <span className="text-[12px] text-muted-foreground">All day</span>
+            </Label>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[12px] text-muted-foreground">Category</span>
+              <div className="flex flex-wrap gap-1.5">
+                {categories.map((option) => (
+                  <button
+                    key={option.slug}
+                    type="button"
+                    className={cn(
+                      'inset-field inline-flex items-center gap-1.5 rounded-[10px] px-2 py-1 text-[11px] text-muted-foreground',
+                      category === option.slug && 'text-foreground shadow-[0_0_0_1px_rgba(255,255,255,0.3)]',
+                    )}
+                    onClick={() => setCategory(option.slug)}
+                  >
+                    <span
+                      className="size-1.5 rounded-full"
+                      style={{ background: toneColor(option.toneIndex) }}
+                    />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="event-notes" className="text-[12px] text-muted-foreground">
+                Notes
+              </Label>
+              <textarea
+                id="event-notes"
+                className="inset-field min-h-16 w-full rounded-[10px] px-3 py-2 text-sm outline-none"
+                rows={2}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="event-reminder" className="text-[12px] text-muted-foreground">
+                Remind me
+              </Label>
+              <Select
+                value={String(reminderMinutes)}
+                onValueChange={async (value) => {
+                  const minutes = Number(value);
+                  setReminderMinutes(minutes);
+                  if (minutes > 0) {
+                    const permission = await requestNotificationPermission();
+                    setReminderBlocked(permission === 'denied' || permission === 'unsupported');
+                  } else {
+                    setReminderBlocked(false);
+                  }
+                }}
+              >
+                <SelectTrigger id="event-reminder" className="inset-field w-full rounded-[10px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {reminderOptions.map((option) => (
+                    <SelectItem key={option.minutes} value={String(option.minutes)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {reminderBlocked && (
-              <AFHint>
+              <p className="text-[13px] text-muted-foreground">
                 Notifications are blocked for this site, so this reminder will not show. Allow
                 them in your browser's site settings to fix that.
-              </AFHint>
+              </p>
             )}
-          </>
+          </div>
         )}
 
-        <div className="cal__editor-actions">
-          <AFButton label="Cancel" variant="quiet" onClick={onCancel} />
+        <DialogFooter className="mt-2 flex-row flex-wrap gap-2 sm:justify-start">
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
           {onDelete && !readOnly && (
             confirming ? (
-              <AFButton label="Really delete" variant="danger" onClick={onDelete} />
+              <Button variant="destructive" onClick={onDelete}>
+                Really delete
+              </Button>
             ) : (
-              <AFButton label="Delete" variant="ghost" onClick={() => setConfirming(true)} />
+              <Button variant="ghost" onClick={() => setConfirming(true)}>
+                Delete
+              </Button>
             )
           )}
           {!readOnly && (
-            <AFButton
-              label="Save"
+            <Button
+              variant="gradient"
+              className="ml-auto"
               disabled={!title.trim()}
               onClick={() => {
                 const startAt = new Date(from);
@@ -189,10 +253,12 @@ export function EventEditor({
                   reminderMinutes,
                 });
               }}
-            />
+            >
+              Save
+            </Button>
           )}
-        </div>
-      </AFPanel>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

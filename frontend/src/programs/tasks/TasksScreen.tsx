@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { AFButton, AFEmptyState, AFIconButton, AFTag } from '../../components/AF';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
+import { FileText, Maximize2, Plus, SlidersHorizontal, Table2, X } from 'lucide-react';
+import { Button } from '../../components/ui/button';
+import { Checkbox } from '../../components/ui/checkbox';
+import { cn } from 'cn';
 import { lockCursor } from '../../components/pointerDrag';
 import { useSession } from '../../app/session';
+import { hexToRgba, toneColor } from '../../data/tones';
 import {
   actionsColumnWidth,
   defaultColumnWidth,
@@ -103,6 +107,15 @@ function useColumnWidths() {
   return { widthFor, startResize, draggingKey, applyWidths };
 }
 
+/** Tint for a status/select pill or a multi-select chip, from the option's tone. */
+function tintStyle(color: string): CSSProperties {
+  return {
+    background: hexToRgba(color, 0.14),
+    borderColor: hexToRgba(color, 0.35),
+    color: `color-mix(in srgb, ${color} 70%, white)`,
+  };
+}
+
 /**
  * reAFresh · Task Tracker — a table of user-defined "pages", each one a task
  * with typed, CRUD-able properties. A page's own detail view is built once
@@ -158,33 +171,48 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
     applyWidths(fitColumnWidths(properties, bar.current?.clientWidth ?? 0));
 
   return (
-    <div className={`page page--tall tsk${paneWidth === 'split' ? ' tsk--split' : ''}`}>
+    <div className={`page page--tall tsk font-sans text-foreground px-4! py-4! md:px-8! md:py-6!${paneWidth === 'split' ? ' tsk--split' : ''}`}>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-[15px] font-semibold text-foreground">Task Tracker</h1>
+          <span className="text-xs text-muted-foreground">
+            {pages.length} {pages.length === 1 ? 'page' : 'pages'} · {properties.length}{' '}
+            {properties.length === 1 ? 'property' : 'properties'}
+          </span>
+        </div>
+      </div>
+
       <div className="tsk__bar" ref={bar}>
-        <AFButton
-          label="New page"
+        <Button
+          variant="raised"
+          onClick={() => setShowFilters(true)}
+        >
+          <SlidersHorizontal size={16} aria-hidden />
+          {filters.length > 0 ? `Filter (${filters.length})` : 'Filter'}
+        </Button>
+        <Button variant="raised" title="Size every column to the table's width" onClick={fitColumns}>
+          <Table2 size={16} aria-hidden />
+          Fit columns
+        </Button>
+        <Button variant="raised" onClick={() => setShowProperties(true)}>
+          Properties
+        </Button>
+        <span className="page__spacer" />
+        <Button
+          variant="gradient"
           // Does not open PageDetail — a "new page" click from the table
           // creates and stays put, matching the dashboard's Tasks widget.
           onClick={() => void commit(() => createPage())}
-        />
-        <AFButton
-          label={filters.length > 0 ? `Filter (${filters.length})` : 'Filter'}
-          variant="quiet"
-          onClick={() => setShowFilters(true)}
-        />
-        <span className="page__spacer" />
-        <AFButton
-          label="Fit columns"
-          variant="ghost"
-          title="Size every column to the table's width"
-          onClick={fitColumns}
-        />
-        <AFButton label="Manage properties" variant="ghost" onClick={() => setShowProperties(true)} />
+        >
+          <Plus size={16} aria-hidden />
+          New page
+        </Button>
       </div>
 
       {pages.length === 0 ? (
-        <AFEmptyState glyph="◆" message="No pages yet. New page to get started." />
+        <p className="text-[13px] text-muted-foreground">No pages yet. New page to get started.</p>
       ) : (
-        <div className="tsk__table-wrap">
+        <div className="tsk__table-wrap surface-3d">
           <table className="tsk__table" style={{ width: tableWidth }}>
             <colgroup>
               <col style={{ width: widthFor(titleColumnKey, defaultTitleWidth) }} />
@@ -227,19 +255,24 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
                         <span className="tsk__icon">
                           {page.icon?.kind === 'upload' ? (
                             <img src={page.icon.value} alt="" className="tsk__icon-img" />
+                          ) : page.icon?.kind === 'preset' ? (
+                            page.icon.value
                           ) : (
-                            (page.icon?.value ?? '▢')
+                            <FileText size={16} aria-hidden />
                           )}
                         </span>
                         <span className="af-body">{page.title}</span>
                       </button>
                       <span className="tsk__peek-actions">
-                        <AFIconButton
-                          glyph="⤢"
-                          tooltip="Open with side peek"
-                          bordered={false}
+                        <button
+                          type="button"
+                          className="tsk__peek-open"
+                          aria-label="Open with side peek"
+                          title="Open with side peek"
                           onClick={() => setOpenPage({ id: page.id, mode: 'peek' })}
-                        />
+                        >
+                          <Maximize2 size={13} aria-hidden />
+                        </button>
                       </span>
                     </div>
                   </td>
@@ -249,24 +282,34 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
                   ))}
 
                   <td className="tsk__col-actions">
-                    {confirmingDelete === page.id ? (
-                      <AFIconButton
-                        glyph="✕"
-                        tooltip="Really delete"
-                        bordered={false}
-                        onClick={() => void commit(() => deletePage(page.id))}
-                      />
-                    ) : (
-                      <AFIconButton
-                        glyph="✕"
-                        tooltip="Delete page"
-                        bordered={false}
-                        onClick={() => setConfirmingDelete(page.id)}
-                      />
-                    )}
+                    <button
+                      type="button"
+                      className={cn('tsk__delete', confirmingDelete === page.id && 'is-confirming')}
+                      aria-label={confirmingDelete === page.id ? 'Really delete' : 'Delete page'}
+                      title={confirmingDelete === page.id ? 'Really delete' : 'Delete page'}
+                      onClick={() =>
+                        confirmingDelete === page.id
+                          ? void commit(() => deletePage(page.id))
+                          : setConfirmingDelete(page.id)
+                      }
+                    >
+                      <X size={14} aria-hidden />
+                    </button>
                   </td>
                 </tr>
               ))}
+              <tr className="tsk__new-row">
+                <td colSpan={properties.length + 2}>
+                  <button
+                    type="button"
+                    className="tsk__new-page"
+                    onClick={() => void commit(() => createPage())}
+                  >
+                    <Plus size={14} aria-hidden />
+                    New page
+                  </button>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -318,10 +361,11 @@ function renderCell(property: TaskPropertyRow, value: unknown): ReactNode {
     case 'select':
     case 'status': {
       const option = property.options.find((o) => o.id === value);
-      return option ? (
-        <AFTag label={option.label} toneIndex={option.toneIndex} />
-      ) : (
-        <span className="af-meta">—</span>
+      if (!option) return <span className="tsk__cell-empty">—</span>;
+      return (
+        <span className="tsk__pill" style={tintStyle(toneColor(option.toneIndex))}>
+          {option.label}
+        </span>
       );
     }
 
@@ -333,11 +377,13 @@ function renderCell(property: TaskPropertyRow, value: unknown): ReactNode {
       return tags.length > 0 ? (
         <span className="tsk__tags">
           {tags.map((option) => (
-            <AFTag key={option.id} label={option.label} toneIndex={option.toneIndex} />
+            <span key={option.id} className="tsk__chip" style={tintStyle(toneColor(option.toneIndex))}>
+              {option.label}
+            </span>
           ))}
         </span>
       ) : (
-        <span className="af-meta">—</span>
+        <span className="tsk__cell-empty">—</span>
       );
     }
 
@@ -349,11 +395,7 @@ function renderCell(property: TaskPropertyRow, value: unknown): ReactNode {
       );
 
     case 'checkbox':
-      return value ? (
-        <span className="tsk__check is-yes">✓</span>
-      ) : (
-        <span className="tsk__check">–</span>
-      );
+      return <Checkbox checked={Boolean(value)} disabled aria-label="Checked" />;
 
     case 'url':
       return typeof value === 'string' && value ? (
@@ -361,7 +403,7 @@ function renderCell(property: TaskPropertyRow, value: unknown): ReactNode {
           {value}
         </a>
       ) : (
-        <span className="af-meta">—</span>
+        <span className="tsk__cell-empty">—</span>
       );
   }
 }

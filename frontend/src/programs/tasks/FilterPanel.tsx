@@ -1,4 +1,7 @@
-import { AFButton, AFPanel, AFTag } from '../../components/AF';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { hexToRgba, toneColor } from '../../data/tones';
 import type { TaskPropertyRow } from '../../data/db';
 import type { PropertyFilter } from './store';
 
@@ -28,106 +31,134 @@ export function FilterPanel({
   };
 
   return (
-    <div className="cal__overlay" role="dialog" aria-label="Filter">
-      <AFPanel label="Filter" className="cal__editor tsk__filter-panel">
-        {filterable.length === 0 && <p className="af-meta">No filterable properties yet.</p>}
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="surface-3d rounded-2xl border-0 bg-transparent p-5 sm:max-w-lg" aria-label="Filter">
+        <DialogHeader>
+          <DialogTitle>Filter</DialogTitle>
+        </DialogHeader>
 
-        {filterable.map((property) => {
-          const current = filterFor(property.id);
+        {filterable.length === 0 && (
+          <p className="text-[13px] text-muted-foreground">No filterable properties yet.</p>
+        )}
 
-          if (property.type === 'select' || property.type === 'multiSelect' || property.type === 'status') {
-            const included = current?.kind === 'options' ? current.included : new Set<string>();
+        <div className="tsk__filter-list">
+          {filterable.map((property) => {
+            const current = filterFor(property.id);
+
+            if (property.type === 'select' || property.type === 'multiSelect' || property.type === 'status') {
+              const included = current?.kind === 'options' ? current.included : new Set<string>();
+              return (
+                <div key={property.id} className="tsk__filter-row">
+                  <span className="tsk__section-label">{property.name}</span>
+                  <div className="tsk__filter-options">
+                    {property.options.map((option) => {
+                      const checked = included.has(option.id);
+                      const color = toneColor(option.toneIndex);
+                      return (
+                        <label key={option.id} className="tsk__filter-option">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const next = new Set(included);
+                              if (checked) next.delete(option.id);
+                              else next.add(option.id);
+                              setFilter(
+                                next.size > 0
+                                  ? { kind: 'options', propertyId: property.id, included: next }
+                                  : null,
+                                property.id,
+                              );
+                            }}
+                          />
+                          <span
+                            className="tsk__pill"
+                            style={{
+                              background: hexToRgba(color, 0.14),
+                              borderColor: hexToRgba(color, 0.35),
+                              color: `color-mix(in srgb, ${color} 70%, white)`,
+                            }}
+                          >
+                            {option.label}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+
+            if (property.type === 'checkbox') {
+              const want = current?.kind === 'checkbox' ? current.want : null;
+              return (
+                <div key={property.id} className="tsk__filter-row">
+                  <span className="tsk__section-label">{property.name}</span>
+                  <div className="tsk__filter-options">
+                    <Button
+                      size="sm"
+                      variant={want === null ? 'raised' : 'ghost'}
+                      onClick={() => setFilter(null, property.id)}
+                    >
+                      Any
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={want === true ? 'raised' : 'ghost'}
+                      onClick={() =>
+                        setFilter({ kind: 'checkbox', propertyId: property.id, want: true }, property.id)
+                      }
+                    >
+                      Checked
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={want === false ? 'raised' : 'ghost'}
+                      onClick={() =>
+                        setFilter(
+                          { kind: 'checkbox', propertyId: property.id, want: false },
+                          property.id,
+                        )
+                      }
+                    >
+                      Not checked
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
+
+            // text / url
+            const text = current?.kind === 'contains' ? current.text : '';
             return (
               <div key={property.id} className="tsk__filter-row">
-                <span className="af-panel-label">{property.name}</span>
-                <div className="tsk__filter-options">
-                  {property.options.map((option) => {
-                    const checked = included.has(option.id);
-                    return (
-                      <label key={option.id} className="tsk__filter-option">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {
-                            const next = new Set(included);
-                            if (checked) next.delete(option.id);
-                            else next.add(option.id);
-                            setFilter(
-                              next.size > 0
-                                ? { kind: 'options', propertyId: property.id, included: next }
-                                : null,
-                              property.id,
-                            );
-                          }}
-                        />
-                        <AFTag label={option.label} toneIndex={option.toneIndex} />
-                      </label>
-                    );
-                  })}
-                </div>
+                <span className="tsk__section-label">{property.name} contains</span>
+                <Input
+                  className="inset-field rounded-[10px]"
+                  defaultValue={text}
+                  onBlur={(event) =>
+                    setFilter(
+                      event.target.value
+                        ? { kind: 'contains', propertyId: property.id, text: event.target.value }
+                        : null,
+                      property.id,
+                    )
+                  }
+                />
               </div>
             );
-          }
-
-          if (property.type === 'checkbox') {
-            const want = current?.kind === 'checkbox' ? current.want : null;
-            return (
-              <div key={property.id} className="tsk__filter-row">
-                <span className="af-panel-label">{property.name}</span>
-                <div className="tsk__filter-options">
-                  <AFButton
-                    label="Any"
-                    variant={want === null ? 'solid' : 'quiet'}
-                    onClick={() => setFilter(null, property.id)}
-                  />
-                  <AFButton
-                    label="Checked"
-                    variant={want === true ? 'solid' : 'quiet'}
-                    onClick={() =>
-                      setFilter({ kind: 'checkbox', propertyId: property.id, want: true }, property.id)
-                    }
-                  />
-                  <AFButton
-                    label="Not checked"
-                    variant={want === false ? 'solid' : 'quiet'}
-                    onClick={() =>
-                      setFilter(
-                        { kind: 'checkbox', propertyId: property.id, want: false },
-                        property.id,
-                      )
-                    }
-                  />
-                </div>
-              </div>
-            );
-          }
-
-          // text / url
-          const text = current?.kind === 'contains' ? current.text : '';
-          return (
-            <div key={property.id} className="tsk__filter-row">
-              <span className="af-panel-label">{property.name} contains</span>
-              <input
-                className="af-input af-input--prose"
-                defaultValue={text}
-                onBlur={(event) =>
-                  setFilter(
-                    event.target.value
-                      ? { kind: 'contains', propertyId: property.id, text: event.target.value }
-                      : null,
-                    property.id,
-                  )
-                }
-              />
-            </div>
-          );
-        })}
-
-        <div className="cal__editor-actions">
-          <AFButton label="Clear all" variant="ghost" onClick={() => onChange([])} />
-          <AFButton label="Done" onClick={onClose} />
+          })}
         </div>
-      </AFPanel>
-    </div>
+
+        <div className="tsk__panel-actions">
+          <Button variant="ghost" onClick={() => onChange([])}>
+            Clear all
+          </Button>
+          <Button variant="raised" onClick={onClose}>
+            Done
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

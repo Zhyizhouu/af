@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AFHint, AFPanel } from '../../components/AF';
+import { Upload } from 'lucide-react';
+import { cn } from 'cn';
+import { Button } from '../../components/ui/button';
 import { QrCode } from './QrCode';
 import { contrastRatio, contrastVerdict, defaults, eccLevels, isEcc, type Ecc } from './qr';
 import './qr.css';
@@ -28,90 +30,150 @@ export function QrScreen() {
   const ratio = useMemo(() => contrastRatio(fg, bg), [fg, bg]);
   const verdict = contrastVerdict(ratio);
 
+  const clear = () => {
+    setText('');
+    setEcc(defaults.ecc);
+    setFg(defaults.fg);
+    setBg(defaults.bg);
+    setLogo(null);
+  };
+
   return (
-    <div className="page qr-page">
-      <AFPanel label="Encode" count={`${text.length} chars`}>
-        <textarea
-          className="af-input af-input--prose qr-page__text"
-          rows={3}
-          value={text}
-          placeholder="A URL, or any text"
-          onChange={(event) => setText(event.target.value)}
-        />
+    <div className="page qr-page px-4! py-4! md:px-8! md:py-6! font-sans text-foreground">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 items-start">
+        <div className="surface-3d rounded-2xl p-5 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[15px] font-semibold">Encode</span>
+            <span className="text-xs text-muted-foreground">{text.length} chars</span>
+          </div>
 
-        <div className="qr-page__controls">
-          <label className="qr-page__control">
-            <span className="af-panel-label">Correction</span>
-            <select
-              className="af-nav__select"
-              value={logo ? 'H' : ecc}
-              disabled={logo !== null}
-              onChange={(event) => {
-                const next = event.target.value;
-                if (isEcc(next)) setEcc(next);
-              }}
+          <textarea
+            className="inset-field qr-page__text w-full rounded-[10px] px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            rows={3}
+            value={text}
+            placeholder="A URL, or any text"
+            onChange={(event) => setText(event.target.value)}
+          />
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-[0.08em] text-subtle-foreground">
+              Correction
+            </span>
+            <div
+              role="group"
+              aria-label="Correction level"
+              className="inline-flex w-fit gap-0.5 rounded-[10px] border border-white/[0.07] bg-[#050506] p-[3px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
             >
-              {eccLevels.map((level) => (
-                <option key={level} value={level}>
-                  {level}
-                </option>
-              ))}
-            </select>
-          </label>
+              {eccLevels.map((level) => {
+                const active = (logo ? 'H' : ecc) === level;
+                return (
+                  <button
+                    key={level}
+                    type="button"
+                    aria-pressed={active}
+                    disabled={logo !== null}
+                    className={cn(
+                      'h-7 min-w-8 rounded-[7px] px-2.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                      active ? 'glow-active text-foreground' : 'text-muted-foreground hover:text-foreground',
+                    )}
+                    onClick={() => setEcc(level)}
+                  >
+                    {level}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-          <label className="qr-page__control">
-            <span className="af-panel-label">Foreground</span>
-            <input type="color" value={fg} onChange={(e) => setFg(e.target.value)} />
-          </label>
+          <div className="flex flex-wrap items-end gap-5">
+            <label className="flex flex-col items-start gap-1.5">
+              <span className="text-xs uppercase tracking-[0.08em] text-subtle-foreground">
+                Foreground
+              </span>
+              <input
+                type="color"
+                value={fg}
+                aria-label="Foreground colour"
+                className="qr-swatch inset-field rounded-full"
+                onChange={(event) => setFg(event.target.value)}
+              />
+            </label>
 
-          <label className="qr-page__control">
-            <span className="af-panel-label">Background</span>
-            <input type="color" value={bg} onChange={(e) => setBg(e.target.value)} />
-          </label>
+            <label className="flex flex-col items-start gap-1.5">
+              <span className="text-xs uppercase tracking-[0.08em] text-subtle-foreground">
+                Background
+              </span>
+              <input
+                type="color"
+                value={bg}
+                aria-label="Background colour"
+                className="qr-swatch inset-field rounded-full"
+                onChange={(event) => setBg(event.target.value)}
+              />
+            </label>
 
-          <label className="qr-page__control">
-            <span className="af-panel-label">Logo</span>
-            <input
-              type="file"
-              accept="image/*"
-              className="qr-page__file"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (!file) return setLogo(null);
-                const reader = new FileReader();
-                reader.onload = () => setLogo(String(reader.result));
-                reader.readAsDataURL(file);
-              }}
-            />
-          </label>
+            <span
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs',
+                verdict === 'good'
+                  ? 'border-emerald-400/35 bg-emerald-400/[0.14] text-emerald-300'
+                  : verdict === 'fair'
+                    ? 'border-amber-400/35 bg-amber-400/[0.14] text-amber-300'
+                    : 'border-rose-400/35 bg-rose-400/[0.14] text-rose-300',
+              )}
+            >
+              {ratio.toFixed(1)}:1 · {verdict === 'good' ? 'Pass' : verdict === 'fair' ? 'Fair' : 'Fail'}
+            </span>
+          </div>
+
+          {verdict === 'poor' && (
+            <p className="text-[13px] text-muted-foreground">This may not scan reliably.</p>
+          )}
+
+          {logo && (
+            <p className="text-[13px] text-muted-foreground">
+              A logo covers part of the code, so correction is locked to H.
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button variant="raised" size="sm" asChild>
+              <label className="cursor-pointer">
+                <Upload size={14} aria-hidden />
+                Logo
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return setLogo(null);
+                    const reader = new FileReader();
+                    reader.onload = () => setLogo(String(reader.result));
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </label>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={clear}>
+              Clear
+            </Button>
+          </div>
         </div>
 
-        {/* Scanners are more forgiving than eyes, but not infinitely: a code
-            that barely separates from its background reads badly in poor light
-            and not at all in a photocopy. */}
-        <AFHint tip={verdict === 'good'}>
-          Contrast {ratio.toFixed(1)}:1 — {verdict}
-          {verdict === 'poor' && '. This may not scan reliably.'}
-        </AFHint>
-
-        {logo && (
-          <AFHint>
-            A logo covers part of the code, so correction is locked to H.
-          </AFHint>
-        )}
-      </AFPanel>
-
-      <AFPanel label="Code">
-        {text.trim() ? (
-          <QrCode
-            label={text.slice(0, 40)}
-            size={260}
-            options={{ text, ecc, fg, bg, logo }}
-          />
-        ) : (
-          <AFHint>Type something above and it appears here.</AFHint>
-        )}
-      </AFPanel>
+        <div className="surface-3d rounded-2xl p-5 flex flex-col items-center gap-4">
+          <div className="flex w-full items-center justify-between">
+            <span className="text-[15px] font-semibold">Code</span>
+          </div>
+          {text.trim() ? (
+            <QrCode label={text.slice(0, 40)} size={260} options={{ text, ecc, fg, bg, logo }} />
+          ) : (
+            <p className="text-[13px] text-muted-foreground">
+              Type something above and it appears here.
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

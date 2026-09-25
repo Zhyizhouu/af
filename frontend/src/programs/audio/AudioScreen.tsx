@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AFButton, AFHint, AFPanel } from '../../components/AF';
+import { Download, Upload } from 'lucide-react';
+import { cn } from 'cn';
+import { Button } from '../../components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
 import { idToken } from '../../data/firebase';
 import {
   AudioApi,
@@ -112,110 +121,168 @@ export function AudioScreen({ api }: { api?: AudioApi }) {
 
   const tooBig = file && limits ? file.size > limits.maxUploadBytes : false;
 
+  const failed = phase === 'failed' || phase === 'cancelled';
+  const stepIndex = phase ? phaseOrder.indexOf(phase) : -1;
+  const progressPct =
+    phase === 'done'
+      ? 100
+      : failed
+        ? 40
+        : stepIndex >= 0
+          ? Math.round(((stepIndex + 1) / phaseOrder.length) * 100)
+          : 0;
+
   return (
-    <div className="page aud">
+    <div className="page aud px-4! py-4! md:px-8! md:py-6! font-sans text-foreground max-w-xl">
       {limits && !limits.configured && (
-        <AFPanel label="Not configured">
-          <span className="ai__warn">
+        <div className="surface-3d rounded-2xl p-5">
+          <span className="text-[15px] font-semibold">Not configured</span>
+          <p className="mt-2 text-sm text-rose-400">
             This server runs without Temporal and the object store, so nothing can be
             converted. Unset AF_CONVERTER_DISABLED on the API and restart it.
-          </span>
-        </AFPanel>
+          </p>
+        </div>
       )}
 
       {error && (
-        <AFPanel label="Problem">
-          <span className="ai__warn">{error}</span>
-        </AFPanel>
+        <div className="surface-3d rounded-2xl p-5">
+          <span className="text-[15px] font-semibold">Problem</span>
+          <p className="mt-2 text-sm text-rose-400">{error}</p>
+        </div>
       )}
 
-      <AFPanel label="File" count={file ? `${(file.size / 1_048_576).toFixed(1)} MB` : 'none'}>
-        <input
-          type="file"
-          className="aud__file"
-          aria-label="Choose a file to convert"
-          onChange={(event) => {
-            setFile(event.target.files?.[0] ?? null);
-            setJobId(null);
-            setPhase(null);
-            setError(null);
-          }}
-        />
-        <AFHint>
-          Anything ffmpeg decodes goes in, video included — the audio track is simply
-          the only stream kept.
-        </AFHint>
-        {tooBig && limits && (
-          <AFHint>
-            Too large. The limit is {(limits.maxUploadBytes / 1_048_576).toFixed(0)} MB.
-          </AFHint>
-        )}
-      </AFPanel>
-
-      <AFPanel label="Output">
-        <div className="aud__formats">
-          {(limits?.formats ?? []).map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={`cal__view${format === option.id ? ' is-active' : ''}`}
-              onClick={() => setFormat(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
+      <div className="surface-3d rounded-2xl p-5 flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[15px] font-semibold">File</span>
+          <span className="text-xs text-muted-foreground">
+            {file ? `${(file.size / 1_048_576).toFixed(1)} MB` : 'none'}
+          </span>
         </div>
 
-        {/* Hidden rather than shown doing nothing: a lossless format has no
-            bitrate to choose. */}
-        {chosen?.lossy && (
-          <div className="aud__bitrates">
-            <span className="af-panel-label">Bitrate</span>
-            {bitrates.map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={`cal__view${bitrate === option ? ' is-active' : ''}`}
-                onClick={() => setBitrate(option)}
-              >
-                {option}k
-              </button>
-            ))}
-          </div>
-        )}
+        <label
+          className={cn(
+            'flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/[0.12] px-6 py-8 text-center cursor-pointer transition-colors hover:border-white/25',
+          )}
+        >
+          <Upload size={22} className="text-subtle-foreground" aria-hidden />
+          <span className="text-sm">
+            {file ? file.name : 'Drop a file here, or click to choose one'}
+          </span>
+          <input
+            type="file"
+            className="aud__file"
+            aria-label="Choose a file to convert"
+            onChange={(event) => {
+              setFile(event.target.files?.[0] ?? null);
+              setJobId(null);
+              setPhase(null);
+              setError(null);
+            }}
+          />
+        </label>
 
-        {chosen?.note && <AFHint>{chosen.note}</AFHint>}
-      </AFPanel>
+        <p className="text-[13px] text-muted-foreground">
+          Anything ffmpeg decodes goes in, video included — the audio track is simply
+          the only stream kept.
+        </p>
+        {tooBig && limits && (
+          <p className="text-[13px] text-muted-foreground">
+            Too large. The limit is {(limits.maxUploadBytes / 1_048_576).toFixed(0)} MB.
+          </p>
+        )}
+      </div>
+
+      <div className="surface-3d rounded-2xl p-5 flex flex-col gap-3">
+        <span className="text-[15px] font-semibold">Output</span>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-[0.08em] text-subtle-foreground">
+              Format
+            </span>
+            <Select value={format} onValueChange={setFormat}>
+              <SelectTrigger className="inset-field w-[160px]" aria-label="Output format">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(limits?.formats ?? []).map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {chosen?.lossy && bitrates.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs uppercase tracking-[0.08em] text-subtle-foreground">
+                Bitrate
+              </span>
+              <Select value={String(bitrate)} onValueChange={(value) => setBitrate(Number(value))}>
+                <SelectTrigger className="inset-field w-[120px]" aria-label="Bitrate">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {bitrates.map((option) => (
+                    <SelectItem key={option} value={String(option)}>
+                      {option}k
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+
+        {chosen?.note && <p className="text-[13px] text-muted-foreground">{chosen.note}</p>}
+      </div>
 
       {phase && (
-        <AFPanel label="Progress" count={phaseLabels[phase]}>
-          <div className="aud__phases">
-            {phaseOrder.map((step) => {
-              const reached = phaseOrder.indexOf(phase) >= phaseOrder.indexOf(step);
-              return <span key={step} className={`aud__phase${reached ? ' is-done' : ''}`} />;
-            })}
+        <div className="surface-3d rounded-2xl p-5 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[15px] font-semibold">Progress</span>
+            <span className="text-xs text-muted-foreground">{phaseLabels[phase]}</span>
           </div>
-          {phase === 'queued' && sent > 0 && sent < 1 && (
-            <AFHint>Uploading — {Math.round(sent * 100)}%</AFHint>
-          )}
-          {phase === 'done' && <AFButton label="Download" expand onClick={() => void save()} />}
-          {(phase === 'queued' || phase === 'downloading' || phase === 'converting') && jobId && (
-            <AFButton
-              label="Cancel"
-              variant="quiet"
-              expand
-              onClick={() => void client.current.cancel(jobId).catch(() => {})}
+
+          <div className="aud__track">
+            <div
+              className={cn('aud__fill', phase === 'done' ? 'is-done' : failed ? 'is-failed' : 'is-running')}
+              style={{ width: `${progressPct}%` }}
             />
+          </div>
+
+          {phase === 'queued' && sent > 0 && sent < 1 && (
+            <p className="text-[13px] text-muted-foreground">
+              Uploading — {Math.round(sent * 100)}%
+            </p>
           )}
-        </AFPanel>
+          {phase === 'done' && (
+            <Button variant="raised" className="w-full" onClick={() => void save()}>
+              <Download size={16} aria-hidden />
+              Download
+            </Button>
+          )}
+          {(phase === 'queued' || phase === 'downloading' || phase === 'converting') && jobId && (
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => void client.current.cancel(jobId).catch(() => {})}
+            >
+              Cancel
+            </Button>
+          )}
+        </div>
       )}
 
-      <AFButton
-        label={busy ? 'Uploading…' : 'Convert'}
-        expand
+      <Button
+        variant="gradient"
+        className="w-full"
         disabled={!file || busy || tooBig || !limits || !configured}
         onClick={() => void convert()}
-      />
+      >
+        {busy ? 'Uploading…' : 'Convert'}
+      </Button>
     </div>
   );
 }

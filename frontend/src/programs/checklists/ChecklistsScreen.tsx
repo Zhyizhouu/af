@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AFButton, AFChip, AFEmptyState, AFHint, AFPanel } from '../../components/AF';
+import { ChevronLeft, Plus } from 'lucide-react';
+import { cn } from 'cn';
+import { Button } from '../../components/ui/button';
+import { Checkbox } from '../../components/ui/checkbox';
+import { Dialog, DialogContent, DialogTitle } from '../../components/ui/dialog';
+import { Input } from '../../components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
 import { useSession } from '../../app/session';
 import type { ChecklistItemRow, ProctorSessionRow } from '../../data/db';
 import { requestNotificationPermission } from '../../data/notifications';
@@ -14,7 +26,6 @@ import {
   setSessionStatus,
   toggleItem,
 } from './store';
-import './checklists.css';
 
 const stamp = new Intl.DateTimeFormat(undefined, {
   weekday: 'short',
@@ -69,14 +80,20 @@ export function ChecklistsScreen() {
   }
 
   return (
-    <div className="page chk">
-      <div className="chk__bar">
-        <div className="chk__tabs">
+    <div className="page font-sans text-foreground px-4! py-4! md:px-8! md:py-6!">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="inline-flex gap-0.5 rounded-[10px] border border-white/[0.07] bg-[#050506] p-[3px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]">
           {(['active', 'archived'] as const).map((option) => (
             <button
               key={option}
               type="button"
-              className={`cal__view${status === option ? ' is-active' : ''}`}
+              aria-pressed={status === option}
+              className={cn(
+                'h-8 min-h-[36px] rounded-[7px] px-3 text-sm font-medium capitalize transition-colors md:min-h-0',
+                status === option
+                  ? 'glow-active text-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
               onClick={() => setStatus(option)}
             >
               {option}
@@ -84,60 +101,75 @@ export function ChecklistsScreen() {
           ))}
         </div>
         <span className="page__spacer" />
-        <AFButton label="New session" onClick={() => setAdding(true)} />
+        <Button variant="gradient" className="h-9 md:h-9 max-md:h-11" onClick={() => setAdding(true)}>
+          <Plus size={16} aria-hidden />
+          New session
+        </Button>
       </div>
 
       {sessions.length === 0 ? (
-        <AFEmptyState
-          glyph="☑"
-          message={
-            status === 'active'
-              ? 'No sessions yet.\nAdd one, or ask the assistant.'
-              : 'Nothing archived yet.'
-          }
-        />
+        <p className="text-[13px] text-muted-foreground">
+          {status === 'active' ? (
+            <>
+              No sessions yet.
+              <br />
+              Add one, or ask the assistant.
+            </>
+          ) : (
+            'Nothing archived yet.'
+          )}
+        </p>
       ) : (
-        <ul className="chk__list">
+        <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
           {sessions.map((session) => (
             <li key={session.id}>
-              <AFPanel
-                label={session.type}
-                countSlot={<span className="af-panel-count">Room {session.room || '—'}</span>}
-                className="chk__card"
-              >
-                <button type="button" className="chk__open" onClick={() => setOpenId(session.id)}>
-                  <span className="chk__title">{sessionLabel(session) || 'Untitled course'}</span>
-                  <span className="af-meta">{stamp.format(new Date(session.dateTime))}</span>
+              <div className="surface-3d rounded-2xl p-5">
+                <div className="mb-1 flex items-center justify-between gap-3">
+                  <span className="text-[15px] font-semibold">{session.type}</span>
+                  <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-0.5 text-xs text-muted-foreground">
+                    Room {session.room || '—'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="flex w-full flex-col items-start gap-1 border-0 bg-transparent p-0 text-left text-inherit"
+                  onClick={() => setOpenId(session.id)}
+                >
+                  <span className="text-sm">{sessionLabel(session) || 'Untitled course'}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {stamp.format(new Date(session.dateTime))}
+                  </span>
                 </button>
-                <div className="chk__row-actions">
-                  <AFButton
-                    label={status === 'active' ? 'Archive' : 'Reopen'}
-                    variant="quiet"
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() =>
                       void after(() =>
                         setSessionStatus(session.id, status === 'active' ? 'archived' : 'active'),
                       )
                     }
-                  />
+                  >
+                    {status === 'active' ? 'Archive' : 'Reopen'}
+                  </Button>
                   <DeleteSession onDelete={() => void after(() => deleteSession(session.id))} />
                 </div>
-              </AFPanel>
+              </div>
             </li>
           ))}
         </ul>
       )}
 
-      {adding && (
-        <NewSession
-          onCancel={() => setAdding(false)}
-          onCreate={(input) =>
-            void after(async () => {
-              await createSession(input);
-              setAdding(false);
-            })
-          }
-        />
-      )}
+      <NewSession
+        open={adding}
+        onOpenChange={setAdding}
+        onCreate={(input) =>
+          void after(async () => {
+            await createSession(input);
+            setAdding(false);
+          })
+        }
+      />
     </div>
   );
 }
@@ -146,9 +178,13 @@ export function ChecklistsScreen() {
 function DeleteSession({ onDelete }: { onDelete: () => void }) {
   const [confirming, setConfirming] = useState(false);
   return confirming ? (
-    <AFButton label="Really delete" variant="danger" onClick={onDelete} />
+    <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-300" onClick={onDelete}>
+      Really delete
+    </Button>
   ) : (
-    <AFButton label="Delete" variant="ghost" onClick={() => setConfirming(true)} />
+    <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
+      Delete
+    </Button>
   );
 }
 
@@ -175,41 +211,57 @@ function SessionDetail({
   const done = items.filter((item) => item.isChecked).length;
 
   return (
-    <div className="page chk">
-      <header className="chk__detail-head">
-        <AFButton label="‹ Back" variant="quiet" onClick={onBack} />
-        <span className="af-brand">
+    <div className="page font-sans text-foreground px-4! py-4! md:px-8! md:py-6!">
+      <header className="flex flex-wrap items-center gap-3 border-b border-white/[0.08] pb-3.5">
+        <Button variant="ghost" size="icon" aria-label="Back" onClick={onBack}>
+          <ChevronLeft size={18} aria-hidden />
+        </Button>
+        <span className="text-sm font-medium">
           {session.type} · Room {session.room || '—'}
         </span>
-        <AFChip label={`${done}/${items.length}`} />
+        <span className="page__spacer" />
+        <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-0.5 text-xs text-muted-foreground">
+          {done}/{items.length}
+        </span>
       </header>
 
-      <AFPanel label="Course">
-        <span className="af-body">{sessionLabel(session) || 'Untitled course'}</span>
-        <AFHint>{stamp.format(new Date(session.dateTime))}</AFHint>
-      </AFPanel>
+      <div className="surface-3d rounded-2xl p-5">
+        <span className="mb-1 block text-xs uppercase tracking-[0.08em] text-subtle-foreground">
+          Course
+        </span>
+        <span className="text-sm">{sessionLabel(session) || 'Untitled course'}</span>
+        <div className="mt-1 text-xs text-muted-foreground">
+          {stamp.format(new Date(session.dateTime))}
+        </div>
+      </div>
 
-      <div className="chk__progress" aria-hidden>
+      <div
+        className="h-[6px] overflow-hidden rounded-full bg-white/[0.06]"
+        aria-hidden
+      >
         <span
-          className="chk__progress-fill"
+          className="block h-full rounded-full bg-gradient-to-r from-[#34d399] to-[#6ee7b7] shadow-[0_0_12px_rgba(52,211,153,0.45)] transition-[width] duration-200 ease-out"
           style={{ width: `${items.length ? (done / items.length) * 100 : 0}%` }}
         />
       </div>
 
       {bySection(items).map(([section, group]) => (
-        <AFPanel
-          key={section}
-          label={section}
-          count={`${group.filter((item) => item.isChecked).length}/${group.length}`}
-        >
-          <ul className="chk__items">
+        <div key={section} className="surface-3d rounded-2xl p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-[0.08em] text-subtle-foreground">
+              {section}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {group.filter((item) => item.isChecked).length}/{group.length}
+            </span>
+          </div>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {group.map((item) => (
               <li key={item.id}>
-                <label className="chk__item">
-                  <input
-                    type="checkbox"
+                <label className="flex cursor-pointer items-start gap-2.5">
+                  <Checkbox
                     checked={item.isChecked}
-                    onChange={() =>
+                    onCheckedChange={() =>
                       void (async () => {
                         await toggleItem(item.id);
                         await reload();
@@ -217,25 +269,33 @@ function SessionDetail({
                         onChanged();
                       })()
                     }
+                    className="mt-0.5 inset-field size-[18px] rounded-[5px] border-white/10 text-white data-[state=checked]:border-white/20 data-[state=checked]:bg-white/10"
                   />
-                  <span className={`af-body${item.isChecked ? ' chk__done' : ''}`}>
+                  <span
+                    className={cn(
+                      'text-sm',
+                      item.isChecked && 'text-subtle-foreground line-through',
+                    )}
+                  >
                     {item.label}
                   </span>
                 </label>
               </li>
             ))}
           </ul>
-        </AFPanel>
+        </div>
       ))}
     </div>
   );
 }
 
 function NewSession({
-  onCancel,
+  open,
+  onOpenChange,
   onCreate,
 }: {
-  onCancel: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onCreate: (input: {
     type: string;
     dateTime: Date;
@@ -261,72 +321,137 @@ function NewSession({
   const [reminderBlocked, setReminderBlocked] = useState(false);
 
   return (
-    <div className="cal__overlay" role="dialog" aria-label="New session">
-      <AFPanel label="New session" className="cal__editor">
-        <span className="af-panel-label">Type</span>
-        <div className="chk__types">
-          {['UAP', 'UAS'].map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={`cal__view${type === option ? ' is-active' : ''}`}
-              onClick={() => setType(option)}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="surface-3d rounded-2xl border-white/[0.07]">
+        <DialogTitle className="text-[15px] font-semibold">New session</DialogTitle>
+
+        <div className="flex flex-col gap-3.5">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-[0.08em] text-subtle-foreground">Type</span>
+            <div className="flex gap-1.5">
+              {['UAP', 'UAS'].map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={type === option}
+                  className={cn(
+                    'h-8 rounded-[7px] px-3 text-sm font-medium transition-colors',
+                    type === option
+                      ? 'glow-active text-foreground'
+                      : 'inset-field text-muted-foreground hover:text-foreground',
+                  )}
+                  onClick={() => setType(option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs uppercase tracking-[0.08em] text-subtle-foreground" htmlFor="s-when">
+              When
+            </label>
+            <Input
+              id="s-when"
+              className="inset-field rounded-[10px]"
+              type="datetime-local"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs uppercase tracking-[0.08em] text-subtle-foreground" htmlFor="s-room">
+              Room
+            </label>
+            <Input
+              id="s-room"
+              className="inset-field rounded-[10px]"
+              value={room}
+              onChange={(e) => setRoom(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs uppercase tracking-[0.08em] text-subtle-foreground" htmlFor="s-code">
+              Course code
+            </label>
+            <Input
+              id="s-code"
+              className="inset-field rounded-[10px]"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs uppercase tracking-[0.08em] text-subtle-foreground" htmlFor="s-name">
+              Course name
+            </label>
+            <Input
+              id="s-name"
+              className="inset-field rounded-[10px]"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs uppercase tracking-[0.08em] text-subtle-foreground" htmlFor="s-class">
+              Class
+            </label>
+            <Input
+              id="s-class"
+              className="inset-field rounded-[10px]"
+              value={klass}
+              onChange={(e) => setKlass(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs uppercase tracking-[0.08em] text-subtle-foreground" htmlFor="s-reminder">
+              Remind me
+            </label>
+            <Select
+              value={String(reminderMinutes)}
+              onValueChange={async (value) => {
+                const minutes = Number(value);
+                setReminderMinutes(minutes);
+                if (minutes > 0) {
+                  const permission = await requestNotificationPermission();
+                  setReminderBlocked(permission === 'denied' || permission === 'unsupported');
+                } else {
+                  setReminderBlocked(false);
+                }
+              }}
             >
-              {option}
-            </button>
-          ))}
+              <SelectTrigger id="s-reminder" className="inset-field w-full rounded-[10px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {reminderOptions.map((option) => (
+                  <SelectItem key={option.minutes} value={String(option.minutes)}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {reminderBlocked && (
+              <p className="text-xs text-muted-foreground">
+                Notifications are blocked for this site, so this reminder will not show. Allow them
+                in your browser's site settings to fix that.
+              </p>
+            )}
+          </div>
         </div>
 
-        <label className="af-panel-label" htmlFor="s-when">When</label>
-        <input id="s-when" className="af-input" type="datetime-local" value={when}
-          onChange={(e) => setWhen(e.target.value)} />
-
-        <label className="af-panel-label" htmlFor="s-room">Room</label>
-        <input id="s-room" className="af-input" value={room} onChange={(e) => setRoom(e.target.value)} />
-
-        <label className="af-panel-label" htmlFor="s-code">Course code</label>
-        <input id="s-code" className="af-input" value={code} onChange={(e) => setCode(e.target.value)} />
-
-        <label className="af-panel-label" htmlFor="s-name">Course name</label>
-        <input id="s-name" className="af-input af-input--prose" value={name}
-          onChange={(e) => setName(e.target.value)} />
-
-        <label className="af-panel-label" htmlFor="s-class">Class</label>
-        <input id="s-class" className="af-input" value={klass} onChange={(e) => setKlass(e.target.value)} />
-
-        <label className="af-panel-label" htmlFor="s-reminder">Remind me</label>
-        <select
-          id="s-reminder"
-          className="af-nav__select"
-          value={reminderMinutes}
-          onChange={async (e) => {
-            const minutes = Number(e.target.value);
-            setReminderMinutes(minutes);
-            if (minutes > 0) {
-              const permission = await requestNotificationPermission();
-              setReminderBlocked(permission === 'denied' || permission === 'unsupported');
-            } else {
-              setReminderBlocked(false);
-            }
-          }}
-        >
-          {reminderOptions.map((option) => (
-            <option key={option.minutes} value={option.minutes}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {reminderBlocked && (
-          <AFHint>
-            Notifications are blocked for this site, so this reminder will not show. Allow them
-            in your browser's site settings to fix that.
-          </AFHint>
-        )}
-
-        <div className="cal__editor-actions">
-          <AFButton label="Cancel" variant="quiet" onClick={onCancel} />
-          <AFButton
-            label="Create"
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="gradient"
             disabled={!code.trim() && !name.trim()}
             onClick={() =>
               onCreate({
@@ -339,9 +464,11 @@ function NewSession({
                 reminderMinutes,
               })
             }
-          />
+          >
+            Create
+          </Button>
         </div>
-      </AFPanel>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
