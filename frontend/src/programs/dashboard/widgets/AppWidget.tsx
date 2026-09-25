@@ -1,23 +1,45 @@
 import { Link } from 'react-router-dom';
+import { Activity, CalendarDays, ClipboardCheck, Music, QrCode, Table2 } from 'lucide-react';
+import { cn } from 'cn';
 import type { Program } from '../../../app/programs';
+import { AIMark } from '../../../components/brand/AIMark';
+
+const icons: Partial<Record<Program['slug'], typeof ClipboardCheck>> = {
+  checklists: ClipboardCheck,
+  calendar: CalendarDays,
+  habits: Activity,
+  tasks: Table2,
+  audio: Music,
+  qr: QrCode,
+};
 
 /**
  * A launcher tile for one application, as a dashboard widget in its own
  * right — sized and shown/hidden exactly like any other widget, and
  * independent of Profile's "Displayed Applications" (header) setting.
  *
- * One line — mark then name — so it costs a button's worth of space rather
- * than a card's. At its smallest dragged size the name is dropped by a
- * container query in `dashboard.css` (`.dash__widget-body`'s
- * `container-type: inline-size`), leaving just the mark.
+ * `WidgetFrame.tsx` gives `app:` widgets their raised card chrome directly,
+ * so this is just the centered content and the link it sits inside. At its
+ * smallest dragged size the name is dropped by a container query on
+ * `.dash__widget-body`, leaving just the mark.
  */
 export function AppWidget({ program }: { program: Program }) {
+  const Icon = icons[program.slug];
   return (
-    <Link to={`/${program.slug}`} className="dash__tile">
-      <span className="dash__mark" aria-hidden>
-        {program.mark}
-      </span>
-      <span className="dash__name">{program.name}</span>
+    <Link
+      to={`/${program.slug}`}
+      className={cn(
+        'flex h-full w-full items-center justify-center gap-2.5 rounded-[8px] text-foreground no-underline',
+        'transition-[filter] duration-150 hover:brightness-110',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
+      )}
+    >
+      {program.slug === 'ai' ? (
+        <AIMark size={18} />
+      ) : Icon ? (
+        <Icon size={18} aria-hidden className="shrink-0 text-subtle-foreground" />
+      ) : null}
+      <span className="truncate text-sm @max-[131px]:hidden">{program.name}</span>
     </Link>
   );
 }

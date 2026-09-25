@@ -1,4 +1,6 @@
-import { AFButton, AFHint, AFPanel } from '../../../components/AF';
+import { Plus } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
+import { Button } from '../../../components/ui/button';
 import type { DashboardWidget } from './registry';
 
 /**
@@ -18,29 +20,31 @@ export function WidgetPicker({
   onClose: () => void;
 }) {
   return (
-    <div className="cal__overlay" role="dialog" aria-label="Add widgets">
-      <AFPanel label="Add widgets" className="cal__editor">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add widgets</DialogTitle>
+        </DialogHeader>
+
         {hidden.length === 0 ? (
-          <AFHint>Every widget is already on the dashboard.</AFHint>
+          <p className="text-sm text-muted-foreground">Every widget is already on your dashboard.</p>
         ) : (
           <ul className="dash__widget-list">
             {hidden.map((id) => {
               const entry = catalog.find((candidate) => candidate.id === id);
               if (!entry) return null;
               return (
-                <li key={id} className="dash__widget-row">
-                  <span className="af-body">{entry.label}</span>
-                  <AFButton label="Add" variant="quiet" onClick={() => onShow(id)} />
+                <li key={id}>
+                  <Button variant="raised" className="w-full justify-between" onClick={() => onShow(id)}>
+                    {entry.label}
+                    <Plus size={16} aria-hidden />
+                  </Button>
                 </li>
               );
             })}
           </ul>
         )}
-
-        <div className="cal__editor-actions">
-          <AFButton label="Close" variant="quiet" onClick={onClose} />
-        </div>
-      </AFPanel>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

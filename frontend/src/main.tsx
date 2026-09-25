@@ -3,11 +3,13 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Shell } from './app/Shell';
 import { SignIn } from './app/SignIn';
+import { Landing } from './app/Landing';
 import { SessionProvider, useSession } from './app/session';
 import { programs } from './app/programs';
-import { AFEmptyState } from './components/AF';
+import { Monogram } from './components/brand/Monogram';
 import { watchRuntimeConfig } from './data/runtimeConfig';
 import { startReminderScheduler } from './data/reminders';
+import './styles/globals.css';
 import './theme/tokens.css';
 
 /**
@@ -24,18 +26,32 @@ function Gate() {
   // page during that beat would flash it at somebody who is already signed in.
   if (!ready) {
     return (
-      <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}>
-        <AFEmptyState glyph="" message="Checking your session…" />
+      <div className="grid h-dvh place-items-center bg-black font-sans">
+        <div className="flex flex-col items-center gap-4">
+          <Monogram size={48} glow className="animate-pulse motion-reduce:animate-none" />
+          <span className="text-[13px] text-muted-foreground">Checking your session…</span>
+        </div>
       </div>
     );
   }
 
-  if (!user) return <SignIn />;
+  if (!user) {
+    return (
+      <Routes>
+        {/* A signed-out deep link keeps its URL rather than bouncing to /signin,
+            so the signed-in router can show that program once sign-in lands. */}
+        <Route path="/" element={<Landing />} />
+        <Route path="/signin" element={<SignIn />} />
+        <Route path="*" element={<SignIn />} />
+      </Routes>
+    );
+  }
 
   return (
     <Routes>
       {/* Real paths, not a hash router: `/calendar?split=ai` has to survive a
           refresh, which is the whole reason the split lives in the URL. */}
+      <Route path="/signin" element={<Navigate to={`/${programs[0]!.slug}`} replace />} />
       <Route path="/:slug" element={<Shell />} />
       <Route path="*" element={<Navigate to={`/${programs[0]!.slug}`} replace />} />
     </Routes>

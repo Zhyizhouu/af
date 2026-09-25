@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { AFButton } from '../../components/AF';
+import { Plus } from 'lucide-react';
+import { Button } from '../../components/ui/button';
 import { useSession } from '../../app/session';
 import type { DashboardLayout } from '../../data/db';
 import {
@@ -51,7 +52,7 @@ export function DashboardScreen() {
       ids
         .map((id) => catalog.find((widget) => widget.id === id))
         .filter((widget): widget is (typeof catalog)[number] => Boolean(widget))
-        .map((widget) => ({ id: widget.id, app: widget.app, rank: widget.rank })),
+        .map((widget) => ({ id: widget.id, app: widget.app, rank: widget.rank, kind: widget.kind })),
     [catalog],
   );
 
@@ -62,7 +63,7 @@ export function DashboardScreen() {
     // good looks like.
     if (stored.rows.length === 0 && stored.hidden.length === 0) {
       return autoArrange(
-        catalog.map((widget) => ({ id: widget.id, app: widget.app, rank: widget.rank })),
+        catalog.map((widget) => ({ id: widget.id, app: widget.app, rank: widget.rank, kind: widget.kind })),
       );
     }
     const known = new Set([...visibleIds(stored), ...stored.hidden]);
@@ -111,16 +112,20 @@ export function DashboardScreen() {
   }, [layout, rowResize.live, heightPin.live]);
 
   return (
-    <div className="page dash">
+    <div className="page dash p-6! px-8! max-[720px]:p-4! font-sans text-foreground">
       <div className="dash__bar">
         <span className="page__spacer" />
-        <AFButton
-          label="Auto-adjust"
-          variant="ghost"
+        <Button
+          variant="raised"
           title="Rearrange every widget into a tidy layout"
           onClick={() => write(autoArrange(entriesFor(visibleIds(layout)), layout.hidden))}
-        />
-        <AFButton label="Add widgets" variant="ghost" onClick={() => setShowAdd(true)} />
+        >
+          Auto-adjust
+        </Button>
+        <Button variant="gradient" onClick={() => setShowAdd(true)}>
+          <Plus size={16} aria-hidden />
+          Add widgets
+        </Button>
       </div>
 
       <div className="dash__grid" ref={grid}>
@@ -132,20 +137,26 @@ export function DashboardScreen() {
               const Widget = entry.Component;
               return [
                 columnIndex > 0 && (
-                  <span
+                  <button
                     key={`${placement.id}-divider`}
-                    className="dash__divider"
+                    type="button"
+                    className="dash__divider group/divider appearance-none border-0 bg-transparent p-0"
+                    aria-label="Drag to resize columns"
                     title="Drag to resize"
                     onPointerDown={rowResize.startResize(
                       rowIndex,
                       columnIndex - 1,
                       row.widgets[columnIndex - 1]!.basis,
                     )}
-                  />
+                  >
+                    <span className="pointer-events-none absolute top-2 bottom-2 left-1.5 w-[2px] rounded-full bg-white/[0.08] transition-[background,box-shadow] group-hover/divider:bg-white/35 group-active/divider:bg-white/35 group-hover/divider:shadow-[0_0_8px_rgba(255,255,255,0.5)]" />
+                  </button>
                 ),
                 <WidgetFrame
                   key={placement.id}
                   id={placement.id}
+                  title={entry.label}
+                  appTile={entry.app}
                   basis={placement.basis}
                   height={placement.height}
                   isDragging={drag.dragId === placement.id}

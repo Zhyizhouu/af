@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AFButton, AFHint, AFIconButton, AFPanel } from '../../../components/AF';
+import { X } from 'lucide-react';
+import { cn } from 'cn';
+import { Input } from '../../../components/ui/input';
+import { Button } from '../../../components/ui/button';
+import { Checkbox } from '../../../components/ui/checkbox';
 import { useSession } from '../../../app/session';
 import type { TodoItemRow } from '../../../data/db';
 import { addTodo, deleteTodo, listTodos, toggleTodo } from '../todoStore';
@@ -32,10 +36,15 @@ export function TodoWidget() {
   };
 
   return (
-    <AFPanel label="To-do" count={`${items.filter((item) => !item.checked).length}`}>
-      <div className="dash__task-add">
-        <input
-          className="af-input af-input--prose"
+    <div className="flex h-full flex-col gap-3.5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-[15px] font-semibold">To-do</h2>
+        <span className="text-xs text-muted-foreground">{items.filter((item) => !item.checked).length}</span>
+      </div>
+
+      <div className="flex gap-2">
+        <Input
+          className="inset-field flex-1"
           placeholder="Add an item…"
           value={text}
           onChange={(event) => setText(event.target.value)}
@@ -43,32 +52,40 @@ export function TodoWidget() {
             if (event.key === 'Enter') submit();
           }}
         />
-        <AFButton label="Add" variant="quiet" disabled={!text.trim()} onClick={submit} />
+        <Button variant="raised" size="sm" disabled={!text.trim()} onClick={submit}>
+          Add
+        </Button>
       </div>
 
       {items.length === 0 ? (
-        <AFHint>Nothing on the list.</AFHint>
+        <p className="text-[13px] text-muted-foreground">Nothing on the list.</p>
       ) : (
-        <ul className="dash__todos">
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {items.map((item) => (
-            <li key={item.id} className="dash__todo">
-              <button
-                type="button"
-                className={`dash__todo-tick${item.checked ? ' is-done' : ''}`}
-                aria-pressed={item.checked}
-                onClick={() => void after(() => toggleTodo(item.id))}
+            <li key={item.id} className="flex items-center gap-2.5">
+              <Checkbox
+                checked={item.checked}
+                onCheckedChange={() => void after(() => toggleTodo(item.id))}
+                aria-label={item.text}
+                className="inset-field size-[18px] rounded-[5px] border-white/10 text-white data-[state=checked]:border-white/20 data-[state=checked]:bg-white/10"
               />
-              <span className={`af-body dash__todo-text${item.checked ? ' is-done' : ''}`}>{item.text}</span>
-              <AFIconButton
-                glyph="✕"
-                tooltip="Delete"
-                bordered={false}
+              <span
+                className={cn('min-w-0 flex-1 truncate text-sm', item.checked && 'text-subtle-foreground line-through')}
+              >
+                {item.text}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Delete"
                 onClick={() => void after(() => deleteTodo(item.id))}
-              />
+              >
+                <X size={14} aria-hidden />
+              </Button>
             </li>
           ))}
         </ul>
       )}
-    </AFPanel>
+    </div>
   );
 }

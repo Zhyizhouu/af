@@ -7,6 +7,8 @@ import { TasksWidget } from './TasksWidget';
 import { TodayWidget } from './TodayWidget';
 import { TodoWidget } from './TodoWidget';
 import { UpNextWidget } from './UpNextWidget';
+import { CompletionStatWidget, EventsStatWidget, HabitsStatWidget, TasksStatWidget } from './StatWidgets';
+import { TaskStatusWidget } from './TaskStatusWidget';
 
 export interface DashboardWidget {
   id: string;
@@ -16,24 +18,21 @@ export interface DashboardWidget {
   app: boolean;
   /** Running order for the seed and for "Auto-adjust". Lower comes first. */
   rank: number;
+  kind?: 'app' | 'stat' | 'panel';
 }
 
-/**
- * Panels in the order the questions actually get asked: what is happening
- * now, then what is owed, then the ambient stuff you glance at rather than
- * act on.
- *
- * Two to a row, the pairs fall out of this deliberately — Today beside Up
- * next (both agenda), Tasks beside To-do (both lists of work), and Habits
- * beside Completion, which is the chart of those very habits.
- */
 const functionalWidgets: readonly DashboardWidget[] = [
-  { id: 'today', label: 'Today', Component: TodayWidget, app: false, rank: 1 },
-  { id: 'upNext', label: 'Up next', Component: UpNextWidget, app: false, rank: 2 },
-  { id: 'tasks', label: 'Tasks', Component: TasksWidget, app: false, rank: 3 },
-  { id: 'todo', label: 'To-do', Component: TodoWidget, app: false, rank: 4 },
-  { id: 'habits', label: 'Habits today', Component: HabitsWidget, app: false, rank: 5 },
-  { id: 'completion', label: 'Completion', Component: CompletionWidget, app: false, rank: 6 },
+  { id: 'stat:habits', label: 'Habits today', Component: HabitsStatWidget, app: false, rank: 1, kind: 'stat' },
+  { id: 'stat:tasks', label: 'Tasks due this week', Component: TasksStatWidget, app: false, rank: 2, kind: 'stat' },
+  { id: 'stat:events', label: 'Events today', Component: EventsStatWidget, app: false, rank: 3, kind: 'stat' },
+  { id: 'stat:completion', label: '7-day completion', Component: CompletionStatWidget, app: false, rank: 4, kind: 'stat' },
+  { id: 'completion', label: 'Habit completion', Component: CompletionWidget, app: false, rank: 10 },
+  { id: 'taskStatus', label: 'Task status', Component: TaskStatusWidget, app: false, rank: 11 },
+  { id: 'today', label: 'Today', Component: TodayWidget, app: false, rank: 12 },
+  { id: 'upNext', label: 'Up next', Component: UpNextWidget, app: false, rank: 13 },
+  { id: 'tasks', label: 'Tasks', Component: TasksWidget, app: false, rank: 14 },
+  { id: 'todo', label: 'To-do', Component: TodoWidget, app: false, rank: 15 },
+  { id: 'habits', label: 'Habits today', Component: HabitsWidget, app: false, rank: 16 },
 ];
 
 /**

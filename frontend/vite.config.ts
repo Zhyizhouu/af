@@ -1,6 +1,8 @@
 /// <reference types="vitest/config" />
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 // The converter and the assistant live on a container host, never on the same
 // origin as this bundle. Read at build time from the same variable the Flutter
@@ -12,7 +14,12 @@ import react from '@vitejs/plugin-react';
 // dart-define was not an error. An unset value here is visible instead: the
 // page says the API is not configured rather than pretending to reach one.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   define: {
     __AF_CONVERT_API__: JSON.stringify(process.env.AF_CONVERT_API ?? ''),
   },

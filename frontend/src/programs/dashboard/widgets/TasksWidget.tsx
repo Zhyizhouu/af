@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AFButton, AFHint, AFPanel, AFTag } from '../../../components/AF';
+import { AFTag } from '../../../components/AF';
+import { Input } from '../../../components/ui/input';
+import { Button } from '../../../components/ui/button';
 import { useSession } from '../../../app/session';
 import { createPage, listPages, listProperties } from '../../tasks/store';
 import type { TaskPageRow, TaskPropertyRow } from '../../../data/db';
@@ -46,10 +48,15 @@ export function TasksWidget() {
   };
 
   return (
-    <AFPanel label="Tasks" count={`${open.length}`}>
-      <div className="dash__task-add">
-        <input
-          className="af-input af-input--prose"
+    <div className="flex h-full flex-col gap-3.5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-[15px] font-semibold">Tasks</h2>
+        <span className="text-xs text-muted-foreground">{open.length}</span>
+      </div>
+
+      <div className="flex gap-2">
+        <Input
+          className="inset-field flex-1"
           placeholder="New page…"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
@@ -57,18 +64,23 @@ export function TasksWidget() {
             if (event.key === 'Enter') submit();
           }}
         />
-        <AFButton label="Add" variant="quiet" disabled={!title.trim()} onClick={submit} />
+        <Button variant="raised" size="sm" disabled={!title.trim()} onClick={submit}>
+          Add
+        </Button>
       </div>
 
       {open.length === 0 ? (
-        <AFHint>Nothing open. New page above, or in Task Tracker.</AFHint>
+        <p className="text-[13px] text-muted-foreground">Nothing open. New page above, or in Task Tracker.</p>
       ) : (
-        <ul className="dash__tasks">
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {open.slice(0, 8).map((page) => {
             const option = status?.options.find((candidate) => candidate.id === page.values[status.id]);
             return (
-              <li key={page.id} className="dash__task">
-                <Link to="/tasks" className="af-body dash__task-title">
+              <li key={page.id} className="flex items-center justify-between gap-2.5">
+                <Link
+                  to="/tasks"
+                  className="min-w-0 flex-1 truncate text-sm text-foreground no-underline hover:text-glow"
+                >
                   {page.title}
                 </Link>
                 {option && <AFTag label={option.label} toneIndex={option.toneIndex} />}
@@ -77,6 +89,6 @@ export function TasksWidget() {
           })}
         </ul>
       )}
-    </AFPanel>
+    </div>
   );
 }

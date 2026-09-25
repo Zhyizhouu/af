@@ -37,6 +37,7 @@ describe('seed', () => {
 describe('autoArrange', () => {
   const app = (id: string, rank: number) => ({ id, app: true, rank });
   const panel = (id: string, rank: number) => ({ id, app: false, rank });
+  const stat = (id: string, rank: number) => ({ id, app: false, rank, kind: 'stat' as const });
 
   it('puts the launcher dock first, then panels two to a row in rank order', () => {
     const layout = autoArrange([
@@ -77,6 +78,30 @@ describe('autoArrange', () => {
 
   it('handles an empty dashboard without inventing rows', () => {
     expect(autoArrange([])).toEqual({ rows: [], hidden: [] });
+  });
+
+  it('puts a full row of stat cards between the dock and the panels', () => {
+    const layout = autoArrange([
+      panel('today', 1),
+      app('app:calendar', 1),
+      stat('stat:tasks', 2),
+      stat('stat:habits', 1),
+      stat('stat:events', 3),
+      stat('stat:completion', 4),
+    ]);
+
+    expect(layout.rows.map((row) => row.widgets.map((w) => w.id))).toEqual([
+      ['app:calendar'],
+      ['stat:habits', 'stat:tasks', 'stat:events', 'stat:completion'],
+      ['today'],
+    ]);
+    expect(sums(layout)).toEqual([100, 100, 100]);
+  });
+
+  it('splits an uneven run of stats evenly rather than lopsidedly', () => {
+    const stats = Array.from({ length: 6 }, (_, index) => stat(`stat:${index}`, index));
+    const layout = autoArrange(stats);
+    expect(layout.rows.map((row) => row.widgets.length)).toEqual([3, 3]);
   });
 });
 

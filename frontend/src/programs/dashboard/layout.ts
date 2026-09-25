@@ -4,7 +4,7 @@ import type { DashboardLayout, DashboardPlacement } from '../../data/db';
  * The dashboard's layout algebra: rows of columns, the same model Notion's
  * own blocks use.
  *
- * Every function here is pure and total — it takes a layout and returns a
+ * Every function here is pure and total: it takes a layout and returns a
  * new one, and never returns an invalid one. Two invariants do the work:
  * a row's `basis` values always sum to 100, and a row never sits empty. Hold
  * those and there is no arrangement a drag can reach that looks broken,
@@ -31,7 +31,7 @@ function rebalance(widgets: DashboardPlacement[]): DashboardPlacement[] {
   if (widgets.length === 0) return widgets;
   const total = widgets.reduce((sum, widget) => sum + widget.basis, 0);
   // A row whose bases somehow summed to nothing gets an even split rather
-  // than a division by zero — the layout is never allowed to come back
+  // than a division by zero: the layout is never allowed to come back
   // invalid, whatever it was handed.
   if (total <= 0) return widgets.map((widget) => ({ ...widget, basis: 100 / widgets.length }));
   return widgets.map((widget) => ({ ...widget, basis: (widget.basis / total) * 100 }));
@@ -67,7 +67,7 @@ function without(layout: DashboardLayout, id: string): DashboardLayout {
 /**
  * Moves a widget to wherever the pointer says, out of whatever row it was
  * in. Removing it first is what lets a widget be dragged within its own row
- * without a special case — by the time the target is applied, its old slot
+ * without a special case: by the time the target is applied, its old slot
  * no longer exists.
  */
 export function moveWidget(
@@ -170,6 +170,11 @@ export interface ArrangeEntry {
   app: boolean;
   /** Lower sorts earlier. See `widgets/registry.tsx` for the running order. */
   rank: number;
+  kind?: 'app' | 'stat' | 'panel';
+}
+
+function kindOf(entry: ArrangeEntry): 'app' | 'stat' | 'panel' {
+  return entry.kind ?? (entry.app ? 'app' : 'panel');
 }
 
 /**
@@ -207,11 +212,12 @@ function chunkEvenly<T>(items: readonly T[], maxPerRow: number): T[][] {
  *   scanned rather than read. Grouping them keeps them out of the way of
  *   the panels instead of one stray launcher leaving a hole beside a tall
  *   panel.
+ * - **Then the stat cards, in one row.** Glanceable numbers, not content —
+ *   they sit between the dock and the panels, split evenly the same way the
+ *   launcher dock is.
  * - **Panels in priority order, two to a row.** What is happening now, then
  *   what is owed, then the ambient stuff — the order you would actually ask
- *   the questions in. The pairs that fall out of it are meant: Today beside
- *   Up next, Tasks beside To-do, and Habits beside Completion, which is the
- *   chart *of* those habits.
+ *   the questions in.
  * - **Every pinned height released.** A height someone dragged for a layout
  *   that no longer exists is the single thing most likely to make a tidy
  *   grid look untidy. Content-driven is the clean slate; re-pin what you
@@ -222,12 +228,15 @@ export function autoArrange(
   hidden: readonly string[] = [],
 ): DashboardLayout {
   const byRank = (a: ArrangeEntry, b: ArrangeEntry) => a.rank - b.rank;
-  const apps = entries.filter((entry) => entry.app).sort(byRank);
-  const panels = entries.filter((entry) => !entry.app).sort(byRank);
+  const apps = entries.filter((entry) => kindOf(entry) === 'app').sort(byRank);
+  const stats = entries.filter((entry) => kindOf(entry) === 'stat').sort(byRank);
+  const panels = entries.filter((entry) => kindOf(entry) === 'panel').sort(byRank);
 
-  const rows = [...chunkEvenly(apps, 8), ...chunkEvenly(panels, 2)].map((group) => ({
-    widgets: group.map((entry) => place(entry.id, 100 / group.length)),
-  }));
+  const rows = [...chunkEvenly(apps, 8), ...chunkEvenly(stats, 4), ...chunkEvenly(panels, 2)].map(
+    (group) => ({
+      widgets: group.map((entry) => place(entry.id, 100 / group.length)),
+    }),
+  );
 
   return normalize({ rows, hidden: [...hidden] });
 }
