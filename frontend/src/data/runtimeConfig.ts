@@ -8,13 +8,13 @@ import { firestore, watchAuth } from './firebase';
  * host and useless for one that moves: a tunnel gets a new hostname every time
  * it restarts, and changing the compiled value means a fresh Vercel build and a
  * window where the deployed site is broken. Reading it from Firestore instead
- * makes a moved API a document write — visible on the next page load, with no
+ * makes a moved API a document write, visible on the next page load, with no
  * rebuild and no deploy.
  *
  * `config/runtime` is world-readable and client-unwritable by `firestore.rules`,
  * which is exactly the shape this wants: any visitor may learn the address, and
  * only something holding a service account may change it. The address is not a
- * secret — every route behind it verifies a Firebase ID token.
+ * secret: every route behind it verifies a Firebase ID token.
  *
  * The build-time value stays as the fallback, so a machine with no Firestore
  * reach still works against whatever it was built with.
@@ -23,6 +23,8 @@ import { firestore, watchAuth } from './firebase';
 declare const __AF_CONVERT_API__: string;
 
 const buildTime = (__AF_CONVERT_API__ ?? '').replace(/\/+$/, '');
+
+const isSameOrigin = buildTime === 'same-origin';
 
 let fromFirestore: string | null = null;
 
@@ -33,11 +35,12 @@ let fromFirestore: string | null = null;
  * the document arrives would otherwise hold the build-time value for the life
  * of the page, which on a deployed site is the one that no longer works.
  */
-export const convertApiBase = (): string => fromFirestore ?? buildTime;
+export const convertApiBase = (): string =>
+  isSameOrigin ? window.location.origin : (fromFirestore ?? buildTime);
 
-/** True once a value has come back — for telling "not configured" apart from
+/** True once a value has come back: for telling "not configured" apart from
  *  "not looked yet", which read identically as an empty string. */
-export const runtimeConfigLoaded = (): boolean => fromFirestore !== null;
+export const runtimeConfigLoaded = (): boolean => isSameOrigin || fromFirestore !== null;
 
 /**
  * Fetches the document, once, without blocking anything.
@@ -48,6 +51,8 @@ export const runtimeConfigLoaded = (): boolean => fromFirestore !== null;
  * leave a caller waiting on a read it does not have to have.
  */
 export async function loadRuntimeConfig(timeoutMs = 4000): Promise<string> {
+  if (isSameOrigin) return convertApiBase();
+
   try {
     const snapshot = await Promise.race([
       getDoc(doc(firestore(), 'config', 'runtime')),
@@ -73,7 +78,7 @@ export async function loadRuntimeConfig(timeoutMs = 4000): Promise<string> {
 /**
  * Looks once now, and again if signing in changes the answer.
  *
- * The first attempt happens before anybody has signed in, which is right — the
+ * The first attempt happens before anybody has signed in, which is right: the
  * address is not secret and `firestore.rules` in this repo makes `config/`
  * world-readable. The rules actually deployed are stricter than the repo's and
  * refuse an unauthenticated read, so that first attempt currently fails and the
@@ -85,6 +90,8 @@ export async function loadRuntimeConfig(timeoutMs = 4000): Promise<string> {
  * the retry becomes a no-op.
  */
 export function watchRuntimeConfig(): void {
+  if (isSameOrigin) return;
+
   void loadRuntimeConfig();
 
   watchAuth((user) => {

@@ -161,9 +161,34 @@ services:
       replicas: 2
     restart: unless-stopped
 
+  web:
+    build:
+      context: ./frontend
+      args:
+        AF_CONVERT_API: same-origin
+    depends_on:
+      - api
+    environment:
+      AF_LAN_HOST: ${AF_LAN_HOST:-192.168.1.28}
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    ports:
+      - "3000:3000"
+      - "8443:8443"
+    restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://web:3000
+    depends_on:
+      - web
+    profiles: [tunnel]
+
 volumes:
   postgres:
   seaweed:
   # Sources are staged here mid-conversion and deleted straight after. Shared
   # between replicas is fine: every job works in its own temp directory.
   scratch:
+  caddy_data:

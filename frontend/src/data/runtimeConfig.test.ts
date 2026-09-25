@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * The address the app talks to, and the rules for changing it.
@@ -16,13 +16,15 @@ let hang = false;
 
 vi.mock('./firebase', () => ({ firestore: () => ({}) }));
 
+const getDoc = vi.fn(async () => {
+  if (hang) return new Promise(() => {}); // never settles
+  if (failWith) throw failWith;
+  return snapshot;
+});
+
 vi.mock('firebase/firestore', () => ({
   doc: (...path: unknown[]) => ({ path }),
-  getDoc: async () => {
-    if (hang) return new Promise(() => {}); // never settles
-    if (failWith) throw failWith;
-    return snapshot;
-  },
+  getDoc: () => getDoc(),
 }));
 
 const load = async () => {
@@ -40,6 +42,11 @@ describe('runtime config', () => {
     snapshot = null;
     failWith = null;
     hang = false;
+    getDoc.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   // AF_CONVERT_API is unset under vitest, so the build-time value is empty —
@@ -97,5 +104,27 @@ describe('runtime config', () => {
     const mod = await load();
 
     await expect(mod.loadRuntimeConfig(20)).resolves.toBe('');
+  });
+
+  describe('same-origin build', () => {
+    beforeEach(() => {
+      vi.stubGlobal('__AF_CONVERT_API__', 'same-origin');
+    });
+
+    it('uses the page origin instead of Firestore', async () => {
+      const mod = await load();
+
+      expect(mod.convertApiBase()).toBe(window.location.origin);
+      expect(mod.runtimeConfigLoaded()).toBe(true);
+    });
+
+    it('resolves without calling getDoc, ignoring any Firestore value', async () => {
+      snapshot = docWith('https://tunnel.example.com');
+      const mod = await load();
+
+      expect(await mod.loadRuntimeConfig()).toBe(window.location.origin);
+      expect(getDoc).not.toHaveBeenCalled();
+      expect(mod.convertApiBase()).toBe(window.location.origin);
+    });
   });
 });

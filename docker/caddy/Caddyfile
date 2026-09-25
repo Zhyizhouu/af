@@ -1,0 +1,27 @@
+{
+	auto_https disable_redirects
+	skip_install_trust
+	default_sni {$AF_LAN_HOST:192.168.1.28}
+}
+
+(app) {
+	encode gzip
+	@api path /v1/* /healthz
+	handle @api {
+		reverse_proxy api:8080
+	}
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+http://:3000 {
+	import app
+}
+
+https://{$AF_LAN_HOST:192.168.1.28}:8443, https://localhost:8443 {
+	tls internal
+	import app
+}
