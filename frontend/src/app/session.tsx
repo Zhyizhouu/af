@@ -12,6 +12,7 @@ import { db, defaultSettings, localScope, openScope, type SettingsRow } from '..
 import { readDashboardLayout } from '../programs/dashboard/layout';
 import { syncAll } from '../data/sync';
 import { isAdmin, signOutNow, watchAuth, type User } from '../data/firebase';
+import { applyThemeConcept } from '../concepts';
 
 export type SyncStatus = 'signedOut' | 'idle' | 'syncing' | 'synced' | 'failed';
 
@@ -28,6 +29,8 @@ function applySettings(settings: SettingsRow) {
 
   if (settings.fullWidth) root.dataset.width = 'full';
   else delete root.dataset.width;
+
+  applyThemeConcept(settings.theme);
 }
 
 /**

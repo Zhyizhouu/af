@@ -131,9 +131,10 @@ export function Shell() {
   const [showProfile, setShowProfile] = useState(false);
 
   const available = visiblePrograms(admin, settings.hiddenPrograms);
+  const routable = visiblePrograms(admin);
 
   const reachable = (target: string | null | undefined) =>
-    available.find((program) => program.slug === target);
+    routable.find((program) => program.slug === target);
 
   const primary = reachable(slug) ?? available[0]!;
   const secondarySlug = params.get('split');
@@ -314,8 +315,12 @@ export function Shell() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="off">Off</SelectItem>
-                  {available
-                    .filter((program) => program.slug !== primary.slug)
+                  {routable
+                    .filter(
+                      (program) =>
+                        program.slug !== primary.slug &&
+                        (program.slug === secondary?.slug || available.includes(program)),
+                    )
                     .map((program) => (
                       <SelectItem key={program.slug} value={program.slug}>
                         {program.name}

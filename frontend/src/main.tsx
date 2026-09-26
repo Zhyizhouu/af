@@ -11,6 +11,7 @@ import { watchRuntimeConfig } from './data/runtimeConfig';
 import { startReminderScheduler } from './data/reminders';
 import './styles/globals.css';
 import './theme/tokens.css';
+import { applyConcept } from './concepts';
 
 /**
  * The gate.
@@ -55,6 +56,8 @@ function Gate() {
     </Routes>
   );
 }
+
+applyConcept();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('no #root to mount into');

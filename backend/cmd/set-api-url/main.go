@@ -18,9 +18,11 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -28,7 +30,9 @@ import (
 
 	firebase "firebase.google.com/go/v4"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 )
 
@@ -91,9 +95,13 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	tls12 := &tls.Config{MinVersion: tls.VersionTLS12, MaxVersion: tls.VersionTLS12}
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = tls12.Clone()
+
 	app, err := firebase.NewApp(ctx,
 		&firebase.Config{ProjectID: *projectID},
-		option.WithCredentialsFile(*creds))
+		option.WithCredentialsFile(*creds),
+		option.WithGRPCDialOption(grpc.WithTransportCredentials(credentials.NewTLS(tls12.Clone()))))
 	if err != nil {
 		return fmt.Errorf("firebase: %w", err)
 	}

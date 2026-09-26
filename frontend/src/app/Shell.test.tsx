@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -7,6 +7,7 @@ import { programs } from './programs';
 
 const syncNow = vi.fn();
 const signOut = vi.fn();
+const session = vi.hoisted(() => ({ hiddenPrograms: [] as string[] }));
 
 if (typeof localStorage === 'undefined' || !localStorage) {
   const store = new Map<string, string>();
@@ -37,7 +38,7 @@ vi.mock('./session', async () => {
     ...actual,
     useSession: () => ({
       admin: false,
-      settings: { hiddenPrograms: [] },
+      settings: { hiddenPrograms: session.hiddenPrograms },
       user: { email: 'test@example.com', displayName: null },
       syncStatus: 'synced',
       syncError: null,
@@ -89,6 +90,27 @@ describe('Shell', () => {
   it('shows the recovery button for an unknown slug', () => {
     renderAt('/nope');
     expect(screen.getByRole('button', { name: /is not a program here/ })).toBeInTheDocument();
+  });
+
+  describe('hidden programs', () => {
+    beforeEach(() => {
+      session.hiddenPrograms = ['audio'];
+    });
+
+    afterEach(() => {
+      session.hiddenPrograms = [];
+    });
+
+    it('leaves a hidden program out of the nav bar', () => {
+      renderAt('/calendar');
+      expect(screen.queryByRole('link', { name: /Audio Converter/ })).not.toBeInTheDocument();
+    });
+
+    it('still opens a hidden program by its URL', () => {
+      renderAt('/audio');
+      expect(screen.getByRole('heading', { level: 1, name: 'Audio Converter' })).toBeInTheDocument();
+      expect(screen.getByText('stub: Audio Converter')).toBeInTheDocument();
+    });
   });
 
   describe('first-visit intro', () => {

@@ -73,7 +73,7 @@ docker compose up --build
 | Service | URL | What it is |
 | --- | --- | --- |
 | API | http://localhost:8080 | what the Flutter app talks to |
-| Temporal UI | http://localhost:8088 | every workflow, its history and its retries |
+| Temporal UI | http://localhost:8089 | every workflow, its history and its retries |
 | SeaweedFS | http://localhost:9333 | master status and volume browser |
 
 Point the app at it with a `--dart-define`, since the app and the API never

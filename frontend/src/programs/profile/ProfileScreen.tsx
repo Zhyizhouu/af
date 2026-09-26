@@ -214,8 +214,8 @@ const fontOptions: { value: SettingsRow['font']; label: string; family: string }
 
 const themeOptions: { value: SettingsRow['theme']; label: string }[] = [
   { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
+  { value: 'light', label: 'Console' },
+  { value: 'dark', label: 'Dawn' },
 ];
 
 const widthOptions: { value: boolean; label: string }[] = [

@@ -1,0 +1,215 @@
+:root[data-concept='concourse'] {
+  --c-scheme: dark;
+  --c-ground: #16181b;
+  --c-panel: #0e0f10;
+  --c-panel-2: #1d2024;
+  --c-sunken: #0a0b0c;
+  --c-ink: #f1f0eb;
+  --c-ink-2: #b4b3ad;
+  --c-ink-3: #92918b;
+  --c-line: #2a2d32;
+  --c-line-strong: #3a3e45;
+  --c-hover: rgba(242, 169, 59, 0.08);
+  --c-accent: #f2a93b;
+  --c-on-accent: #16120a;
+  --c-lamp: #f2a93b;
+  --c-ok: #7fcf8a;
+  --c-warn: #f2a93b;
+  --c-danger: #ef6a6a;
+  --c-info: #8fb8ea;
+  --c-focus: #f2a93b;
+  --c-selection: rgba(242, 169, 59, 0.3);
+  --c-sidebar: #3d4046;
+  --c-sidebar-ink: #f1f0eb;
+  --c-sidebar-ink-2: #aeb0b4;
+  --c-sidebar-active: #0e0f10;
+  --c-sidebar-active-ink: #f2a93b;
+  --c-radius: 3px;
+  --c-radius-sm: 2px;
+  --c-font: 'Barlow', system-ui, sans-serif;
+  --c-font-display: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+  --c-font-data: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+  --c-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 2px 6px rgba(0, 0, 0, 0.5);
+  --c-shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 2px 4px rgba(0, 0, 0, 0.55);
+  --c-ease: cubic-bezier(0.2, 0.9, 0.25, 1);
+  --c-dur: 140ms;
+  --c-enter-y: 0px;
+  --c-enter-o: 0.2;
+  --c-enter-dur: 260ms;
+}
+
+:root[data-concept='concourse'] [data-slot='sidebar-wrapper'] {
+  --sidebar-width: 236px !important;
+}
+
+:root[data-concept='concourse'] [class*='bg-[linear-gradient(180deg,#0d0d0f,#050506)]'] {
+  background: #3d4046;
+}
+
+:root[data-concept='concourse'] [data-slot='sidebar-container'] {
+  border-right: 2px solid #0b0c0d;
+}
+
+:root[data-concept='concourse'] [data-slot='sidebar-menu-button'],
+:root[data-concept='concourse'] [data-slot='sidebar-group-label'],
+:root[data-concept='concourse'] header.border-b h1,
+:root[data-concept='concourse'] h2,
+:root[data-concept='concourse'] h3,
+:root[data-concept='concourse'] .text-\[15px\].font-semibold,
+:root[data-concept='concourse'] [data-slot='button'],
+:root[data-concept='concourse'] [data-slot='tabs-trigger'],
+:root[data-concept='concourse'] .tsk__table th {
+  font-family: var(--c-font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+:root[data-concept='concourse'] [data-slot='sidebar-menu-button'] {
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 2px;
+}
+
+:root[data-concept='concourse'] [data-slot='sidebar-menu-button'].glow-active {
+  background: var(--c-panel);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+:root[data-concept='concourse'] [data-slot='sidebar-menu-button'].glow-active::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-lamp);
+  margin-left: auto;
+  box-shadow: 0 0 0 3px rgba(242, 169, 59, 0.18);
+}
+
+:root[data-concept='concourse'] header.border-b h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+:root[data-concept='concourse'] h1.text-gradient {
+  font-size: clamp(44px, 6vw, 84px);
+  line-height: 1.02;
+  font-family: var(--c-font-display);
+  text-transform: uppercase;
+}
+
+:root[data-concept='concourse'] header.border-b {
+  background: var(--c-panel);
+  border-bottom: 2px solid #0b0c0d;
+  backdrop-filter: none;
+}
+
+:root[data-concept='concourse'] .surface-3d {
+  background: var(--c-panel);
+  border: 1px solid #000;
+  outline: 1px solid var(--c-line);
+  outline-offset: -2px;
+}
+
+:root[data-concept='concourse'] .dash__widget.raised {
+  border-radius: 3px !important;
+}
+
+:root[data-concept='concourse'] .dash__widget.surface-3d {
+  border: 0;
+  outline: 0;
+  border-bottom: 1px solid var(--c-line-strong);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-concept='concourse'] .text-\[30px\],
+:root[data-concept='concourse'] .min-h-\[62px\] > span:first-child,
+:root[data-concept='concourse'] .min-h-\[62px\] > button > span:first-child {
+  position: relative;
+  display: inline-block;
+  width: fit-content;
+  align-self: flex-start;
+  font-family: var(--c-font-data);
+  font-weight: 700;
+  padding: 0 0.18em;
+  background: linear-gradient(180deg, #202226 0%, #17191b 49%, #0b0c0d 50%, #131416 100%);
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 2px 3px rgba(0, 0, 0, 0.6);
+  color: #fbfaf5;
+  transform-origin: 50% 50%;
+  animation: concourse-flap 420ms steps(6, end) both;
+}
+
+:root[data-concept='concourse'] .text-\[30px\]::after,
+:root[data-concept='concourse'] .min-h-\[62px\] > span:first-child::after,
+:root[data-concept='concourse'] .min-h-\[62px\] > button > span:first-child::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.85);
+}
+
+@keyframes concourse-flap {
+  from {
+    transform: perspective(300px) rotateX(-88deg);
+  }
+  to {
+    transform: none;
+  }
+}
+
+:root[data-concept='concourse'] .min-h-\[62px\] {
+  border-radius: 2px;
+  background: #121315;
+  border-color: #2a2d32;
+}
+
+:root[data-concept='concourse'] .min-h-\[62px\] [class~='bg-white'][class~='text-black'] {
+  box-shadow: none;
+  background: var(--c-lamp) !important;
+  color: #111111 !important;
+}
+
+:root[data-concept='concourse'] .tsk__table tr,
+:root[data-concept='concourse'] ul > li {
+  transition: background-color var(--c-dur) var(--c-ease);
+}
+
+:root[data-concept='concourse'] .tsk__table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+:root[data-concept='concourse'] [data-slot='button'][data-variant='gradient'] {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(242, 169, 59, 0.25);
+  font-weight: 700;
+}
+
+:root[data-concept='concourse'] [data-slot='button'][data-variant='raised'] {
+  background: linear-gradient(180deg, #2c2f34, #1f2226);
+}
+
+:root[data-concept='concourse'] [data-slot='checkbox'] {
+  border-radius: 2px;
+}
+
+:root[data-concept='concourse'] .af-split__grip {
+  background: #3a3e45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-concept='concourse'] .text-\[30px\],
+  :root[data-concept='concourse'] .min-h-\[62px\] > span:first-child,
+  :root[data-concept='concourse'] .min-h-\[62px\] > button > span:first-child {
+    animation: none;
+  }
+}
+
+:root[data-concept='concourse'] [data-slot='button'][data-variant='destructive'],
+:root[data-concept='concourse'] [data-slot='badge'][data-variant='destructive'] {
+  color: #16120a;
+}

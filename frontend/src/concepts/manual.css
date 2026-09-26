@@ -1,0 +1,215 @@
+:root[data-concept='manual'] {
+  --c-scheme: light;
+  --board: #3b3d45;
+  --c-ground: var(--board);
+  --c-panel: rgba(255, 255, 255, 0.9);
+  --c-panel-2: #ffffff;
+  --c-sunken: rgba(255, 255, 255, 0.7);
+  --c-ink: #16161a;
+  --c-ink-2: #45454d;
+  --c-ink-3: #55555e;
+  --c-line: rgba(22, 22, 26, 0.14);
+  --c-line-strong: rgba(22, 22, 26, 0.3);
+  --c-hover: rgba(22, 22, 26, 0.06);
+  --c-accent: #16161a;
+  --c-on-accent: #ffffff;
+  --c-lamp: #16161a;
+  --c-ok: #2a6e1d;
+  --c-warn: #8a5a00;
+  --c-danger: #c0341d;
+  --c-info: #1e3196;
+  --c-focus: #16161a;
+  --c-selection: rgba(22, 22, 26, 0.16);
+  --c-sidebar: #f4f2ee;
+  --c-sidebar-ink: #16161a;
+  --c-sidebar-ink-2: #3a3a42;
+  --c-sidebar-active: var(--board);
+  --c-sidebar-active-ink: #ffffff;
+  --c-radius: 2px;
+  --c-radius-sm: 1px;
+  --c-font: 'Public Sans', system-ui, sans-serif;
+  --c-font-display: 'Source Serif 4', Georgia, serif;
+  --c-font-data: 'Public Sans', system-ui, sans-serif;
+  --c-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 3px 4px 8px -2px rgba(0, 0, 0, 0.25);
+  --c-shadow-raised: 2px 2px 4px -1px rgba(0, 0, 0, 0.25);
+  --c-ease: steps(2, end);
+  --c-dur: 90ms;
+  --c-enter-y: 3px;
+  --c-enter-o: 0.5;
+  --c-enter-dur: 90ms;
+}
+
+:root[data-concept='manual'][data-program='checklists'] { --board: #c4501c; }
+:root[data-concept='manual'][data-program='calendar'] { --board: #2438a8; }
+:root[data-concept='manual'][data-program='habits'] { --board: #3c8a2c; }
+:root[data-concept='manual'][data-program='tasks'] { --board: #0e7a7e; }
+:root[data-concept='manual'][data-program='audio'] { --board: #6a3fa3; }
+:root[data-concept='manual'][data-program='ai'] { --board: #d9a70f; }
+:root[data-concept='manual'][data-program='qr'] { --board: #9c4a24; }
+:root[data-concept='manual'][data-program='landing'],
+:root[data-concept='manual'][data-program='signin'] { --board: #2438a8; }
+
+:root[data-concept='manual'][data-program='ai'] {
+  --c-sidebar-active-ink: #16161a;
+}
+
+:root[data-concept='manual'] [data-slot='sidebar-inset'] {
+  background: var(--board);
+  transition: background-color 90ms steps(2, end);
+}
+
+:root[data-concept='manual'] header.border-b {
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+  backdrop-filter: none;
+}
+
+:root[data-concept='manual'] [class*='bg-[linear-gradient(180deg,#0d0d0f,#050506)]'] {
+  background: #f4f2ee;
+}
+
+:root[data-concept='manual'] [data-slot='sidebar-container'] {
+  border-right: none;
+}
+
+:root[data-concept='manual'] [data-slot='sidebar-menu'] {
+  gap: 3px;
+}
+
+:root[data-concept='manual'] [data-slot='sidebar-menu-button'] {
+  --tab: #3b3d45;
+  position: relative;
+  border-radius: 2px 0 0 2px;
+  font-weight: 600;
+  padding-left: 18px;
+  transition: none;
+}
+
+:root[data-concept='manual'] [data-slot='sidebar-menu-button']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  background: var(--tab);
+}
+
+:root[data-concept='manual'] [data-slot='sidebar-menu-button'][href^='/checklists'] { --tab: #c4501c; }
+:root[data-concept='manual'] [data-slot='sidebar-menu-button'][href^='/calendar'] { --tab: #2438a8; }
+:root[data-concept='manual'] [data-slot='sidebar-menu-button'][href^='/habits'] { --tab: #3c8a2c; }
+:root[data-concept='manual'] [data-slot='sidebar-menu-button'][href^='/tasks'] { --tab: #0e7a7e; }
+:root[data-concept='manual'] [data-slot='sidebar-menu-button'][href^='/audio'] { --tab: #6a3fa3; }
+:root[data-concept='manual'] [data-slot='sidebar-menu-button'][href^='/ai'] { --tab: #d9a70f; }
+:root[data-concept='manual'] [data-slot='sidebar-menu-button'][href^='/qr'] { --tab: #9c4a24; }
+
+:root[data-concept='manual'] [data-slot='sidebar-menu-button'].glow-active {
+  margin-right: -8px;
+  width: calc(100% + 8px);
+  background: var(--tab);
+  color: var(--c-sidebar-active-ink);
+  box-shadow: none;
+}
+
+:root[data-concept='manual'] [data-slot='sidebar-group-label'] {
+  font-family: var(--c-font-display);
+  font-style: italic;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+:root[data-concept='manual'] header.border-b h1 {
+  font-weight: 600;
+  font-size: 21px;
+  letter-spacing: -0.01em;
+}
+
+:root[data-concept='manual'] h1.text-gradient {
+  font-size: clamp(44px, 6vw, 84px);
+  line-height: 1.02;
+  font-family: var(--c-font-display);
+}
+
+:root[data-concept='manual'][data-program='landing'] h1.text-gradient,
+:root[data-concept='manual'][data-program='landing'] p.text-muted-foreground {
+  color: #ffffff;
+}
+
+:root[data-concept='manual'] .text-\[15px\].font-semibold {
+  font-family: var(--c-font-display);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+:root[data-concept='manual'] .surface-3d {
+  background: var(--c-panel);
+  border: none;
+  border-radius: 2px;
+}
+
+:root[data-concept='manual'] .page > p,
+:root[data-concept='manual'] .af-body {
+  font-family: var(--c-font-display);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+:root[data-concept='manual'] .dash__widget.raised {
+  border-radius: 2px !important;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+}
+
+:root[data-concept='manual'] [data-slot='button'] {
+  border-radius: 2px;
+  transition: none;
+}
+
+:root[data-concept='manual'] [data-slot='button'][data-variant='raised'] {
+  background: rgba(255, 255, 255, 0.92);
+  border: none;
+}
+
+:root[data-concept='manual'] .page {
+  width: calc(100% - 32px);
+  margin: 16px auto;
+  background: rgba(250, 249, 246, 0.94);
+  box-shadow: var(--c-shadow);
+  border-radius: 2px;
+}
+
+:root[data-concept='manual'] .page .surface-3d {
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(22, 22, 26, 0.12);
+}
+
+:root[data-concept='manual'] [data-slot='checkbox'] {
+  border-radius: 1px;
+  border: 1.5px solid #16161a;
+}
+
+:root[data-concept='manual'] .min-h-\[62px\] {
+  background: #ffffff;
+  border: 1px solid var(--c-line);
+}
+
+:root[data-concept='manual'] .min-h-\[62px\] [class~='bg-white'][class~='text-black'] {
+  box-shadow: none;
+  background: var(--board);
+  color: #ffffff;
+}
+
+:root[data-concept='manual'][data-program='ai'] .min-h-\[62px\] [class~='bg-white'][class~='text-black'] {
+  color: #16161a;
+}
+
+:root[data-concept='manual'] .page [class~='bg-[#050506]'] {
+  background: rgba(22, 22, 26, 0.06);
+  border-color: var(--c-line);
+  box-shadow: none;
+}
+
+:root[data-concept='manual'] .tsk__table {
+  background: rgba(255, 255, 255, 0.92);
+}

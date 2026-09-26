@@ -1,0 +1,212 @@
+:root[data-concept='dawn'] {
+  --c-scheme: dark;
+  --c-ground: #080a14;
+  --c-panel: rgba(16, 19, 36, 0.78);
+  --c-panel-2: #151a31;
+  --c-sunken: rgba(8, 10, 20, 0.7);
+  --c-ink: #e7e5f0;
+  --c-ink-2: #aeb0c8;
+  --c-ink-3: #9092ad;
+  --c-line: rgba(160, 170, 230, 0.12);
+  --c-line-strong: rgba(160, 170, 230, 0.22);
+  --c-hover: rgba(160, 170, 230, 0.08);
+  --c-accent: #e9a7b6;
+  --c-on-accent: #1a0f18;
+  --c-lamp: #e9a7b6;
+  --c-ok: #8fd6b4;
+  --c-warn: #f0c27a;
+  --c-danger: #f28b99;
+  --c-info: #9db4ff;
+  --c-focus: #9db4ff;
+  --c-selection: rgba(157, 180, 255, 0.3);
+  --c-sidebar: #070912;
+  --c-sidebar-ink: #e7e5f0;
+  --c-sidebar-ink-2: #9ea1bd;
+  --c-sidebar-active: rgba(157, 180, 255, 0.12);
+  --c-sidebar-active-ink: #ffffff;
+  --c-radius: 14px;
+  --c-radius-sm: 6px;
+  --c-font: 'Saira', system-ui, sans-serif;
+  --c-font-display: 'Saira Stencil One', 'Saira', system-ui, sans-serif;
+  --c-font-data: 'Saira', system-ui, sans-serif;
+  --c-shadow: 0 1px 0 rgba(200, 210, 255, 0.06) inset, 0 20px 40px -24px rgba(0, 0, 0, 0.8);
+  --c-shadow-raised: 0 1px 0 rgba(200, 210, 255, 0.08) inset, 0 6px 16px -8px rgba(0, 0, 0, 0.7);
+  --c-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --c-dur: 320ms;
+  --c-enter-y: 12px;
+  --c-enter-o: 0.2;
+  --c-enter-dur: 700ms;
+
+  --horizon-low: #1b2d86;
+  --horizon-mid: #5a3f8c;
+  --horizon-high: #d98aa0;
+  --horizon-strength: 0.55;
+}
+
+:root[data-concept='dawn'][data-phase='first-light'] {
+  --horizon-low: #203aa0;
+  --horizon-mid: #7a4a96;
+  --horizon-high: #e59aad;
+  --horizon-strength: 0.7;
+}
+
+:root[data-concept='dawn'][data-phase='dawn'] {
+  --horizon-low: #2a4fc4;
+  --horizon-mid: #b0608f;
+  --horizon-high: #f2b2a6;
+  --horizon-strength: 0.82;
+}
+
+:root[data-concept='dawn'][data-phase='day'] {
+  --horizon-low: #3160d8;
+  --horizon-mid: #8a78c8;
+  --horizon-high: #f0c7c9;
+  --horizon-strength: 0.62;
+}
+
+:root[data-concept='dawn'][data-phase='night'] {
+  --horizon-low: #14226a;
+  --horizon-mid: #3a2d6e;
+  --horizon-high: #9a6a8e;
+  --horizon-strength: 0.42;
+}
+
+:root[data-concept='dawn'] [data-slot='sidebar-inset'] {
+  position: relative;
+  isolation: isolate;
+}
+
+:root[data-concept='dawn'] [data-slot='sidebar-inset']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 55% at 50% 118%, var(--horizon-high) 0%, transparent 60%),
+    radial-gradient(160% 45% at 50% 108%, var(--horizon-mid) 0%, transparent 70%),
+    linear-gradient(to top, var(--horizon-low) 0%, transparent 38%);
+  opacity: var(--horizon-strength);
+  transition: opacity 4s ease;
+  animation: dawn-breathe 24s ease-in-out infinite alternate;
+}
+
+@keyframes dawn-breathe {
+  from {
+    opacity: calc(var(--horizon-strength) * 0.78);
+  }
+  to {
+    opacity: var(--horizon-strength);
+  }
+}
+
+:root[data-concept='dawn'] [data-slot='sidebar-inset'] > * {
+  background: transparent;
+}
+
+:root[data-concept='dawn'] header.border-b {
+  background: rgba(8, 10, 20, 0.55);
+  border-color: var(--c-line);
+}
+
+:root[data-concept='dawn'] h2 {
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:root[data-concept='dawn'] header.border-b h1 {
+  font-weight: 400;
+  text-transform: uppercase;
+  font-size: 22px;
+  letter-spacing: 0.12em;
+}
+
+:root[data-concept='dawn'] h1.text-gradient {
+  font-size: clamp(44px, 6vw, 84px);
+  line-height: 1.02;
+  font-family: var(--c-font-display);
+  text-transform: uppercase;
+}
+
+:root[data-concept='dawn'] .text-\[15px\].font-semibold {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: #f3f1f8;
+}
+
+:root[data-concept='dawn'] [data-slot='sidebar-group-label'] {
+  font-family: var(--c-font-display);
+  font-weight: 400;
+  letter-spacing: 0.14em;
+}
+
+:root[data-concept='dawn'] [data-slot='sidebar-menu-button'] {
+  border-radius: 999px;
+  font-weight: 400;
+}
+
+:root[data-concept='dawn'] [data-slot='sidebar-menu-button'].glow-active {
+  box-shadow: inset 0 0 0 1px rgba(157, 180, 255, 0.25);
+}
+
+:root[data-concept='dawn'] .surface-3d {
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+}
+
+:root[data-concept='dawn'] .dash__widget.raised {
+  border-radius: 999px !important;
+  background: rgba(21, 26, 49, 0.7);
+}
+
+:root[data-concept='dawn'] [data-slot='button'] {
+  border-radius: 999px;
+  font-weight: 500;
+  transition: background-color var(--c-dur) var(--c-ease), box-shadow var(--c-dur) var(--c-ease), transform var(--c-dur) var(--c-ease);
+}
+
+:root[data-concept='dawn'] [data-slot='button'][data-variant='gradient'] {
+  background: linear-gradient(180deg, #f3c0cb, #e29bac);
+  box-shadow: 0 8px 24px -10px rgba(233, 167, 182, 0.7);
+}
+
+:root[data-concept='dawn'] [data-slot='button'][data-variant='gradient']:hover {
+  transform: translateY(-1px);
+}
+
+:root[data-concept='dawn'] [data-slot='button'][data-variant='raised'] {
+  background: rgba(157, 180, 255, 0.08);
+  border-color: rgba(157, 180, 255, 0.18);
+}
+
+:root[data-concept='dawn'] .text-\[30px\] {
+  font-weight: 300;
+  letter-spacing: -0.01em;
+}
+
+:root[data-concept='dawn'] [data-slot='checkbox'] {
+  border-radius: 999px;
+}
+
+:root[data-concept='dawn'] .min-h-\[62px\] {
+  background: rgba(16, 19, 36, 0.55);
+}
+
+:root[data-concept='dawn'] .min-h-\[62px\] [class~='bg-white'][class~='text-black'] {
+  box-shadow: none;
+  background: var(--c-accent);
+  color: var(--c-on-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-concept='dawn'] [data-slot='sidebar-inset']::before {
+    animation: none;
+    transition: none;
+  }
+}
+
+:root[data-concept='dawn'] [data-slot='button'][data-variant='destructive'],
+:root[data-concept='dawn'] [data-slot='badge'][data-variant='destructive'] {
+  color: #1a0f18;
+}
