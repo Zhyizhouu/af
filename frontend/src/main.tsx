@@ -38,8 +38,6 @@ function Gate() {
   if (!user) {
     return (
       <Routes>
-        {/* A signed-out deep link keeps its URL rather than bouncing to /signin,
-            so the signed-in router can show that program once sign-in lands. */}
         <Route path="/" element={<Landing />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="*" element={<SignIn />} />

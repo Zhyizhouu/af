@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { AFIconButton } from '../../components/AF';
+import { Command } from 'lucide-react';
 import type { TaskPageRow } from '../../data/db';
 import { savePageField } from './store';
 
@@ -115,17 +115,20 @@ export function PageBody({ page, onChange }: { page: TaskPageRow; onChange: () =
   return (
     <div className="tsk__body" ref={container}>
       <div className="tsk__body-bar">
-        <span className="af-panel-label">Notes</span>
-        <AFIconButton
-          glyph="⌘"
-          tooltip="Shortcuts"
-          bordered={false}
+        <span className="text-[12px] uppercase tracking-[0.08em] text-subtle-foreground">Notes</span>
+        <button
+          type="button"
+          className="tsk__icon-btn raised"
+          aria-label="Shortcuts"
+          title="Shortcuts"
           onClick={() => setShowShortcuts((open) => !open)}
-        />
+        >
+          <Command size={14} aria-hidden />
+        </button>
       </div>
 
       {showShortcuts && (
-        <div className="tsk__body-shortcuts" role="note">
+        <div className="tsk__body-shortcuts surface-3d rounded-xl" role="note">
           <span className="af-meta">
             <span className="af-mono">/</span> for a block — Text, H1, H2, H3
           </span>
@@ -143,7 +146,7 @@ export function PageBody({ page, onChange }: { page: TaskPageRow; onChange: () =
 
       <div
         ref={editor}
-        className="tsk__body-editor af-body"
+        className="tsk__body-editor"
         contentEditable
         suppressContentEditableWarning
         onBlur={commit}
@@ -152,13 +155,17 @@ export function PageBody({ page, onChange }: { page: TaskPageRow; onChange: () =
       />
 
       {slash && filtered.length > 0 && (
-        <div className="tsk__slash-menu" role="menu" style={{ top: slash.top, left: slash.left }}>
+        <div
+          className="tsk__slash-menu surface-3d rounded-xl"
+          role="menu"
+          style={{ top: slash.top, left: slash.left }}
+        >
           {filtered.map((option, index) => (
             <button
               key={option.tag}
               type="button"
               role="menuitem"
-              className={index === slashIndex ? 'is-active' : ''}
+              className={index === slashIndex ? 'is-active glow-active' : ''}
               // Keeps the editor focused (and its selection alive) instead of
               // blurring to the button, which is what `pickSlash` needs.
               onMouseDown={(event) => event.preventDefault()}

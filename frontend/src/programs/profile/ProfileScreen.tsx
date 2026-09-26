@@ -1,11 +1,17 @@
 import { useState } from 'react';
-import { AFButton, AFHint, AFPanel } from '../../components/AF';
+import { KeyRound, Mail } from 'lucide-react';
+import { cn } from 'cn';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import { Checkbox } from '../../components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { useSession } from '../../app/session';
 import { programs } from '../../app/programs';
 import { auth, authErrorMessage, type User } from '../../data/firebase';
 import type { SettingsRow } from '../../data/db';
 import { changeEmail, changePassword, hasPasswordProvider, providerLabel } from './store';
-import './profile.css';
 
 type Tab = 'credentials' | 'font' | 'apps';
 
@@ -25,30 +31,37 @@ export function ProfileScreen({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('credentials');
 
   return (
-    <div className="cal__overlay" role="dialog" aria-label="Profile">
-      <AFPanel label="Profile" className="prf__editor">
-        <div className="prf__tabs">
-          {tabs.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={`cal__view${tab === option.id ? ' is-active' : ''}`}
-              onClick={() => setTab(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="surface-3d rounded-2xl border-0 bg-transparent sm:max-w-[640px]" aria-label="Settings">
+        <DialogHeader>
+          <DialogTitle>Settings</DialogTitle>
+        </DialogHeader>
 
-        {tab === 'credentials' && <CredentialsPanel />}
-        {tab === 'font' && <FontSettingsPanel settings={settings} onChange={updateSettings} />}
-        {tab === 'apps' && <DisplayedAppsPanel settings={settings} onChange={updateSettings} />}
+        <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
+          <TabsList className="h-auto w-full justify-start gap-0.5 rounded-[10px] border border-white/[0.07] bg-[#050506] p-[3px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]">
+            {tabs.map((option) => (
+              <TabsTrigger
+                key={option.id}
+                value={option.id}
+                className="h-auto min-h-8 flex-1 whitespace-normal rounded-[7px] border-0 bg-transparent px-1.5 py-1.5 text-center text-[11px] font-medium leading-tight text-muted-foreground shadow-none after:hidden data-[state=active]:glow-active data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent sm:px-3 sm:text-sm"
+              >
+                {option.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-        <div className="cal__editor-actions">
-          <AFButton label="Close" variant="quiet" onClick={onClose} />
-        </div>
-      </AFPanel>
-    </div>
+          <TabsContent value="credentials" className="mt-4">
+            <CredentialsPanel />
+          </TabsContent>
+          <TabsContent value="font" className="mt-4">
+            <FontSettingsPanel settings={settings} onChange={updateSettings} />
+          </TabsContent>
+          <TabsContent value="apps" className="mt-4">
+            <DisplayedAppsPanel settings={settings} onChange={updateSettings} />
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -96,74 +109,99 @@ function CredentialsPanel() {
   };
 
   return (
-    <div className="prf__section">
-      <div className="prf__field">
-        <span className="af-panel-label">Email</span>
-        <span className="af-body">{current?.email ?? '—'}</span>
-      </div>
-      <div className="prf__field">
-        <span className="af-panel-label">Signed in with</span>
-        <span className="af-body">{providerLabel(current)}</span>
+    <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-1">
+          <span className="text-[12px] uppercase tracking-[0.08em] text-subtle-foreground">Email</span>
+          <span className="text-[14px] text-foreground">{current?.email ?? '—'}</span>
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-[12px] uppercase tracking-[0.08em] text-subtle-foreground">Signed in with</span>
+          <span className="text-[14px] text-foreground">{providerLabel(current)}</span>
+        </div>
       </div>
 
       {canChangeCredentials ? (
         <>
-          <label className="af-panel-label" htmlFor="prf-current-password">
-            Current password
-          </label>
-          <input
-            id="prf-current-password"
-            type="password"
-            className="af-input"
-            autoComplete="current-password"
-            value={currentPassword}
-            onChange={(event) => setCurrentPassword(event.target.value)}
-          />
-
-          <label className="af-panel-label" htmlFor="prf-next-password">
-            New password
-          </label>
-          <div className="prf__inline">
-            <input
-              id="prf-next-password"
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="prf-current-password">Current password</Label>
+            <Input
+              id="prf-current-password"
               type="password"
-              className="af-input"
-              autoComplete="new-password"
-              value={nextPassword}
-              onChange={(event) => setNextPassword(event.target.value)}
-            />
-            <AFButton
-              label="Change password"
-              disabled={!currentPassword || nextPassword.length < 6 || busy !== null}
-              onClick={() => void runPasswordChange()}
+              className="inset-field rounded-[10px]"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
             />
           </div>
 
-          <label className="af-panel-label" htmlFor="prf-next-email">
-            New email
-          </label>
-          <div className="prf__inline">
-            <input
-              id="prf-next-email"
-              type="email"
-              className="af-input"
-              value={nextEmail}
-              onChange={(event) => setNextEmail(event.target.value)}
-            />
-            <AFButton
-              label="Change email"
-              variant="quiet"
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:gap-3">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <Label htmlFor="prf-next-password">New password</Label>
+              <Input
+                id="prf-next-password"
+                type="password"
+                className="inset-field rounded-[10px]"
+                autoComplete="new-password"
+                value={nextPassword}
+                onChange={(event) => setNextPassword(event.target.value)}
+              />
+            </div>
+            <Button
+              variant="gradient"
+              disabled={!currentPassword || nextPassword.length < 6 || busy !== null}
+              onClick={() => void runPasswordChange()}
+            >
+              <KeyRound />
+              Change password
+            </Button>
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:gap-3">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <Label htmlFor="prf-next-email">New email</Label>
+              <Input
+                id="prf-next-email"
+                type="email"
+                className="inset-field rounded-[10px]"
+                value={nextEmail}
+                onChange={(event) => setNextEmail(event.target.value)}
+              />
+            </div>
+            <Button
+              variant="ghost"
               disabled={!currentPassword || !nextEmail.trim() || busy !== null}
               onClick={() => void runEmailChange()}
-            />
+            >
+              <Mail />
+              Change email
+            </Button>
           </div>
         </>
       ) : (
-        <AFHint>Signed in with Google — no password to manage here.</AFHint>
+        <p className="text-[13px] text-muted-foreground">
+          Signed in with Google — no password to manage here.
+        </p>
       )}
 
-      {message && <AFHint tip>{message}</AFHint>}
-      {error && <AFHint>{error}</AFHint>}
+      {message && (
+        <div
+          role="status"
+          className="rounded-[10px] border px-3 py-2 text-[13px]"
+          style={{ color: '#86efac', background: 'rgba(52,211,153,0.08)', borderColor: 'rgba(52,211,153,0.35)' }}
+        >
+          {message}
+        </div>
+      )}
+      {error && (
+        <div
+          role="alert"
+          className="rounded-[10px] border px-3 py-2 text-[13px]"
+          style={{ color: '#fda4af', background: 'rgba(251,113,133,0.08)', borderColor: 'rgba(251,113,133,0.35)' }}
+        >
+          {error}
+        </div>
+      )}
     </div>
   );
 }
@@ -193,59 +231,86 @@ function FontSettingsPanel({
   onChange: (patch: Partial<Omit<SettingsRow, 'id'>>) => Promise<void>;
 }) {
   return (
-    <div className="prf__section">
-      <span className="af-panel-label">Font</span>
-      <div className="prf__fonts">
-        {fontOptions.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className={`prf__font${settings.font === option.value ? ' is-active' : ''}`}
-            onClick={() => void onChange({ font: option.value })}
-          >
-            <span className="prf__font-sample" style={{ fontFamily: option.family }}>
-              Aa
-            </span>
-            <span className="af-meta">{option.label}</span>
-          </button>
-        ))}
+    <div className="flex flex-col gap-5">
+      <div>
+        <span className="mb-2 block text-[12px] uppercase tracking-[0.08em] text-subtle-foreground">Font</span>
+        <div role="radiogroup" aria-label="Font" className="grid grid-cols-3 gap-2">
+          {fontOptions.map((option) => {
+            const active = settings.font === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                className={cn(
+                  'raised flex flex-col items-center gap-2 rounded-2xl px-3 py-4 text-foreground transition-colors',
+                  active && 'glow-active',
+                )}
+                onClick={() => void onChange({ font: option.value })}
+              >
+                <span className="text-2xl" style={{ fontFamily: option.family }}>
+                  Aa
+                </span>
+                <span className="text-[12px] text-muted-foreground">{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <span className="af-panel-label">Theme</span>
-      <div className="prf__themes">
-        {themeOptions.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className={`prf__theme${settings.theme === option.value ? ' is-active' : ''}`}
-            onClick={() => void onChange({ theme: option.value })}
-          >
-            {option.label}
-          </button>
-        ))}
+      <div>
+        <span className="mb-2 block text-[12px] uppercase tracking-[0.08em] text-subtle-foreground">Theme</span>
+        <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-2">
+          {themeOptions.map((option) => {
+            const active = settings.theme === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                className={cn(
+                  'raised rounded-2xl px-3 py-2.5 text-[13px] font-medium text-foreground transition-colors',
+                  active && 'glow-active',
+                )}
+                onClick={() => void onChange({ theme: option.value })}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Applies to every program at once, deliberately — one page width is
-          the rule `.page` exists to keep, and a per-screen override would be
-          the drift it was introduced to stop. */}
-      <span className="af-panel-label">Page width</span>
-      <div className="prf__themes">
-        {widthOptions.map((option) => (
-          <button
-            key={String(option.value)}
-            type="button"
-            className={`prf__theme${settings.fullWidth === option.value ? ' is-active' : ''}`}
-            onClick={() => void onChange({ fullWidth: option.value })}
-          >
-            {option.label}
-          </button>
-        ))}
+      <div>
+        <span className="mb-2 block text-[12px] uppercase tracking-[0.08em] text-subtle-foreground">Page width</span>
+        <div role="radiogroup" aria-label="Page width" className="grid grid-cols-2 gap-2">
+          {widthOptions.map((option) => {
+            const active = settings.fullWidth === option.value;
+            return (
+              <button
+                key={String(option.value)}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                className={cn(
+                  'raised rounded-2xl px-3 py-2.5 text-[13px] font-medium text-foreground transition-colors',
+                  active && 'glow-active',
+                )}
+                onClick={() => void onChange({ fullWidth: option.value })}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-[13px] text-muted-foreground">
+          {settings.fullWidth
+            ? 'Every program fills the window.'
+            : 'Every program sits in a reading column.'}
+        </p>
       </div>
-      <AFHint>
-        {settings.fullWidth
-          ? 'Every program fills the window.'
-          : 'Every program sits in a reading column.'}
-      </AFHint>
     </div>
   );
 }
@@ -267,19 +332,28 @@ function DisplayedAppsPanel({
   };
 
   return (
-    <div className="prf__section">
-      <AFHint>Choose which applications show in the nav bar, the dashboard, and the split picker.</AFHint>
-      <ul className="prf__apps">
-        {programs.map((program) => (
-          <li key={program.slug} className="prf__app-row">
-            <span className="af-mono">{program.mark}</span>
-            <span className="af-body">{program.name}</span>
-            <label className="prf__app-toggle">
-              <input type="checkbox" checked={!hidden.has(program.slug)} onChange={() => toggle(program.slug)} />
-              <span className="af-meta">{hidden.has(program.slug) ? 'Hidden' : 'Shown'}</span>
-            </label>
-          </li>
-        ))}
+    <div className="flex flex-col gap-3">
+      <p className="text-[13px] text-muted-foreground">
+        Choose which applications show in the nav bar, the dashboard, and the split picker.
+      </p>
+      <ul className="flex flex-col gap-1">
+        {programs.map((program) => {
+          const checked = !hidden.has(program.slug);
+          const id = `prf-app-${program.slug}`;
+          return (
+            <li
+              key={program.slug}
+              className="flex items-center gap-3 border-b border-white/[0.06] px-2 py-2 last:border-b-0"
+            >
+              <span className="shrink-0 font-mono text-[14px] text-muted-foreground">{program.mark}</span>
+              <span className="min-w-0 flex-1 truncate text-[14px] text-foreground">{program.name}</span>
+              <Label htmlFor={id} className="shrink-0 gap-2 text-[12px] text-muted-foreground">
+                {checked ? 'Shown' : 'Hidden'}
+                <Checkbox id={id} checked={checked} onCheckedChange={() => toggle(program.slug)} />
+              </Label>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

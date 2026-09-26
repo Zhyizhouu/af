@@ -104,12 +104,17 @@ if ($LASTEXITCODE -ne 0) {
 # while Postgres, Temporal and SeaweedFS are simply gone — and `docker ps`
 # shows two healthy-looking containers that cannot work.
 #
-# 2>$null because compose writes its progress to stderr; the ps table below
-# says the same thing more usefully.
+# Compose writes its progress to stderr, so it is captured and only shown when
+# the command fails; on success the ps table below says the same thing more
+# usefully.
 Push-Location $repo
 try {
-  Invoke-Native { docker compose up -d 2>$null | Out-Null }
-  if ($LASTEXITCODE -ne 0) { throw 'docker compose up failed.' }
+  $composeOut = Invoke-Native { docker compose up -d 2>&1 | ForEach-Object { "$_" } }
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "`n    docker compose up said:" -ForegroundColor Red
+    $composeOut | Select-Object -Last 25 | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+    throw 'docker compose up failed.'
+  }
   Invoke-Native { docker compose ps --format "table {{.Name}}`t{{.Status}}" }
 } finally { Pop-Location }
 

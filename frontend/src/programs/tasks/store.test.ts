@@ -48,6 +48,50 @@ describe('seedDefaultProperties', () => {
 
     expect(await listProperties()).toHaveLength(0);
   });
+
+  it('mints stable ids for the seeded properties and their options', async () => {
+    await seedDefaultProperties();
+    const properties = await listProperties();
+
+    const status = properties.find((p) => p.name === 'Status')!;
+    expect(status.id).toBe('seed:status');
+    expect(status.options.map((o) => o.id)).toEqual([
+      'seed:status:not-started',
+      'seed:status:in-progress',
+      'seed:status:in-correction',
+      'seed:status:done',
+    ]);
+
+    const priority = properties.find((p) => p.name === 'Priority')!;
+    expect(priority.id).toBe('seed:priority');
+    expect(priority.options.map((o) => o.id)).toEqual([
+      'seed:priority:high',
+      'seed:priority:medium',
+      'seed:priority:low',
+    ]);
+  });
+
+  it('does nothing when properties already exist', async () => {
+    await saveProperty({ name: 'Custom', type: 'text' });
+    await seedDefaultProperties();
+
+    expect((await listProperties()).map((p) => p.name)).toEqual(['Custom']);
+  });
+
+  it('produces identical ids across two independent fresh databases', async () => {
+    await openScope(`test-a-${Math.random().toString(36).slice(2)}`);
+    await seedDefaultProperties();
+    const first = await listProperties();
+
+    await openScope(`test-b-${Math.random().toString(36).slice(2)}`);
+    await seedDefaultProperties();
+    const second = await listProperties();
+
+    expect(second.map((p) => p.id)).toEqual(first.map((p) => p.id));
+    expect(second.map((p) => p.options.map((o) => o.id))).toEqual(
+      first.map((p) => p.options.map((o) => o.id)),
+    );
+  });
 });
 
 describe('saveProperty', () => {

@@ -57,10 +57,7 @@ export function QrCode({
       await navigator.clipboard.writeText(svg);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Clipboard access can be refused by the browser; the button simply
-      // stays as "Copy" when that happens.
-    }
+    } catch {}
   };
 
   return (

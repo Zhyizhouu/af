@@ -22,6 +22,9 @@ export const maxIconBytes = 96 * 1024;
 
 // ---- properties ----
 
+const seedOptionId = (propertySlug: string, label: string): string =>
+  `seed:${propertySlug}:${label.toLowerCase().replace(/ /g, '-')}`;
+
 /** Seeds a starting schema once, ever — a user who deletes every property is
  *  never re-seeded, since this only checks whether any row (including
  *  tombstones) has ever existed. */
@@ -30,14 +33,14 @@ export async function seedDefaultProperties(): Promise<void> {
   const now = Date.now();
 
   const status: TaskPropertyRow = {
-    id: crypto.randomUUID(),
+    id: 'seed:status',
     name: 'Status',
     type: 'status',
     options: [
-      { id: crypto.randomUUID(), label: 'Not started', toneIndex: 4 },
-      { id: crypto.randomUUID(), label: 'In progress', toneIndex: 0 },
-      { id: crypto.randomUUID(), label: 'In Correction', toneIndex: 3 },
-      { id: crypto.randomUUID(), label: 'Done', toneIndex: 1 },
+      { id: seedOptionId('status', 'Not started'), label: 'Not started', toneIndex: 4 },
+      { id: seedOptionId('status', 'In progress'), label: 'In progress', toneIndex: 0 },
+      { id: seedOptionId('status', 'In Correction'), label: 'In Correction', toneIndex: 3 },
+      { id: seedOptionId('status', 'Done'), label: 'Done', toneIndex: 1 },
     ],
     sortOrder: 0,
     createdAt: now,
@@ -46,13 +49,13 @@ export async function seedDefaultProperties(): Promise<void> {
   };
 
   const priority: TaskPropertyRow = {
-    id: crypto.randomUUID(),
+    id: 'seed:priority',
     name: 'Priority',
     type: 'select',
     options: [
-      { id: crypto.randomUUID(), label: 'High', toneIndex: 5 },
-      { id: crypto.randomUUID(), label: 'Medium', toneIndex: 3 },
-      { id: crypto.randomUUID(), label: 'Low', toneIndex: 4 },
+      { id: seedOptionId('priority', 'High'), label: 'High', toneIndex: 5 },
+      { id: seedOptionId('priority', 'Medium'), label: 'Medium', toneIndex: 3 },
+      { id: seedOptionId('priority', 'Low'), label: 'Low', toneIndex: 4 },
     ],
     sortOrder: 1,
     createdAt: now,

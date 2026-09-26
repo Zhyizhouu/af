@@ -7,12 +7,6 @@ import { AiScreen } from './AiScreen';
 import { AiApi } from './api';
 import { ProposalsSummary } from './cards';
 
-/**
- * A vitest-free visual check for the redesigned proposal card: the pieces
- * exercised here are only reachable with a live backend in the app itself, so
- * this renders them straight from fixture data instead.
- */
-
 vi.mock('../../data/firebase', () => ({
   watchAuth: (onChange: (user: null) => void) => {
     onChange(null);

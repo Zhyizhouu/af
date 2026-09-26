@@ -107,7 +107,6 @@ function useColumnWidths() {
   return { widthFor, startResize, draggingKey, applyWidths };
 }
 
-/** Tint for a status/select pill or a multi-select chip, from the option's tone. */
 function tintStyle(color: string): CSSProperties {
   return {
     background: hexToRgba(color, 0.14),
@@ -323,7 +322,10 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
           onClose={() => setOpenPage(null)}
           onFullscreen={() => setOpenPage({ id: openPage.id, mode: 'fullscreen' })}
           onExitFullscreen={() => setOpenPage({ id: openPage.id, mode: 'peek' })}
-          onChange={() => void reload()}
+          onChange={() => {
+            void reload();
+            requestSync();
+          }}
         />
       )}
 
@@ -331,7 +333,10 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
         <PropertyPanel
           properties={properties}
           onClose={() => setShowProperties(false)}
-          onChange={() => void reload()}
+          onChange={() => {
+            void reload();
+            requestSync();
+          }}
         />
       )}
 

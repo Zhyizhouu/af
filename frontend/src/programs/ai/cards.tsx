@@ -232,12 +232,6 @@ export function QrArtifactCard({
   );
 }
 
-/**
- * The header and footer around a turn's proposal cards: how many changes are
- * on the table, and the two ways out — commit what is left, or dismiss all of
- * it. Kept apart from the individual cards above because it is shared across
- * whichever mix of them a turn happens to hold.
- */
 export function ProposalsSummary({
   count,
   confirmLabel,

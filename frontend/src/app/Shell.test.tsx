@@ -8,10 +8,6 @@ import { programs } from './programs';
 const syncNow = vi.fn();
 const signOut = vi.fn();
 
-// This Node runtime's built-in `localStorage` shadows jsdom's window one and
-// stays undefined without an on-disk backing file, which SplitView reads from
-// on mount. A tiny in-memory stand-in is enough for a test that never asserts
-// on stored ratios.
 if (typeof localStorage === 'undefined' || !localStorage) {
   const store = new Map<string, string>();
   vi.stubGlobal('localStorage', {
@@ -22,8 +18,6 @@ if (typeof localStorage === 'undefined' || !localStorage) {
   });
 }
 
-// This jsdom build has no matchMedia either. useIsMobile (used by the
-// sidebar's collapsible="icon" behavior) calls it unconditionally on mount.
 if (typeof window.matchMedia !== 'function') {
   window.matchMedia = ((query: string) => ({
     matches: false,

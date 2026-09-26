@@ -15,13 +15,8 @@ const icons: Partial<Record<Program['slug'], typeof ClipboardCheck>> = {
 
 /**
  * A launcher tile for one application, as a dashboard widget in its own
- * right — sized and shown/hidden exactly like any other widget, and
+ * right: sized and shown/hidden exactly like any other widget, and
  * independent of Profile's "Displayed Applications" (header) setting.
- *
- * `WidgetFrame.tsx` gives `app:` widgets their raised card chrome directly,
- * so this is just the centered content and the link it sits inside. At its
- * smallest dragged size the name is dropped by a container query on
- * `.dash__widget-body`, leaving just the mark.
  */
 export function AppWidget({ program }: { program: Program }) {
   const Icon = icons[program.slug];
@@ -39,7 +34,7 @@ export function AppWidget({ program }: { program: Program }) {
       ) : Icon ? (
         <Icon size={18} aria-hidden className="shrink-0 text-subtle-foreground" />
       ) : null}
-      <span className="truncate text-sm @max-[131px]:hidden">{program.name}</span>
+      <span className="truncate text-sm @max-[111px]:hidden">{program.name}</span>
     </Link>
   );
 }

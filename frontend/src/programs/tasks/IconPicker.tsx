@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react';
-import { AFButton, AFHint, AFPanel } from '../../components/AF';
+import { Upload } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { Button } from '../../components/ui/button';
 import type { TaskPageIcon } from '../../data/db';
 import { maxIconBytes } from './store';
 
@@ -12,9 +14,11 @@ const presetIcons = [
 ];
 
 export function IconPicker({
+  current,
   onPick,
   onClose,
 }: {
+  current?: TaskPageIcon;
   onPick: (icon: TaskPageIcon) => void;
   onClose: () => void;
 }) {
@@ -35,22 +39,32 @@ export function IconPicker({
   };
 
   return (
-    <div className="cal__overlay" role="dialog" aria-label="Choose an icon">
-      <AFPanel label="Icon" className="cal__editor">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="surface-3d rounded-2xl border-0 bg-transparent p-5 sm:max-w-md" aria-label="Choose an icon">
+        <DialogHeader>
+          <DialogTitle>Icon</DialogTitle>
+        </DialogHeader>
+
         <div className="tsk__icon-grid">
-          {presetIcons.map((glyph) => (
-            <button
-              key={glyph}
-              type="button"
-              className="tsk__icon-option"
-              onClick={() => onPick({ kind: 'preset', value: glyph })}
-            >
-              {glyph}
-            </button>
-          ))}
+          {presetIcons.map((glyph) => {
+            const active = current?.kind === 'preset' && current.value === glyph;
+            return (
+              <button
+                key={glyph}
+                type="button"
+                className={`tsk__icon-option${active ? ' glow-active' : ' raised'}`}
+                onClick={() => onPick({ kind: 'preset', value: glyph })}
+              >
+                {glyph}
+              </button>
+            );
+          })}
         </div>
 
-        <AFButton label="Upload icon" variant="quiet" onClick={() => fileInput.current?.click()} />
+        <Button variant="raised" onClick={() => fileInput.current?.click()}>
+          <Upload size={15} aria-hidden />
+          Upload icon
+        </Button>
         <input
           ref={fileInput}
           type="file"
@@ -62,12 +76,14 @@ export function IconPicker({
             event.target.value = '';
           }}
         />
-        {error && <AFHint>{error}</AFHint>}
+        {error && <p className="text-xs text-destructive">{error}</p>}
 
-        <div className="cal__editor-actions">
-          <AFButton label="Cancel" variant="quiet" onClick={onClose} />
+        <div className="tsk__panel-actions">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
         </div>
-      </AFPanel>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

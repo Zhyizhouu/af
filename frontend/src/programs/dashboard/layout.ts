@@ -212,9 +212,6 @@ function chunkEvenly<T>(items: readonly T[], maxPerRow: number): T[][] {
  *   scanned rather than read. Grouping them keeps them out of the way of
  *   the panels instead of one stray launcher leaving a hole beside a tall
  *   panel.
- * - **Then the stat cards, in one row.** Glanceable numbers, not content —
- *   they sit between the dock and the panels, split evenly the same way the
- *   launcher dock is.
  * - **Panels in priority order, two to a row.** What is happening now, then
  *   what is owed, then the ambient stuff — the order you would actually ask
  *   the questions in.

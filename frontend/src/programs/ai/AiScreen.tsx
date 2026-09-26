@@ -39,7 +39,7 @@ import type { AiConversationRow } from '../../data/db';
 import './ai.css';
 
 /**
- * reAFresh · AI — talk about what you need scheduled, and confirm what it
+ * reAFresh · AI: talk about what you need scheduled, and confirm what it
  * proposes.
  *
  * The shape that matters is the pause in the middle. The assistant never
@@ -73,6 +73,13 @@ export function AiScreen({
   const client = useRef(api ?? new AiApi({ token: idToken }));
   const { requestSync, revision } = useSession();
   const transcript = useRef<HTMLDivElement>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [conversationId, setConversationId] = useState(newConversationId);
@@ -93,7 +100,7 @@ export function AiScreen({
   const composer = useRef<HTMLTextAreaElement>(null);
 
   // Collapsed by default in a split pane, and on anything narrow: a sidebar
-  // plus a readable transcript needs room that half a window — or a phone —
+  // plus a readable transcript needs room that half a window (or a phone)
   // does not have. Driven from state rather than hidden in CSS, because a
   // sidebar hidden by a media query while the state says it is open leaves no
   // toggle on screen and no way back to the history at all.
@@ -102,16 +109,19 @@ export function AiScreen({
   );
 
   const refreshSaved = useCallback(async () => {
-    setSaved(await listConversations());
+    const rows = await listConversations();
+    if (mounted.current) setSaved(rows);
   }, []);
 
   useEffect(() => {
     void refreshSaved();
     client.current
       .limits()
-      .then(setLimits)
+      .then((result) => {
+        if (mounted.current) setLimits(result);
+      })
       .catch((error: unknown) => {
-        if (error instanceof AiError) setLimitsError(error.message);
+        if (mounted.current && error instanceof AiError) setLimitsError(error.message);
       });
   }, [refreshSaved]);
 
@@ -151,7 +161,7 @@ export function AiScreen({
 
       const window: AiEntry[] = [];
       for (const entry of agenda) {
-        // Task Tracker due dates are out of the assistant's window for now —
+        // Task Tracker due dates are out of the assistant's window for now:
         // it knows the calendar and proctor sessions, not Task Tracker.
         if (entry.kind === 'task') continue;
         if (entry.end < from || entry.start > until) continue;
@@ -187,8 +197,9 @@ export function AiScreen({
       readHabitsForAssistant(),
     ]);
     const now = new Date();
+    if (!mounted.current) return;
 
-    // Taken before the new message is added, and skipping failures — an error
+    // Taken before the new message is added, and skipping failures: an error
     // bubble is this app talking to itself, not something the assistant said.
     const history = messages.filter((m) => !m.failed).map(toTurn);
 
@@ -230,9 +241,11 @@ export function AiScreen({
       ];
     }
 
-    setMessages(next);
-    setBusy(false);
-    scrollToEnd();
+    if (mounted.current) {
+      setMessages(next);
+      setBusy(false);
+      scrollToEnd();
+    }
     await persist(next, conversationId);
   }, [draft, busy, messages, pending, conversationId, calendarWindow, persist, scrollToEnd]);
 
@@ -246,7 +259,7 @@ export function AiScreen({
   const attach = useCallback((file: File) => {
     if (file.size > maxAttachmentBytes) {
       setAttachError(
-        `${file.name} is too large — keep attachments under ${Math.round(
+        `${file.name} is too large, keep attachments under ${Math.round(
           maxAttachmentBytes / 1024,
         )} KB so they sync with the conversation.`,
       );
@@ -277,8 +290,10 @@ export function AiScreen({
         next = [...messages, errorMessage(`Some changes could not be applied: ${error}`)];
       }
 
-      setMessages(next);
-      setBusy(false);
+      if (mounted.current) {
+        setMessages(next);
+        setBusy(false);
+      }
       // Saved here too: whether a turn was carried out is the one piece of
       // state that must survive, or reopening offers to do it all again.
       await persist(next, conversationId);
@@ -297,7 +312,6 @@ export function AiScreen({
     [],
   );
 
-  /** Drops every proposal a turn still has kept — the "Dismiss" footer button. */
   const dismissAll = useCallback((index: number) => {
     setMessages((current) =>
       current.map((m, i) =>
@@ -327,7 +341,7 @@ export function AiScreen({
       if (prompts.length === 0) return false;
 
       const next = (historyIndex ?? prompts.length) + step;
-      if (next < 0) return true; // already at the oldest — stay rather than wrap
+      if (next < 0) return true; // already at the oldest: stay rather than wrap
 
       if (historyIndex === null) stashedDraft.current = draft;
 
@@ -372,7 +386,7 @@ export function AiScreen({
   const remove = useCallback(
     async (id: string) => {
       await deleteConversation(id);
-      if (id === conversationId) startNew();
+      if (mounted.current && id === conversationId) startNew();
       await refreshSaved();
     },
     [conversationId, startNew, refreshSaved],
@@ -482,7 +496,7 @@ export function AiScreen({
               placeholder="Write a message…"
               onChange={(event) => {
                 setDraft(event.target.value);
-                // Typing is how you leave history — from here the draft is yours.
+                // Typing is how you leave history: from here the draft is yours.
                 setHistoryIndex(null);
               }}
               onKeyDown={(event) => {
@@ -503,7 +517,7 @@ export function AiScreen({
                 }
 
                 // Enter sends, Shift+Enter breaks the line. preventDefault is what
-                // stops the newline landing as well as the message going — without
+                // stops the newline landing as well as the message going, without
                 // it you send and are left holding a blank second line.
                 if (event.key !== 'Enter' || event.shiftKey) return;
                 event.preventDefault();
@@ -785,12 +799,6 @@ function CommitControl({
   );
 }
 
-/**
- * The gap between sending and hearing back.
- *
- * The mark itself carries the wait — its orbit speeds up while `thinking` is
- * true — so this is the mark plus a word, not a spinner of its own.
- */
 function Thinking() {
   return (
     <div className="mb-6 flex items-center gap-3.5">

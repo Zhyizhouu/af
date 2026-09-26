@@ -1,5 +1,3 @@
-/* Shared with programs/audio/AudioScreen.tsx, which has no stylesheet of its
-   own for this state — keep this rule even if programs/ai stops using it. */
 .ai__warn {
   font-family: var(--af-mono);
   font-size: 12.5px;
