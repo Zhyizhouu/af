@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
+import { jakartaDayKey } from '../programs/habits/time';
 
 /**
  * Local storage, scoped to whoever is signed in.
@@ -219,7 +220,11 @@ export interface SettingsRow {
 export interface TodoItemRow {
   id: string;
   text: string;
+  /** The Jakarta day (`YYYY-MM-DD`) this item belongs to. */
+  day: string;
   checked: boolean;
+  /** When it was checked off, or null while open. */
+  doneAt: number | null;
   sortOrder: number;
   createdAt: number;
   updatedAt: number;
@@ -260,6 +265,21 @@ export class AfDatabase extends Dexie {
       settings: 'id, updatedAt',
       todoItems: 'id, sortOrder, updatedAt, deleted',
     });
+    this.version(5)
+      .stores({ todoItems: 'id, day, sortOrder, updatedAt, deleted' })
+      .upgrade((tx) => {
+        const today = jakartaDayKey();
+        const now = Date.now();
+        return tx
+          .table('todoItems')
+          .toCollection()
+          .modify((row: Partial<TodoItemRow> & Pick<TodoItemRow, 'checked' | 'updatedAt'>) => {
+            if (row.day) return;
+            row.day = today;
+            row.doneAt = row.checked ? row.updatedAt : null;
+            row.updatedAt = now;
+          });
+      });
   }
 }
 

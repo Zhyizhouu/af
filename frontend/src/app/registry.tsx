@@ -7,6 +7,7 @@ import { ChecklistsScreen } from '../programs/checklists/ChecklistsScreen';
 import { HabitsScreen } from '../programs/habits/HabitsScreen';
 import { QrScreen } from '../programs/qr/QrScreen';
 import { TasksScreen } from '../programs/tasks/TasksScreen';
+import { TodoScreen } from '../programs/todo/TodoScreen';
 import type { Program } from './programs';
 
 export interface PaneOptions {
@@ -24,6 +25,8 @@ export function renderProgram(program: Program, options: PaneOptions) {
   switch (program.slug) {
     case 'dashboard':
       return <DashboardScreen />;
+    case 'todo':
+      return <TodoScreen paneWidth={options.paneWidth} />;
     case 'ai':
       return <AiScreen paneWidth={options.paneWidth} />;
     case 'qr':

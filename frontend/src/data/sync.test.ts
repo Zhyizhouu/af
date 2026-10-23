@@ -354,6 +354,49 @@ describe('sync', () => {
     const local = await db().todoItems.get('todo-1');
     expect(local!.text).toBe('Buy milk');
     expect(local!.checked).toBe(false);
+    expect(local!.doneAt).toBeNull();
+  });
+
+  it('keeps the day and doneAt of a remote to-do item', async () => {
+    remote.set('users/uid-1/todoItems/todo-2', {
+      text: 'Pay rent',
+      day: '2026-03-10',
+      checked: true,
+      doneAt: Timestamp.fromMillis(4000),
+      sortOrder: 0,
+      updatedAt: Timestamp.fromMillis(5000),
+    });
+
+    await syncAll('uid-1');
+
+    const local = await db().todoItems.get('todo-2');
+    expect(local!.day).toBe('2026-03-10');
+    expect(local!.doneAt).toBe(4000);
+  });
+
+  it('pushes the local day of a to-do item the remote copy lacks', async () => {
+    remote.set('users/uid-1/todoItems/todo-3', {
+      text: 'Legacy',
+      checked: false,
+      sortOrder: 0,
+      updatedAt: Timestamp.fromMillis(1000),
+    });
+    await db().todoItems.put({
+      id: 'todo-3',
+      text: 'Legacy',
+      day: '2026-03-10',
+      checked: false,
+      doneAt: null,
+      sortOrder: 0,
+      createdAt: 500,
+      updatedAt: 2000,
+      deleted: false,
+    });
+
+    await syncAll('uid-1');
+
+    expect((await db().todoItems.get('todo-3'))!.day).toBe('2026-03-10');
+    expect(written.get('users/uid-1/todoItems/todo-3')!.day).toBe('2026-03-10');
   });
 
   // Checklist items and habits are still Flutter-only. A pass that pushed an

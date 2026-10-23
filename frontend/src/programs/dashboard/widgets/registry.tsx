@@ -31,7 +31,7 @@ const functionalWidgets: readonly DashboardWidget[] = [
   { id: 'today', label: 'Today', Component: TodayWidget, app: false, rank: 12 },
   { id: 'upNext', label: 'Up next', Component: UpNextWidget, app: false, rank: 13 },
   { id: 'tasks', label: 'Tasks', Component: TasksWidget, app: false, rank: 14 },
-  { id: 'todo', label: 'To-do', Component: TodoWidget, app: false, rank: 15 },
+  { id: 'todo', label: 'To-Do', Component: TodoWidget, app: false, rank: 15 },
   { id: 'habits', label: 'Habits today', Component: HabitsWidget, app: false, rank: 16 },
 ];
 

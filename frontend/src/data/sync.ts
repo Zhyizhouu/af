@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore';
 import { firestore } from './firebase';
 import { readDashboardLayout } from '../programs/dashboard/layout';
+import { jakartaDayKey } from '../programs/habits/time';
 import {
   db,
   type AiConversationRow,
@@ -318,7 +319,9 @@ const settingsFromDocument = (id: string, data: DocumentData): SettingsRow => ({
 
 const todoItemToDocument = (row: TodoItemRow): DocumentData => ({
   text: row.text,
+  day: row.day,
   checked: row.checked,
+  doneAt: row.doneAt === null ? null : stamp(row.doneAt),
   sortOrder: row.sortOrder,
   createdAt: stamp(row.createdAt),
   updatedAt: stamp(row.updatedAt),
@@ -328,7 +331,9 @@ const todoItemToDocument = (row: TodoItemRow): DocumentData => ({
 const todoItemFromDocument = (id: string, data: DocumentData): TodoItemRow => ({
   id,
   text: String(data.text ?? ''),
+  day: typeof data.day === 'string' ? data.day : jakartaDayKey(),
   checked: Boolean(data.checked),
+  doneAt: data.doneAt ? millis(data.doneAt) : null,
   sortOrder: Number(data.sortOrder ?? 0),
   createdAt: millis(data.createdAt),
   updatedAt: millis(data.updatedAt),
