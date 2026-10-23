@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { cn } from 'cn';
 import { Button } from '../../components/ui/button';
 import { useSession } from '../../app/session';
 import { readAgenda, type AgendaEntry } from '../../data/agenda';
-import { hexToRgba, toneColor } from '../../data/tones';
+import { clock } from '../../data/format';
+import { hexToRgba } from '../../data/tones';
 import {
   builtInCategories,
-  categoryBySlug,
+  entryColour,
   listCategories,
   type EventCategory,
 } from './categories';
@@ -142,10 +143,6 @@ export function CalendarScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 's
 
         <span className="flex-1" />
 
-        <Button variant="raised" className="h-9 min-h-11 rounded-[8px] text-[13px] md:min-h-9">
-          <RefreshCw size={16} aria-hidden />
-          Sync Outlook
-        </Button>
         <Button
           variant="gradient"
           className="h-9 min-h-11 rounded-[8px] text-[13px] md:min-h-9"
@@ -220,7 +217,6 @@ export function CalendarScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 's
 
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
 const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
 
 function rangeLabel(view: CalendarView, anchor: Date): string {
   if (view === 'year') return String(anchor.getFullYear());
@@ -231,11 +227,6 @@ function rangeLabel(view: CalendarView, anchor: Date): string {
 
 const withHour = (day: Date, hour: number) =>
   new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour);
-
-const colorFor = (entry: AgendaEntry, categories: EventCategory[]): string =>
-  entry.kind === 'event'
-    ? toneColor(categoryBySlug(categories, entry.category).toneIndex)
-    : '#fb923c';
 
 const tintedText = (color: string): string => `color-mix(in srgb, ${color} 70%, white)`;
 
@@ -358,7 +349,7 @@ function MonthView({
                   <span
                     key={entry.id}
                     className="size-1.5 rounded-full"
-                    style={{ background: colorFor(entry, categories) }}
+                    style={{ background: entryColour(entry, categories) }}
                   />
                 ))}
                 {/* Four dots and silence read as "four things"; a busy day
@@ -411,7 +402,7 @@ function DayAgenda({
               >
                 <span
                   className="w-[3px] self-stretch rounded-full"
-                  style={{ background: colorFor(entry, categories) }}
+                  style={{ background: entryColour(entry, categories) }}
                 />
                 <span className="w-[7ch] shrink-0 text-[11.5px] text-muted-foreground">
                   {entry.allDay ? 'all day' : clock.format(entry.start)}
@@ -556,7 +547,7 @@ function TimeGrid({
                   startMinutes + 30,
                   entry.end.getHours() * 60 + entry.end.getMinutes(),
                 );
-                const color = colorFor(entry, categories);
+                const color = entryColour(entry, categories);
                 const isPast = entry.end.getTime() < now.getTime();
                 return (
                   <div

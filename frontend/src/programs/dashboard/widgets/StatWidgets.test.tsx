@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { AgendaProvider } from '../AgendaContext';
 import { CompletionStatWidget, EventsStatWidget, HabitsStatWidget, TasksStatWidget } from './StatWidgets';
 
 let habits: { id: string; name: string }[] = [];
@@ -59,7 +60,11 @@ describe('TasksStatWidget', () => {
       { kind: 'task', id: 't1', title: 'A', start: new Date('2026-09-26T10:00:00Z'), end: new Date('2026-09-26T10:00:00Z'), finished: false },
       { kind: 'task', id: 't2', title: 'B', start: new Date('2026-09-28T10:00:00Z'), end: new Date('2026-09-28T10:00:00Z'), finished: false },
     ];
-    render(<TasksStatWidget />);
+    render(
+      <AgendaProvider>
+        <TasksStatWidget />
+      </AgendaProvider>,
+    );
     expect(await screen.findByText('Tasks due this week')).toBeInTheDocument();
   });
 });
@@ -67,7 +72,11 @@ describe('TasksStatWidget', () => {
 describe('EventsStatWidget', () => {
   it('shows nothing else today when no upcoming event remains', async () => {
     agenda = [];
-    render(<EventsStatWidget />);
+    render(
+      <AgendaProvider>
+        <EventsStatWidget />
+      </AgendaProvider>,
+    );
     expect(await screen.findByText('Nothing else today')).toBeInTheDocument();
   });
 });

@@ -1,19 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../../../app/session';
-import { readAgenda, type AgendaEntry } from '../../../data/agenda';
-import { listCategories, type EventCategory } from '../../calendar/categories';
-import { colourFor } from './shared';
-
-const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
-const dayStamp = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+import { clock } from '../../../data/format';
+import { entryColour, listCategories, type EventCategory } from '../../calendar/categories';
+import { useAgenda } from '../AgendaContext';
+import { dayStamp } from './shared';
 
 export function UpNextWidget() {
   const { revision } = useSession();
-  const [entries, setEntries] = useState<AgendaEntry[]>([]);
+  const entries = useAgenda();
   const [categories, setCategories] = useState<EventCategory[]>([]);
 
   const reload = useCallback(async () => {
-    setEntries(await readAgenda());
     setCategories(await listCategories());
   }, []);
 
@@ -48,8 +45,8 @@ export function UpNextWidget() {
               <span
                 className="h-7 w-1 shrink-0 rounded-sm"
                 style={{
-                  background: colourFor(entry, categories),
-                  boxShadow: index === 0 ? `0 0 10px ${colourFor(entry, categories)}` : undefined,
+                  background: entryColour(entry, categories),
+                  boxShadow: index === 0 ? `0 0 10px ${entryColour(entry, categories)}` : undefined,
                 }}
               />
               <span className="min-w-0 flex-1 truncate text-sm">{entry.title}</span>

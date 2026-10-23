@@ -77,13 +77,22 @@ export const entryFromTaskPage = (page: TaskPageRow, property: TaskPropertyRow, 
 /** True when the page's Status-type property (if it has one) resolves to an
  *  option labelled "Done" — the same word Task Tracker's own seeded default
  *  uses (`programs/tasks/store.ts`'s `seedDefaultProperties`). */
-const isPageDone = (page: TaskPageRow, properties: TaskPropertyRow[]): boolean => {
+export const isPageDone = (page: TaskPageRow, properties: TaskPropertyRow[]): boolean => {
   const status = properties.find((property) => property.type === 'status');
   if (!status) return false;
   const option = status.options.find((candidate) => candidate.id === page.values[status.id]);
   return option?.label.trim().toLowerCase() === 'done';
 };
 
+/**
+ * Every live agenda entry, oldest first.
+ *
+ * Reads four whole tables. Task pages carry their dates in a free-form
+ * `values` map, so they have no date index and are always filtered in memory;
+ * and a Dexie read returns whole rows, page bodies included, which only a
+ * schema split could avoid. Callers that need just the near future (the
+ * reminder loop) use `readUpcomingEvents` instead.
+ */
 export async function readAgenda(): Promise<AgendaEntry[]> {
   const [events, sessions, properties, pages] = await Promise.all([
     db().calendarEvents.filter((row) => !row.deleted).toArray(),
@@ -103,6 +112,22 @@ export async function readAgenda(): Promise<AgendaEntry[]> {
   }
 
   return [...events.map(entryFromEvent), ...sessions.map(entryFromSession), ...taskEntries].sort(
+    (a, b) => a.start.getTime() - b.start.getTime(),
+  );
+}
+
+/**
+ * Calendar events and proctor sessions starting in `(from, to]`, via the
+ * `start` and `dateTime` indexes, so a lookup touches only that window rather
+ * than every row. Task pages are left out: they have no date index and never
+ * carry a reminder.
+ */
+export async function readUpcomingEvents(from: number, to: number): Promise<AgendaEntry[]> {
+  const [events, sessions] = await Promise.all([
+    db().calendarEvents.where('start').between(from, to, false, true).filter((row) => !row.deleted).toArray(),
+    db().proctorSessions.where('dateTime').between(from, to, false, true).filter((row) => !row.deleted).toArray(),
+  ]);
+  return [...events.map(entryFromEvent), ...sessions.map(entryFromSession)].sort(
     (a, b) => a.start.getTime() - b.start.getTime(),
   );
 }

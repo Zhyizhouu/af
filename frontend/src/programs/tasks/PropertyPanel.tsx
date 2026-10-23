@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { useDragReorder } from '../../components/dragReorder';
 import type { TaskPropertyRow, TaskPropertyType } from '../../data/db';
-import { categoryTones, hexToRgba, toneColor } from '../../data/tones';
+import { categoryTones, tintStyle, toneColor } from '../../data/tones';
 import {
   addOption,
   deleteOption,
@@ -204,11 +204,7 @@ function OptionEditor({
             </span>
             <span
               className="tsk__pill"
-              style={{
-                background: hexToRgba(color, 0.14),
-                borderColor: hexToRgba(color, 0.35),
-                color: `color-mix(in srgb, ${color} 70%, white)`,
-              }}
+              style={tintStyle(color)}
             >
               {option.label}
             </span>

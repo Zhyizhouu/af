@@ -318,10 +318,6 @@ export function db(): AfDatabase {
   return current;
 }
 
-export function scope(): string {
-  return currentScope;
-}
-
 /**
  * Swaps to another account's database.
  *

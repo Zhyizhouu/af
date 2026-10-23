@@ -3,10 +3,6 @@
 The React app. **Vercel builds and serves this** — `vercel.json` points at
 `frontend/dist`.
 
-The Flutter app in `../lib` is still in the repo and still passes its own tests,
-but nothing deploys it any more. It is kept for now as the reference the port
-was made against, and because both write the same Firestore documents.
-
 ```
 npm install
 npm run dev                      # http://localhost:5173
@@ -40,13 +36,16 @@ something.
 
 ## Ported
 
-All six programs, the shell and the data layer.
+All nine programs, the shell and the data layer.
 
 | Program | Notes |
 | --- | --- |
+| Dashboard | Rows and columns of widgets the account arranges itself: drag to move, drag dividers to resize, pin heights, auto-adjust |
+| To-Do | Plain per-day checklists, a checked item stays on its day as that day's archive |
 | Checklists | Sessions seeded from the 120-item template, sections, archive sweep, cascade delete |
 | Calendar | Year / Month / Week / 3-Day / Day, column-packed overlaps, now-line, event editor |
 | Habits | One record per Jakarta day, completion chart at five ranges, midnight rollover |
+| Task Tracker | Table of pages with typed, editable properties, filters, and a detail view per page |
 | Audio Converter | Server-served format menu, upload progress, phase bar, cancel, download |
 | AI | Chat, calendar sight, deletions, synced history, QR artifacts, attachments |
 | QR Generator | SVG, correction levels, colours with a contrast verdict, logo knockout |
@@ -94,5 +93,3 @@ that at 1 MiB.
 the Audio Converter will say they are not configured. That is deliberate — the
 Flutter build defaulted to `http://localhost:8080`, which on a deployed site
 resolved to each visitor's own machine and failed silently as mixed content.
-
-`vercel-build.sh` is the old Flutter build step and is no longer referenced.

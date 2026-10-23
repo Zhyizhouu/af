@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { hexToRgba, toneColor } from '../data/tones';
 import './af.css';
 
@@ -45,82 +45,10 @@ export function AFPanel({
   );
 }
 
-export function AFPanelLabel({ label, count }: { label: string; count?: string }) {
-  return (
-    <div className="af-panel__head" style={{ marginBottom: 0 }}>
-      <span className="af-panel-label">{label.toUpperCase()}</span>
-      {count && <span className="af-panel-count">{count}</span>}
-    </div>
-  );
-}
-
-type Variant = 'solid' | 'ghost' | 'quiet' | 'danger';
-
-export function AFButton({
-  label,
-  variant = 'solid',
-  expand = false,
-  icon,
-  ...rest
-}: {
-  label: string;
-  variant?: Variant;
-  expand?: boolean;
-  icon?: ReactNode;
-} & ButtonHTMLAttributes<HTMLButtonElement>) {
-  const modifier = variant === 'solid' ? '' : ` af-btn--${variant}`;
-  return (
-    <button
-      type="button"
-      className={`af-btn${modifier}${expand ? ' af-btn--expand' : ''}`}
-      {...rest}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-export function AFIconButton({
-  glyph,
-  tooltip,
-  bordered = true,
-  ...rest
-}: {
-  glyph: ReactNode;
-  tooltip: string;
-  bordered?: boolean;
-} & ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      type="button"
-      className={`af-icon-btn${bordered ? '' : ' af-icon-btn--bare'}`}
-      title={tooltip}
-      aria-label={tooltip}
-      {...rest}
-    >
-      {glyph}
-    </button>
-  );
-}
-
-export function AFHint({ children, tip = false }: { children: ReactNode; tip?: boolean }) {
-  return <div className={`af-hint${tip ? ' af-hint--tip' : ''}`}>{children}</div>;
-}
-
-export function AFChip({ label, color }: { label: string; color?: string }) {
-  return (
-    <span className="af-chip" style={{ color: color ?? 'var(--af-accent)' }}>
-      {label}
-    </span>
-  );
-}
-
 /**
- * A filled, coloured pill — for a property option's value, not for anything
- * `AFChip` already covers. `AFChip` colours its text only; option values
+ * A filled, coloured pill for a property option's value. Option values
  * (Select/Multi-select/Status/Priority) need to read as a tinted background
- * at a glance, which is the one thing it can't do.
+ * at a glance.
  */
 export function AFTag({ label, toneIndex }: { label: string; toneIndex: number }) {
   const color = toneColor(toneIndex);
@@ -138,27 +66,4 @@ export function AFEmptyState({ glyph = '⊞', message }: { glyph?: string; messa
       <div className="af-empty__message">{message}</div>
     </div>
   );
-}
-
-export function AFMasthead({
-  title,
-  tagline,
-  actions,
-}: {
-  title: string;
-  tagline?: string;
-  actions?: ReactNode;
-}) {
-  return (
-    <div className="af-masthead">
-      <span className="af-masthead__tick" />
-      <span className="af-brand">{title.toUpperCase()}</span>
-      {tagline && <span className="af-masthead__tagline">{tagline}</span>}
-      {actions}
-    </div>
-  );
-}
-
-export function AFFooter({ children }: { children: ReactNode }) {
-  return <div className="af-footer">{children}</div>;
 }

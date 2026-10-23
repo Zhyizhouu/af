@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { FileText, Maximize2, Plus, SlidersHorizontal, Table2, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Checkbox } from '../../components/ui/checkbox';
 import { cn } from 'cn';
 import { lockCursor } from '../../components/pointerDrag';
 import { useSession } from '../../app/session';
-import { hexToRgba, toneColor } from '../../data/tones';
+import { tintStyle, toneColor } from '../../data/tones';
 import {
   actionsColumnWidth,
   defaultColumnWidth,
@@ -107,14 +107,6 @@ function useColumnWidths() {
   );
 
   return { widthFor, startResize, draggingKey, applyWidths };
-}
-
-function tintStyle(color: string): CSSProperties {
-  return {
-    background: hexToRgba(color, 0.14),
-    borderColor: hexToRgba(color, 0.35),
-    color: `color-mix(in srgb, ${color} 70%, white)`,
-  };
 }
 
 /**

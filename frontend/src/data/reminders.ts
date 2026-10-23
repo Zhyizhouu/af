@@ -9,7 +9,7 @@
  * app load rather than being tied to sign-in.
  */
 
-import { readAgenda } from './agenda';
+import { readUpcomingEvents } from './agenda';
 import { notify } from './notifications';
 
 /** The only lead times offered — a fixed menu rather than free entry, so a
@@ -28,6 +28,8 @@ export const reminderOptions: readonly { minutes: number; label: string }[] = [
 
 const checkIntervalMs = 20_000;
 
+const horizonMs = Math.max(...reminderOptions.map((option) => option.minutes)) * 60_000;
+
 // Persists across checks so an entry notifies exactly once, but only for keys
 // still matching the agenda below — a key drops out once its entry is
 // deleted, its reminder is turned off, or it has started, which is what keeps
@@ -36,7 +38,8 @@ const fired = new Set<string>();
 
 /**
  * Notifies for every agenda entry whose reminder has come due since the last
- * check.
+ * check. An entry starting beyond the longest lead time is not read yet, and
+ * is therefore also not in `seen` yet.
  *
  * `now` and `seen` are parameters, not read from module state directly, so a
  * test can drive this without waiting on a real interval or leaking state
@@ -46,7 +49,9 @@ export async function checkDueReminders(
   now: number = Date.now(),
   seen: Set<string> = fired,
 ): Promise<void> {
-  const entries = await readAgenda();
+  // Only entries starting within the longest lead time can be due, so the
+  // lookup is bounded to that window instead of scanning every table.
+  const entries = await readUpcomingEvents(now, now + horizonMs);
 
   const live = new Set<string>();
   for (const entry of entries) {

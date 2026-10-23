@@ -15,7 +15,7 @@ import {
 import { Checkbox } from '../../components/ui/checkbox';
 import { Input } from '../../components/ui/input';
 import type { TaskPageIcon, TaskPageRow, TaskPropertyRow, TaskPropertyType } from '../../data/db';
-import { hexToRgba, toneColor } from '../../data/tones';
+import { tintStyle, toneColor } from '../../data/tones';
 import { dateValueFromKey, dateValueKey } from './dateValue';
 import { IconPicker } from './IconPicker';
 import { PageBody } from './PageBody';
@@ -344,11 +344,7 @@ function PropertyValueInput({
                 key={option.id}
                 type="button"
                 className={`tsk__option tsk__pill${active ? ' is-active glow-active' : ''}`}
-                style={{
-                  background: hexToRgba(color, 0.14),
-                  borderColor: hexToRgba(color, 0.35),
-                  color: `color-mix(in srgb, ${color} 70%, white)`,
-                }}
+                style={tintStyle(color)}
                 onClick={() => onChange(active ? null : option.id)}
               >
                 {option.label}
@@ -371,11 +367,7 @@ function PropertyValueInput({
                 key={option.id}
                 type="button"
                 className={`tsk__option tsk__pill${active ? ' is-active glow-active' : ''}`}
-                style={{
-                  background: hexToRgba(color, 0.14),
-                  borderColor: hexToRgba(color, 0.35),
-                  color: `color-mix(in srgb, ${color} 70%, white)`,
-                }}
+                style={tintStyle(color)}
                 onClick={() => {
                   const next = new Set(selected);
                   if (next.has(option.id)) next.delete(option.id);

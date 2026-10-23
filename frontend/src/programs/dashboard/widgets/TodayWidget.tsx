@@ -1,22 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { cn } from 'cn';
 import { useSession } from '../../../app/session';
-import { readAgenda, type AgendaEntry } from '../../../data/agenda';
+import { clock } from '../../../data/format';
 import { dayFromKey, jakartaDayKey, jakartaOffsetMs } from '../../habits/time';
-import { listCategories, type EventCategory } from '../../calendar/categories';
-import { colourFor, dayStamp } from './shared';
-
-const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+import { entryColour, listCategories, type EventCategory } from '../../calendar/categories';
+import { useAgenda } from '../AgendaContext';
+import { dayStamp } from './shared';
 
 /** Named for what it holds, not for the day: "Up next" is also about today,
  *  and two headings reading TODAY on one dashboard is one heading too many. */
 export function TodayWidget() {
   const { revision } = useSession();
-  const [entries, setEntries] = useState<AgendaEntry[]>([]);
+  const entries = useAgenda();
   const [categories, setCategories] = useState<EventCategory[]>([]);
 
   const reload = useCallback(async () => {
-    setEntries(await readAgenda());
     setCategories(await listCategories());
   }, []);
 
@@ -56,8 +54,8 @@ export function TodayWidget() {
                 <span
                   className="h-7 w-1 shrink-0 rounded-sm"
                   style={{
-                    background: colourFor(entry, categories),
-                    boxShadow: isNext ? `0 0 10px ${colourFor(entry, categories)}` : undefined,
+                    background: entryColour(entry, categories),
+                    boxShadow: isNext ? `0 0 10px ${entryColour(entry, categories)}` : undefined,
                   }}
                 />
                 <span className="min-w-0 flex-1 truncate text-sm">{entry.title}</span>

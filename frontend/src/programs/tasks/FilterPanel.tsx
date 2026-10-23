@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { hexToRgba, toneColor } from '../../data/tones';
+import { tintStyle, toneColor } from '../../data/tones';
 import type { TaskPropertyRow } from '../../data/db';
 import type { PropertyFilter } from './store';
 
@@ -73,11 +73,7 @@ export function FilterPanel({
                           />
                           <span
                             className="tsk__pill"
-                            style={{
-                              background: hexToRgba(color, 0.14),
-                              borderColor: hexToRgba(color, 0.35),
-                              color: `color-mix(in srgb, ${color} 70%, white)`,
-                            }}
+                            style={tintStyle(color)}
                           >
                             {option.label}
                           </span>

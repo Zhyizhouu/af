@@ -1,5 +1,5 @@
-import type { ReactElement } from 'react';
-import { programs } from '../../../app/programs';
+import type { ComponentType } from 'react';
+import { programs, type Program } from '../../../app/programs';
 import { AppWidget } from './AppWidget';
 import { CompletionWidget } from './CompletionWidget';
 import { HabitsWidget } from './HabitsWidget';
@@ -13,7 +13,12 @@ import { TaskStatusWidget } from './TaskStatusWidget';
 export interface DashboardWidget {
   id: string;
   label: string;
-  Component: () => ReactElement;
+  /** Stable across renders. An app launcher is `AppWidget` with its program
+   *  passed as a prop, so one component type serves every tile and a tile is
+   *  never remounted when the catalog is rebuilt. */
+  Component: ComponentType<{ program?: Program }>;
+  /** Handed to `Component` for an app launcher; absent for functional widgets. */
+  program?: Program;
   /** App-launcher widgets default smaller — a tile, not a content panel. */
   app: boolean;
   /** Running order for the seed and for "Auto-adjust". Lower comes first. */
@@ -53,7 +58,8 @@ export function widgetCatalogFor(admin: boolean): readonly DashboardWidget[] {
     .map((program, index) => ({
       id: `app:${program.slug}`,
       label: program.name,
-      Component: () => <AppWidget program={program} />,
+      Component: AppWidget,
+      program,
       app: true,
       // Launchers keep the nav bar's own running order, so the dock and the
       // nav never disagree about where a program sits.

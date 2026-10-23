@@ -317,12 +317,12 @@
   }
 }
 
-:root[data-concept]:is([data-concept='console'], [data-concept='coupon'], [data-concept='manual'], [data-concept='sheet']) :is(.tsk__pill, .tsk__chip, .tsk__title-open, .tsk__title-open .af-body) {
+:root[data-concept][data-concept='console'] :is(.tsk__pill, .tsk__chip, .tsk__title-open, .tsk__title-open .af-body) {
   color: var(--c-ink) !important;
 }
 
-:root[data-concept]:is([data-concept='console'], [data-concept='coupon'], [data-concept='manual'], [data-concept='sheet']) [style*='52, 211, 153'],
-:root[data-concept]:is([data-concept='console'], [data-concept='coupon'], [data-concept='manual'], [data-concept='sheet']) [style*='34d399'] {
+:root[data-concept][data-concept='console'] [style*='52, 211, 153'],
+:root[data-concept][data-concept='console'] [style*='34d399'] {
   color: var(--c-ok) !important;
 }
 
@@ -337,8 +337,8 @@
   color: var(--c-ink-2);
 }
 
-:root[data-concept]:is([data-concept='console'], [data-concept='coupon'], [data-concept='sheet']) [class*='top-[-220px]'],
-:root[data-concept]:is([data-concept='console'], [data-concept='coupon'], [data-concept='sheet']) [class*='top-[-60px]'] {
+:root[data-concept][data-concept='console'] [class*='top-[-220px]'],
+:root[data-concept][data-concept='console'] [class*='top-[-60px]'] {
   display: none;
 }
 
@@ -356,10 +356,10 @@
   color: #ffffff;
 }
 
-:root[data-concept]:is([data-concept='console'], [data-concept='coupon'], [data-concept='sheet']) [aria-hidden='true'][style*='var(--glow)'] {
+:root[data-concept][data-concept='console'] [aria-hidden='true'][style*='var(--glow)'] {
   display: none;
 }
 
-:root[data-concept]:is([data-concept='console'], [data-concept='coupon'], [data-concept='sheet']) [class*='0_-20px_80px_-30px_var(--glow)'] {
+:root[data-concept][data-concept='console'] [class*='0_-20px_80px_-30px_var(--glow)'] {
   box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.25);
 }

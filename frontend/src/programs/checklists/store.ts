@@ -91,8 +91,6 @@ export async function archiveStale(now: Date = new Date()): Promise<void> {
   );
 }
 
-export const getSession = (id: string) => db().proctorSessions.get(id);
-
 export async function setSessionStatus(
   id: string,
   status: 'active' | 'archived',

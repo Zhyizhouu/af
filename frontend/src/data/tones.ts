@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 /**
  * The app-wide colour palette: a fixed set of theme-aware tones, referenced
  * everywhere by index rather than by raw colour.
@@ -64,4 +66,16 @@ export function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(value.slice(2, 4), 16);
   const b = parseInt(value.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * The tinted-chip look every tone-coloured pill shares: a soft fill, a
+ * stronger edge, and the tone lightened for text.
+ */
+export function tintStyle(color: string): CSSProperties {
+  return {
+    background: hexToRgba(color, 0.14),
+    borderColor: hexToRgba(color, 0.35),
+    color: `color-mix(in srgb, ${color} 70%, white)`,
+  };
 }

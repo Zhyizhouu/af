@@ -16,6 +16,7 @@ import {
 import { widgetCatalogFor } from './widgets/registry';
 import { useDashboardDrag } from './widgets/useDashboardDrag';
 import { useHeightPin, useRowResize } from './widgets/useDashboardResize';
+import { AgendaProvider } from './AgendaContext';
 import { WidgetFrame } from './widgets/WidgetFrame';
 import { WidgetPicker } from './widgets/WidgetPicker';
 import './dashboard.css';
@@ -36,11 +37,19 @@ import './dashboard.css';
  * header setting; the two lists don't read each other.
  */
 export function DashboardScreen() {
+  return (
+    <AgendaProvider>
+      <DashboardGrid />
+    </AgendaProvider>
+  );
+}
+
+function DashboardGrid() {
   const { admin, settings, updateSettings } = useSession();
   const [showAdd, setShowAdd] = useState(false);
   const grid = useRef<HTMLDivElement>(null);
 
-  const catalog = widgetCatalogFor(admin);
+  const catalog = useMemo(() => widgetCatalogFor(admin), [admin]);
 
   // Seeded on first read rather than in `session.tsx` — the same pattern
   // `seedDefaultProperties` uses for Task Tracker. A widget the catalog has
@@ -166,7 +175,7 @@ export function DashboardScreen() {
                   onUnpin={() => write(setHeight(layout, placement.id, null))}
                   onHide={() => write(hideWidget(layout, placement.id))}
                 >
-                  <Widget />
+                  <Widget program={entry.program} />
                 </WidgetFrame>,
               ];
             })}

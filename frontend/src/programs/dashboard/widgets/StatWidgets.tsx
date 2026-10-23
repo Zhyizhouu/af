@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { useSession } from '../../../app/session';
-import { readAgenda, type AgendaEntry } from '../../../data/agenda';
+import { clock } from '../../../data/format';
+import { useAgenda } from '../AgendaContext';
 import { listHabits, readDay, completionOver, todayKey, type Completion } from '../../habits/store';
 import { trendColor, trendOf, trendSoftColor } from './trend';
 import { countDueThisWeek, countDueToday, eventsToday, nextEvent } from './statMath';
-
-const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
 
 function StatCard({
   label,
@@ -61,16 +60,7 @@ export function HabitsStatWidget() {
 }
 
 export function TasksStatWidget() {
-  const { revision } = useSession();
-  const [entries, setEntries] = useState<AgendaEntry[]>([]);
-
-  const reload = useCallback(async () => {
-    setEntries(await readAgenda());
-  }, []);
-
-  useEffect(() => {
-    void reload();
-  }, [reload, revision]);
+  const entries = useAgenda();
 
   const now = new Date();
   const dueThisWeek = countDueThisWeek(entries, now);
@@ -87,16 +77,7 @@ export function TasksStatWidget() {
 }
 
 export function EventsStatWidget() {
-  const { revision } = useSession();
-  const [entries, setEntries] = useState<AgendaEntry[]>([]);
-
-  const reload = useCallback(async () => {
-    setEntries(await readAgenda());
-  }, []);
-
-  useEffect(() => {
-    void reload();
-  }, [reload, revision]);
+  const entries = useAgenda();
 
   const now = new Date();
   const count = eventsToday(entries, now);

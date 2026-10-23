@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { openScope } from './db';
-import { readAgenda } from './agenda';
+import { db, openScope } from './db';
+import { readAgenda, readUpcomingEvents } from './agenda';
 import { dateValueFromKey } from '../programs/tasks/dateValue';
 import { addOption, createPage, listProperties, saveProperty, savePageValue } from '../programs/tasks/store';
 
@@ -72,5 +72,50 @@ describe('readAgenda, date value generations', () => {
 
     expect(starts).toHaveLength(2);
     expect(starts[0]).toBe(starts[1]);
+  });
+});
+
+describe('readUpcomingEvents', () => {
+  const put = (id: string, start: number, deleted = false) =>
+    db().calendarEvents.put({
+      id,
+      title: id,
+      notes: '',
+      start,
+      end: start + 60_000,
+      allDay: false,
+      category: 'other',
+      reminderMinutes: 0,
+      createdAt: 0,
+      updatedAt: 0,
+      deleted,
+    });
+
+  it('returns only live entries inside the window, from both tables', async () => {
+    await put('before', 500);
+    await put('at-from', 1_000);
+    await put('inside', 2_000);
+    await put('at-to', 3_000);
+    await put('after', 4_000);
+    await put('gone', 2_500, true);
+    await db().proctorSessions.put({
+      id: 'sess',
+      type: 'UAS',
+      room: '401',
+      courseCode: '',
+      courseName: '',
+      courseClass: '',
+      dateTime: 2_200,
+      status: 'active',
+      reminderMinutes: 0,
+      createdAt: 0,
+      updatedAt: 0,
+      deleted: false,
+      reopened: false,
+    });
+
+    const ids = (await readUpcomingEvents(1_000, 3_000)).map((entry) => entry.id);
+
+    expect(ids).toEqual(['inside', 'sess', 'at-to']);
   });
 });

@@ -29,10 +29,6 @@ function mockMatchMedia(matches: boolean) {
   };
 }
 
-function resetLocation(search: string) {
-  history.pushState({}, '', `/${search}`);
-}
-
 async function load() {
   vi.resetModules();
   return import('./index');
@@ -42,12 +38,7 @@ describe('concepts', () => {
   beforeEach(() => {
     delete document.documentElement.dataset.concept;
     delete document.documentElement.dataset.phase;
-    delete document.documentElement.dataset.program;
     document.head.innerHTML = '';
-    resetLocation('');
-    try {
-      sessionStorage.clear();
-    } catch {}
   });
 
   afterEach(() => {
@@ -81,15 +72,11 @@ describe('concepts', () => {
     expect(document.documentElement.dataset.concept).toBe('dawn');
   });
 
-  it('leaves an active concept override in place', async () => {
+  it('stamps the time-of-day phase dawn styles against', async () => {
     mockMatchMedia(false);
-    resetLocation('?concept=sheet');
     const mod = await load();
-    mod.applyConcept();
-    expect(document.documentElement.dataset.concept).toBe('sheet');
-
-    mod.applyThemeConcept('light');
-    expect(document.documentElement.dataset.concept).toBe('sheet');
+    mod.applyThemeConcept('dark');
+    expect(['night', 'first-light', 'dawn', 'day']).toContain(document.documentElement.dataset.phase);
   });
 
   it('injects a concept font link only once per id', async () => {

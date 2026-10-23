@@ -5,14 +5,8 @@ import { Input } from '../../../components/ui/input';
 import { Button } from '../../../components/ui/button';
 import { useSession } from '../../../app/session';
 import { createPage, listPages, listProperties } from '../../tasks/store';
+import { isPageDone } from '../../../data/agenda';
 import type { TaskPageRow, TaskPropertyRow } from '../../../data/db';
-
-const isDone = (page: TaskPageRow, properties: TaskPropertyRow[]): boolean => {
-  const status = properties.find((property) => property.type === 'status');
-  if (!status) return false;
-  const option = status.options.find((candidate) => candidate.id === page.values[status.id]);
-  return option?.label.trim().toLowerCase() === 'done';
-};
 
 /**
  * Incomplete Task Tracker pages, plus a quick way to add one.
@@ -35,7 +29,7 @@ export function TasksWidget() {
     void reload();
   }, [reload, revision]);
 
-  const open = pages.filter((page) => !isDone(page, properties));
+  const open = pages.filter((page) => !isPageDone(page, properties));
   const status = properties.find((property) => property.type === 'status');
 
   const submit = () => {

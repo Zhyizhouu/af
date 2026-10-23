@@ -19,7 +19,8 @@ const icons: Partial<Record<Program['slug'], typeof ClipboardCheck>> = {
  * right: sized and shown/hidden exactly like any other widget, and
  * independent of Profile's "Displayed Applications" (header) setting.
  */
-export function AppWidget({ program }: { program: Program }) {
+export function AppWidget({ program }: { program?: Program }) {
+  if (!program) return null;
   const Icon = icons[program.slug];
   return (
     <Link

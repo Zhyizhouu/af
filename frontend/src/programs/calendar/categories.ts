@@ -1,4 +1,6 @@
-import { db, type CategoryRow } from '../../data/db';
+import type { AgendaEntry } from '../../data/agenda';
+import { db } from '../../data/db';
+import { toneColor } from '../../data/tones';
 
 /**
  * What an event *is*. Colour follows from the classification rather than being
@@ -49,27 +51,8 @@ export const categoryBySlug = (
   slug: string,
 ): EventCategory => categories.find((c) => c.slug === slug) ?? fallbackCategory;
 
-export async function saveCategory(
-  label: string,
-  toneIndex: number,
-  id?: string,
-): Promise<CategoryRow> {
-  const now = Date.now();
-  const existing = id ? await db().categories.get(id) : undefined;
-  const row: CategoryRow = {
-    id: id ?? crypto.randomUUID(),
-    label: label.trim() || 'Untitled',
-    toneIndex,
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-    deleted: false,
-  };
-  await db().categories.put(row);
-  return row;
-}
-
-export async function deleteCategory(id: string): Promise<void> {
-  const existing = await db().categories.get(id);
-  if (!existing || existing.deleted) return;
-  await db().categories.put({ ...existing, deleted: true, updatedAt: Date.now() });
-}
+/** The colour an agenda entry is drawn in, everywhere it appears. An event
+ *  takes its category's tone; a proctor session or a Task Tracker due date
+ *  has no category of its own and reads as one fixed orange. */
+export const entryColour = (entry: AgendaEntry, categories: EventCategory[]): string =>
+  entry.kind === 'event' ? toneColor(categoryBySlug(categories, entry.category).toneIndex) : '#fb923c';
