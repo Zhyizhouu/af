@@ -10,9 +10,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"time"
 
-	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
 	"github.com/Zhyizhouu/af/backend/internal/config"
@@ -39,32 +37,21 @@ func run(log *slog.Logger) error {
 
 	ctx := context.Background()
 
-	blobs, err := storage.NewSeaweed(ctx, storage.Options{
-		Endpoint:  cfg.S3Endpoint,
-		Region:    cfg.S3Region,
-		AccessKey: cfg.S3AccessKey,
-		SecretKey: cfg.S3SecretKey,
-		Bucket:    cfg.S3Bucket,
-	})
+	blobs, err := storage.NewSeaweed(ctx, cfg.StorageOptions())
 	if err != nil {
 		return err
 	}
 
-	// Retried rather than a single attempt: a container's network can still
-	// be settling for a moment after Docker starts it, even once Temporal's
-	// own healthcheck has passed, and Dial's eager GetSystemInfo RPC can miss
-	// that window on the very first try.
-	temporalClient, err := temporalclient.DialWithRetry(ctx, func() (client.Client, error) {
-		return client.Dial(client.Options{
-			HostPort:  cfg.TemporalHostPort,
-			Namespace: cfg.TemporalNamespace,
-			Logger:    log,
-		})
-	}, log, 6, 5*time.Second)
+	temporalClient, err := temporalclient.Connect(ctx, cfg, log)
 	if err != nil {
 		return err
 	}
 	defer temporalClient.Close()
+
+	tempDir := os.Getenv("AF_TEMP_DIR")
+	sweepCtx, stopSweeping := context.WithCancel(ctx)
+	defer stopSweeping()
+	go sweepLoop(sweepCtx, log, blobs, convert.ExecutionBudget(cfg.ResultTTL), tempDir)
 
 	w := worker.New(temporalClient, cfg.TaskQueue, worker.Options{
 		// ffmpeg saturates the cores it is given, so letting one replica take
@@ -77,7 +64,7 @@ func run(log *slog.Logger) error {
 	w.RegisterActivity(&convert.Activities{
 		Blobs:      blobs,
 		Transcoder: media.New(os.Getenv("AF_FFMPEG_PATH"), os.Getenv("AF_FFPROBE_PATH")),
-		TempDir:    os.Getenv("AF_TEMP_DIR"),
+		TempDir:    tempDir,
 	})
 
 	log.Info("worker polling",

@@ -43,6 +43,9 @@ type Server struct {
 	verifier auth.Verifier
 	planner  Planner
 	log      *slog.Logger
+
+	planLimit *rateLimiter
+	openJobs  *openJobs
 }
 
 func New(
@@ -60,6 +63,9 @@ func New(
 		verifier: verifier,
 		planner:  planner,
 		log:      log,
+
+		planLimit: newRateLimiter(cfg.PlanRatePer10Min),
+		openJobs:  newOpenJobs(),
 	}
 }
 
@@ -179,25 +185,6 @@ func (s *Server) verify(w http.ResponseWriter, r *http.Request) (auth.Caller, bo
 func (s *Server) caller(w http.ResponseWriter, r *http.Request) (string, bool) {
 	caller, ok := s.verify(w, r)
 	return caller.UID, ok
-}
-
-// adminCaller is caller plus the role check, for routes that are not merely
-// per-account but restricted outright.
-//
-// This is the gate. Hiding a program from the nav bar is presentation — the
-// route still exists and a signed-in user can still call it — so anything that
-// must not be reachable is refused here or is not protected at all.
-func (s *Server) adminCaller(w http.ResponseWriter, r *http.Request) (string, bool) {
-	caller, ok := s.verify(w, r)
-	if !ok {
-		return "", false
-	}
-	if !caller.Admin {
-		s.log.Warn("admin route refused", "uid", caller.UID, "path", r.URL.Path)
-		writeError(w, http.StatusForbidden, "This feature is not available on your account.")
-		return "", false
-	}
-	return caller.UID, true
 }
 
 // converterReady reports whether this gateway was started with the object

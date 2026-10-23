@@ -31,59 +31,6 @@ func serverWith(v auth.Verifier) *Server {
 	)
 }
 
-// The gate is the whole point of the feature, so it gets tested at the
-// middleware rather than through a handler that might guard itself by accident.
-func TestAdminCaller(t *testing.T) {
-	t.Run("an admin passes and keeps its uid", func(t *testing.T) {
-		s := serverWith(stubVerifier{caller: auth.Caller{UID: "u1", Admin: true}})
-		rec := httptest.NewRecorder()
-
-		uid, ok := s.adminCaller(rec, httptest.NewRequest("GET", "/x", nil))
-		if !ok || uid != "u1" {
-			t.Fatalf("got uid=%q ok=%v, want u1/true", uid, ok)
-		}
-	})
-
-	// The interesting case: a real, signed-in, entirely legitimate user. The
-	// token verifies; only the claim is missing. 403 not 401 — the credential
-	// was fine, the authority was not.
-	t.Run("a signed-in non-admin is refused with 403", func(t *testing.T) {
-		s := serverWith(stubVerifier{caller: auth.Caller{UID: "u2", Admin: false}})
-		rec := httptest.NewRecorder()
-
-		if _, ok := s.adminCaller(rec, httptest.NewRequest("GET", "/x", nil)); ok {
-			t.Fatal("a non-admin was allowed through")
-		}
-		if rec.Code != http.StatusForbidden {
-			t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
-		}
-	})
-
-	t.Run("a bad token is 401, not 403", func(t *testing.T) {
-		s := serverWith(stubVerifier{err: auth.ErrUnauthorized})
-		rec := httptest.NewRecorder()
-
-		if _, ok := s.adminCaller(rec, httptest.NewRequest("GET", "/x", nil)); ok {
-			t.Fatal("an unverified caller was allowed through")
-		}
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
-		}
-	})
-
-	// caller() must not have picked up the role check by sharing verify() with
-	// adminCaller() — every existing per-account route depends on it not having.
-	t.Run("caller still admits a non-admin", func(t *testing.T) {
-		s := serverWith(stubVerifier{caller: auth.Caller{UID: "u3", Admin: false}})
-		rec := httptest.NewRecorder()
-
-		uid, ok := s.caller(rec, httptest.NewRequest("GET", "/x", nil))
-		if !ok || uid != "u3" {
-			t.Fatalf("got uid=%q ok=%v, want u3/true", uid, ok)
-		}
-	})
-}
-
 func TestHandleMe(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

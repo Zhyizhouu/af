@@ -7,7 +7,19 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/client"
+
+	"github.com/Zhyizhouu/af/backend/internal/config"
 )
+
+func Connect(ctx context.Context, cfg config.Config, log *slog.Logger) (client.Client, error) {
+	return DialWithRetry(ctx, func() (client.Client, error) {
+		return client.Dial(client.Options{
+			HostPort:  cfg.TemporalHostPort,
+			Namespace: cfg.TemporalNamespace,
+			Logger:    log,
+		})
+	}, log, 6, 5*time.Second)
+}
 
 /*
 DialWithRetry calls dial repeatedly with a fixed delay between attempts,

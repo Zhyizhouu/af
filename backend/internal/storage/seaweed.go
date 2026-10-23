@@ -16,6 +16,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+
+	"github.com/Zhyizhouu/af/backend/internal/convert"
 )
 
 // ErrNotFound lets the gateway answer 404 without importing the S3 types.
@@ -138,6 +140,27 @@ func (s *Seaweed) Delete(ctx context.Context, key string) error {
 		return fmt.Errorf("delete %q: %w", key, err)
 	}
 	return nil
+}
+
+func (s *Seaweed) List(ctx context.Context, prefix string) ([]convert.Object, error) {
+	var objects []convert.Object
+	pages := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{
+		Bucket: &s.bucket,
+		Prefix: &prefix,
+	})
+	for pages.HasMorePages() {
+		page, err := pages.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list %q: %w", prefix, err)
+		}
+		for _, item := range page.Contents {
+			if item.Key == nil || item.LastModified == nil {
+				continue
+			}
+			objects = append(objects, convert.Object{Key: *item.Key, Modified: *item.LastModified})
+		}
+	}
+	return objects, nil
 }
 
 func wrap(key string, err error) error {

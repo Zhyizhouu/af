@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/testsuite"
@@ -65,6 +66,7 @@ func TestSourceIsAlwaysDeleted(t *testing.T) {
 			t.Fatal("a failed conversion should fail the workflow")
 		}
 		requireDeleted(t, blobs, sourceKey)
+		requireDeleted(t, blobs, "results/job-1/lecture.mp3")
 	})
 
 	// The request never reaches an activity, so nothing else would ever come
@@ -212,3 +214,36 @@ func (b *recordingBlobs) Get(context.Context, string) (io.ReadCloser, error) {
 }
 
 func (b *recordingBlobs) Size(context.Context, string) (int64, error) { return 0, nil }
+
+func (b *recordingBlobs) List(context.Context, string) ([]convert.Object, error) { return nil, nil }
+
+func TestSanitiseCutsOnARuneBoundary(t *testing.T) {
+	name := strings.Repeat("é", 60)
+	got := convert.SafeName(name)
+	if !utf8.ValidString(got) {
+		t.Fatalf("%q is not valid UTF-8", got)
+	}
+	if got != strings.Repeat("é", 40) {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestSanitiseCollapsesReplacements(t *testing.T) {
+	if got := convert.SafeName("a:*?b"); got != "a-b" {
+		t.Fatalf("got %q, want a-b", got)
+	}
+}
+
+func TestAcceptsInput(t *testing.T) {
+	for name, want := range map[string]bool{
+		"talk.MP3":      true,
+		"clip.mov":      true,
+		"notes.txt":     false,
+		"playlist.m3u8": false,
+		"noextension":   false,
+	} {
+		if got := convert.AcceptsInput(name); got != want {
+			t.Errorf("AcceptsInput(%q) = %v, want %v", name, got, want)
+		}
+	}
+}

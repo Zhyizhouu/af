@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
@@ -123,7 +123,27 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		sourceName = "upload"
 	}
 
+	if !convert.AcceptsInput(sourceName) {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf(
+			"That file type is not supported. Send audio or video in one of: %s.",
+			strings.TrimPrefix(strings.Join(convert.InputExtensions, ", "), ".")))
+		return
+	}
+
 	jobID := uuid.NewString()
+	if !s.openJobs.reserve(r.Context(), uid, jobID, s.cfg.MaxOpenJobs, s.jobStillOpen) {
+		writeError(w, http.StatusTooManyRequests, fmt.Sprintf(
+			"You already have %d conversions in progress. Wait for one to finish or cancel it.",
+			s.cfg.MaxOpenJobs))
+		return
+	}
+	started := false
+	defer func() {
+		if !started {
+			s.openJobs.release(uid, jobID)
+		}
+	}()
+
 	sourceKey := convert.SourceKey(jobID, convert.SafeName(sourceName))
 
 	contentType := part.Header.Get("Content-Type")
@@ -156,12 +176,9 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
-		ID:        workflowID(jobID),
-		TaskQueue: s.cfg.TaskQueue,
-		// The workflow outlives the conversion by the result's lifetime, since
-		// it owns the timer that deletes the file. Two hours of headroom on
-		// top is the encode budget.
-		WorkflowExecutionTimeout: s.cfg.ResultTTL + 2*time.Hour,
+		ID:                       workflowID(jobID),
+		TaskQueue:                s.cfg.TaskQueue,
+		WorkflowExecutionTimeout: convert.ExecutionBudget(s.cfg.ResultTTL),
 	}, convert.Audio, request)
 	if err != nil {
 		s.log.Error("workflow start failed", "job", jobID, "error", err)
@@ -173,6 +190,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	started = true
 	writeJSON(w, http.StatusAccepted, jobResponse{
 		ID:         jobID,
 		Stage:      string(convert.StageQueued),
@@ -239,8 +257,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	if status.SizeBytes > 0 {
 		header.Set("Content-Length", strconv.FormatInt(status.SizeBytes, 10))
 	}
-	header.Set("Content-Disposition",
-		fmt.Sprintf("attachment; filename=%q", status.ResultName))
+	header.Set("Content-Disposition", contentDisposition(status.ResultName))
 
 	if _, err := io.Copy(w, body); err != nil {
 		// Headers are already sent, so there is no status left to change —
@@ -264,7 +281,12 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "The job could not be cancelled.")
 		return
 	}
+	s.openJobs.release(uid, status.JobID)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func contentDisposition(name string) string {
+	return mime.FormatMediaType("attachment", map[string]string{"filename": name})
 }
 
 // ---- reading a job ----
@@ -310,6 +332,9 @@ func (s *Server) describe(
 	if status.OwnerUID != uid {
 		writeError(w, http.StatusNotFound, "No such job.")
 		return convert.Status{}, false
+	}
+	if !isOpen(status.Stage) {
+		s.openJobs.release(uid, status.JobID)
 	}
 	return status, true
 }

@@ -13,6 +13,16 @@ import (
 // separating from the transport failures that retries exist for.
 const ErrUnsupportedMedia = "UnsupportedMedia"
 
+const (
+	ConvertTimeout     = time.Hour
+	ConvertMaxAttempts = 3
+	QueueAllowance     = 30 * time.Minute
+)
+
+func ExecutionBudget(resultTTL time.Duration) time.Duration {
+	return resultTTL + ConvertMaxAttempts*ConvertTimeout + QueueAllowance
+}
+
 // Result is what a finished conversion leaves in the object store.
 type Result struct {
 	Key       string  `json:"key"`
@@ -65,14 +75,14 @@ func Audio(ctx workflow.Context, req Request) (Status, error) {
 	options := workflow.ActivityOptions{
 		// Sized for the file, not for the request: a long recording at 320k is
 		// minutes of encoding, and the browser is polling rather than waiting.
-		StartToCloseTimeout: time.Hour,
+		StartToCloseTimeout: ConvertTimeout,
 		// Well under the encode's heartbeat cadence, so a worker that dies
 		// mid-file is noticed in a couple of minutes rather than an hour.
 		HeartbeatTimeout: 2 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:        2 * time.Second,
 			MaximumInterval:        30 * time.Second,
-			MaximumAttempts:        3,
+			MaximumAttempts:        ConvertMaxAttempts,
 			NonRetryableErrorTypes: []string{ErrUnsupportedMedia},
 		},
 	}
@@ -99,6 +109,7 @@ func Audio(ctx workflow.Context, req Request) (Status, error) {
 	discard(ctx, req.SourceKey)
 
 	if convertErr != nil {
+		discard(ctx, req.resultKey())
 		status.Stage = StageFailed
 		status.Error = describe(convertErr)
 		return status, convertErr
@@ -165,11 +176,11 @@ func discard(ctx workflow.Context, key string) {
 // waiting on a file.
 func describe(err error) string {
 	var applicationErr *temporal.ApplicationError
-	if errors.As(err, &applicationErr) {
+	if errors.As(err, &applicationErr) && applicationErr.Type() == ErrUnsupportedMedia {
 		return applicationErr.Message()
 	}
 	if errors.Is(err, workflow.ErrCanceled) {
 		return "Cancelled."
 	}
-	return "Conversion failed."
+	return "The conversion failed."
 }

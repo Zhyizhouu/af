@@ -261,7 +261,6 @@ func (t Turn) Render() string {
 	return b.String()
 }
 
-// RenderExisting is the calendar as the model is shown it.
 // RenderHabits is the habit list as the model is shown it.
 //
 // Saying "none" matters as much as it does for the calendar: silence reads as
@@ -357,13 +356,24 @@ type Request struct {
 // KnownHabitIDs is the set a tick may name. Same guard as KnownIDs: a habit id
 // the request never mentioned is a guess, and a guess marks the wrong habit.
 func (r Request) KnownHabitIDs() map[string]bool {
-	known := make(map[string]bool, len(r.Habits))
-	for _, habit := range r.Habits {
-		if id := strings.TrimSpace(habit.ID); id != "" {
-			known[id] = true
+	return idSet(r.Habits, func(h Habit) string { return h.ID })
+}
+
+func idSet[T any](items []T, id func(T) string) map[string]bool {
+	known := make(map[string]bool, len(items))
+	for _, item := range items {
+		if v := strings.TrimSpace(id(item)); v != "" {
+			known[v] = true
 		}
 	}
 	return known
+}
+
+func capped[T any](items []T, limit int) []T {
+	if len(items) <= limit {
+		return items
+	}
+	return items[:limit]
 }
 
 const (
@@ -439,37 +449,22 @@ func (r Request) Recent() []Turn {
 // time order, and if a window has to be cut short it is the far future that
 // matters least.
 func (r Request) Calendar() []Entry {
-	if len(r.Existing) <= MaxExisting {
-		return r.Existing
-	}
-	return r.Existing[:MaxExisting]
+	return capped(r.Existing, MaxExisting)
 }
 
 // Files is the attachment list the model is shown, bounded.
 func (r Request) Files() []Attachment {
-	if len(r.Attachments) <= MaxAttachments {
-		return r.Attachments
-	}
-	return r.Attachments[:MaxAttachments]
+	return capped(r.Attachments, MaxAttachments)
 }
 
 // Tracked is the habit list the model is shown, bounded.
 func (r Request) Tracked() []Habit {
-	if len(r.Habits) <= MaxHabits {
-		return r.Habits
-	}
-	return r.Habits[:MaxHabits]
+	return capped(r.Habits, MaxHabits)
 }
 
 // KnownIDs is the set a removal is allowed to name.
 func (r Request) KnownIDs() map[string]bool {
-	known := make(map[string]bool, len(r.Existing))
-	for _, entry := range r.Existing {
-		if id := strings.TrimSpace(entry.ID); id != "" {
-			known[id] = true
-		}
-	}
-	return known
+	return idSet(r.Existing, func(e Entry) string { return e.ID })
 }
 
 // TimeLayout is the shape every time in this package takes: local wall clock,

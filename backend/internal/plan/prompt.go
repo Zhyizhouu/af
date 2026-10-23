@@ -209,9 +209,6 @@ func RenderAttachments(attachments []Attachment) string {
 	return b.String()
 }
 
-// FormatNow renders a time the way the instructions and the schema expect.
-func FormatNow(t time.Time) string { return t.Format(TimeLayout) }
-
 // ParseLocal reads one of the model's times as a wall clock with no zone.
 func ParseLocal(value string) (time.Time, error) {
 	parsed, err := time.Parse(TimeLayout, strings.TrimSpace(value))

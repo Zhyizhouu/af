@@ -140,7 +140,7 @@ func Normalise(
 
 func cleanSession(s Session, now time.Time) (Session, bool) {
 	s.Type = strings.ToUpper(strings.TrimSpace(s.Type))
-	if s.Type != "UAP" && s.Type != "UAS" {
+	if !slices.Contains(SessionTypes, s.Type) {
 		// The schema constrains this to an enum, so reaching here means the
 		// answer did not honour its own schema. Refusing beats guessing which
 		// exam somebody is invigilating.

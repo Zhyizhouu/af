@@ -35,6 +35,13 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !s.planLimit.allow(uid) {
+		w.Header().Set("Retry-After", "60")
+		writeError(w, http.StatusTooManyRequests,
+			"You are asking too quickly. Wait a few minutes and try again.")
+		return
+	}
+
 	// Roomier than the single-message limit because the body now carries the
 	// transcript. MaxHistoryTurns turns at the per-message cap is the real
 	// bound; this only stops something absurd being decoded at all.

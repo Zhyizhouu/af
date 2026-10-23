@@ -19,15 +19,12 @@ import (
 	"github.com/Zhyizhouu/af/backend/internal/convert"
 )
 
+const protocolWhitelist = "file,pipe"
+
 type FFmpeg struct {
 	FFmpegPath  string
 	FFprobePath string
 }
-
-// commandContext is where every ffmpeg invocation in this package is built,
-// so the one thing that must never vary — that arguments come from code and
-// never from a request — has a single place to be checked.
-var commandContext = exec.CommandContext
 
 func New(ffmpegPath, ffprobePath string) FFmpeg {
 	if ffmpegPath == "" {
@@ -52,6 +49,7 @@ type probeOutput struct {
 func (f FFmpeg) Probe(ctx context.Context, path string) (convert.Media, error) {
 	cmd := exec.CommandContext(ctx, f.FFprobePath,
 		"-v", "error",
+		"-protocol_whitelist", protocolWhitelist,
 		"-print_format", "json",
 		"-show_format",
 		"-show_streams",
@@ -92,14 +90,6 @@ func (f FFmpeg) Transcode(
 	opt convert.Options,
 	progress func(float64),
 ) error {
-	// Probing again is one local stat-and-parse, and it is what makes the
-	// percentage possible: ffmpeg reports how far it has got, never how far
-	// there is to go.
-	media, err := f.Probe(ctx, inPath)
-	if err != nil {
-		return err
-	}
-
 	cmd := exec.CommandContext(ctx, f.FFmpegPath, arguments(inPath, outPath, opt)...)
 
 	stdout, err := cmd.StdoutPipe()
@@ -114,7 +104,7 @@ func (f FFmpeg) Transcode(
 		return fmt.Errorf("starting ffmpeg: %w", err)
 	}
 
-	readProgress(stdout, media.Seconds, progress)
+	readProgress(stdout, opt.Seconds, progress)
 
 	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("ffmpeg: %w: %s", err, tail(stderr.String()))
@@ -134,6 +124,7 @@ func arguments(inPath, outPath string, opt convert.Options) []string {
 		// nobody is attached to.
 		"-nostdin",
 		"-y",
+		"-protocol_whitelist", protocolWhitelist,
 		"-i", inPath,
 		// Drops video and cover art alike: the output is an audio file, and a
 		// stray video stream in an audio container is what breaks fussy
@@ -168,12 +159,13 @@ func arguments(inPath, outPath string, opt convert.Options) []string {
 // name — it carries microseconds too in most builds — so it is left alone and
 // the formatted `out_time` is the fallback instead.
 func readProgress(stdout io.Reader, totalSeconds float64, report func(float64)) {
-	if report == nil || totalSeconds <= 0 {
+	if report == nil {
 		// Still has to be drained, or ffmpeg blocks on a full pipe.
 		_, _ = io.Copy(io.Discard, stdout)
 		return
 	}
 
+	var seconds float64
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
 		key, value, found := strings.Cut(strings.TrimSpace(scanner.Text()), "=")
@@ -181,25 +173,22 @@ func readProgress(stdout io.Reader, totalSeconds float64, report func(float64)) 
 			continue
 		}
 
-		var seconds float64
 		switch key {
 		case "out_time_us":
-			micros, err := strconv.ParseFloat(value, 64)
-			if err != nil {
-				continue
+			if micros, err := strconv.ParseFloat(value, 64); err == nil {
+				seconds = micros / 1_000_000
 			}
-			seconds = micros / 1_000_000
 		case "out_time":
-			parsed, ok := clockToSeconds(value)
-			if !ok {
+			if parsed, ok := clockToSeconds(value); ok {
+				seconds = parsed
+			}
+		case "progress":
+			if totalSeconds <= 0 {
+				report(-1)
 				continue
 			}
-			seconds = parsed
-		default:
-			continue
+			report(seconds / totalSeconds)
 		}
-
-		report(seconds / totalSeconds)
 	}
 }
 

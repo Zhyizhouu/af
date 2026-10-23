@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Zhyizhouu/af/backend/internal/storage"
 )
 
 type Config struct {
@@ -46,6 +48,9 @@ type Config struct {
 	ResultTTL           time.Duration
 	WorkerMaxConcurrent int
 
+	PlanRatePer10Min int
+	MaxOpenJobs      int
+
 	// Gemini, for the assistant. Empty disables it rather than letting the
 	// page offer a button that cannot work.
 	GeminiAPIKey string
@@ -69,6 +74,8 @@ func Load() (Config, error) {
 		FirebaseCredsFile:   env("AF_FIREBASE_CREDENTIALS_FILE", ""),
 		AuthDisabled:        boolean("AF_AUTH_DISABLED", false),
 		WorkerMaxConcurrent: number("AF_WORKER_MAX_CONCURRENT", 2),
+		PlanRatePer10Min:    number("AF_PLAN_RATE_PER_10MIN", 20),
+		MaxOpenJobs:         number("AF_MAX_OPEN_JOBS", 3),
 		GeminiAPIKey:        env("AF_GEMINI_API_KEY", ""),
 		GeminiModel:         env("AF_GEMINI_MODEL", ""),
 	}
@@ -81,6 +88,16 @@ func Load() (Config, error) {
 		return c, err
 	}
 	return c, nil
+}
+
+func (c Config) StorageOptions() storage.Options {
+	return storage.Options{
+		Endpoint:  c.S3Endpoint,
+		Region:    c.S3Region,
+		AccessKey: c.S3AccessKey,
+		SecretKey: c.S3SecretKey,
+		Bucket:    c.S3Bucket,
+	}
 }
 
 // httpAddr honours AF_HTTP_ADDR first, then PORT, then :8080.

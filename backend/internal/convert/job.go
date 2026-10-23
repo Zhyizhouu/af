@@ -10,6 +10,9 @@ package convert
 
 import (
 	"fmt"
+	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -36,15 +39,6 @@ const StatusQuery = "status"
 var Bitrates = []int{128, 192, 256, 320}
 
 const DefaultBitrate = 192
-
-func ValidBitrate(kbps int) bool {
-	for _, b := range Bitrates {
-		if b == kbps {
-			return true
-		}
-	}
-	return false
-}
 
 // Request is what the gateway hands the workflow. The source is already in the
 // object store by this point: the upload is a synchronous HTTP concern, and
@@ -113,8 +107,27 @@ type Media struct {
 
 // Options are the knobs the transcoder exposes.
 type Options struct {
-	Format  Format `json:"format"`
-	Bitrate int    `json:"bitrate"`
+	Format  Format  `json:"format"`
+	Bitrate int     `json:"bitrate"`
+	Seconds float64 `json:"seconds"`
+}
+
+var InputExtensions = []string{
+	".mp3", ".wav", ".m4a", ".aac", ".ogg", ".oga", ".opus", ".flac", ".webm",
+	".mp4", ".mov", ".mkv", ".wma", ".aiff", ".aif", ".amr", ".3gp", ".caf",
+}
+
+func AcceptsInput(sourceName string) bool {
+	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(sourceName)))
+	return slices.Contains(InputExtensions, ext)
+}
+
+func (r Request) resultKey() string {
+	format, err := FormatByID(r.Format)
+	if err != nil {
+		return ""
+	}
+	return ResultKey(r.JobID, OutputName(r.SourceName, format))
 }
 
 // SourceKey and ResultKey keep the object layout in one place, so the gateway

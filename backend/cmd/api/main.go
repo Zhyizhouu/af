@@ -61,29 +61,13 @@ func run(log *slog.Logger) error {
 	if cfg.ConverterDisabled {
 		log.Warn("AF_CONVERTER_DISABLED is set: the converter is unavailable on this server")
 	} else {
-		seaweed, err := storage.NewSeaweed(ctx, storage.Options{
-			Endpoint:  cfg.S3Endpoint,
-			Region:    cfg.S3Region,
-			AccessKey: cfg.S3AccessKey,
-			SecretKey: cfg.S3SecretKey,
-			Bucket:    cfg.S3Bucket,
-		})
+		seaweed, err := storage.NewSeaweed(ctx, cfg.StorageOptions())
 		if err != nil {
 			return err
 		}
 		blobs = seaweed
 
-		// Retried rather than a single attempt: a container's network can
-		// still be settling for a moment after Docker starts it, even once
-		// Temporal's own healthcheck has passed, and Dial's eager
-		// GetSystemInfo RPC can miss that window on the very first try.
-		dialled, err := temporalclient.DialWithRetry(ctx, func() (client.Client, error) {
-			return client.Dial(client.Options{
-				HostPort:  cfg.TemporalHostPort,
-				Namespace: cfg.TemporalNamespace,
-				Logger:    log,
-			})
-		}, log, 6, 5*time.Second)
+		dialled, err := temporalclient.Connect(ctx, cfg, log)
 		if err != nil {
 			return err
 		}
@@ -98,7 +82,7 @@ func run(log *slog.Logger) error {
 	if cfg.GeminiAPIKey == "" {
 		log.Warn("AF_GEMINI_API_KEY is unset: the assistant is unavailable")
 	} else {
-		client, err := gemini.New(gemini.Options{
+		assistant, err := gemini.New(gemini.Options{
 			APIKey: cfg.GeminiAPIKey,
 			Model:  cfg.GeminiModel,
 			Logger: log,
@@ -106,8 +90,8 @@ func run(log *slog.Logger) error {
 		if err != nil {
 			return err
 		}
-		planner = client
-		log.Info("assistant ready", "model", client.Model())
+		planner = assistant
+		log.Info("assistant ready", "model", assistant.Model())
 	}
 
 	server := &http.Server{

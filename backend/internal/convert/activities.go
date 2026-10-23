@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
@@ -68,7 +69,8 @@ func (a *Activities) Convert(ctx context.Context, req Request) (Result, error) {
 
 	media, err := a.Transcoder.Probe(ctx, source)
 	if err != nil {
-		return Result{}, unsupported(fmt.Errorf("that file could not be read as media: %w", err))
+		activity.GetLogger(ctx).Error("probe failed", "job", req.JobID, "error", err)
+		return Result{}, unsupported(errors.New("The file could not be read as audio."))
 	}
 	if !media.HasAudio {
 		return Result{}, unsupported(errors.New("that file has no audio track to convert"))
@@ -80,7 +82,7 @@ func (a *Activities) Convert(ctx context.Context, req Request) (Result, error) {
 		ctx,
 		source,
 		output,
-		Options{Format: format, Bitrate: req.Bitrate},
+		Options{Format: format, Bitrate: req.Bitrate, Seconds: media.Seconds},
 		func(fraction float64) {
 			if time.Since(last) < heartbeatEvery {
 				return
@@ -96,7 +98,8 @@ func (a *Activities) Convert(ctx context.Context, req Request) (Result, error) {
 		if ctx.Err() != nil {
 			return Result{}, err
 		}
-		return Result{}, unsupported(fmt.Errorf("encoding failed: %w", err))
+		activity.GetLogger(ctx).Error("encode failed", "job", req.JobID, "error", err)
+		return Result{}, unsupported(errors.New("The conversion failed."))
 	}
 
 	activity.RecordHeartbeat(ctx, Progress{Step: StepStoring, Percent: 1})
@@ -107,9 +110,21 @@ func (a *Activities) Convert(ctx context.Context, req Request) (Result, error) {
 	}
 	defer file.Close()
 
+	info, err := file.Stat()
+	if err != nil {
+		return Result{}, fmt.Errorf("measuring the encoded file: %w", err)
+	}
+
 	name := OutputName(req.SourceName, format)
 	key := ResultKey(req.JobID, name)
-	if err := a.Blobs.Put(ctx, key, file, format.MIME); err != nil {
+	upload := &reporter{
+		reader: file,
+		total:  info.Size(),
+		report: func(fraction float64) {
+			activity.RecordHeartbeat(ctx, Progress{Step: StepStoring, Percent: fraction})
+		},
+	}
+	if err := a.Blobs.Put(ctx, key, upload, format.MIME); err != nil {
 		return Result{}, fmt.Errorf("storing the result: %w", err)
 	}
 
@@ -221,23 +236,30 @@ func SafeName(sourceName string) string {
 // would show up in the filename people download.
 func sanitise(name string) string {
 	var b strings.Builder
+	var last rune
 	for _, r := range name {
 		switch {
 		case r < 0x20 || r == 0x7f:
 			// Dropped outright — a control character is not standing in for
 			// anything a person typed.
 		case strings.ContainsRune(`/\:*?"<>|`, r):
-			if !strings.HasSuffix(b.String(), "-") {
+			if last != '-' {
 				b.WriteRune('-')
+				last = '-'
 			}
 		default:
 			b.WriteRune(r)
+			last = r
 		}
 	}
 
 	trimmed := strings.Trim(b.String(), " .-")
 	if len(trimmed) > 80 {
-		trimmed = strings.TrimRight(trimmed[:80], " .-")
+		cut := 80
+		for cut > 0 && !utf8.RuneStart(trimmed[cut]) {
+			cut--
+		}
+		trimmed = strings.TrimRight(trimmed[:cut], " .-")
 	}
 	return trimmed
 }

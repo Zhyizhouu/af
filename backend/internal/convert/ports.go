@@ -3,11 +3,12 @@ package convert
 import (
 	"context"
 	"io"
+	"time"
 )
 
 // Blobs is the object store the pipeline reads from and writes to.
 //
-// Deliberately smaller than the S3 API: four verbs is everything the workflow
+// Deliberately smaller than the S3 API: five verbs is everything the pipeline
 // needs, and keeping the port narrow is what lets the SeaweedFS adapter be
 // swapped for a local directory in a test without the domain noticing.
 type Blobs interface {
@@ -15,6 +16,12 @@ type Blobs interface {
 	Get(ctx context.Context, key string) (io.ReadCloser, error)
 	Delete(ctx context.Context, key string) error
 	Size(ctx context.Context, key string) (int64, error)
+	List(ctx context.Context, prefix string) ([]Object, error)
+}
+
+type Object struct {
+	Key      string
+	Modified time.Time
 }
 
 // Transcoder inspects and converts media on the local filesystem.

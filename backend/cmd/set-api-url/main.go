@@ -22,7 +22,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -76,7 +75,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("parsing -url: %w", err)
 		}
-		if parsed.Scheme != "https" && parsed.Host != "127.0.0.1" && parsed.Hostname() != "localhost" {
+		if parsed.Scheme != "https" && parsed.Hostname() != "127.0.0.1" && parsed.Hostname() != "localhost" {
 			return fmt.Errorf("refusing %q: the app is served over https, so anything "+
 				"but an https gateway is blocked as mixed content", *raw)
 		}
@@ -96,7 +95,6 @@ func run() error {
 	defer cancel()
 
 	tls12 := &tls.Config{MinVersion: tls.VersionTLS12, MaxVersion: tls.VersionTLS12}
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = tls12.Clone()
 
 	app, err := firebase.NewApp(ctx,
 		&firebase.Config{ProjectID: *projectID},
