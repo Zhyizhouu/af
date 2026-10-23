@@ -452,7 +452,7 @@ function NewSession({
           </Button>
           <Button
             variant="gradient"
-            disabled={!code.trim() && !name.trim()}
+            disabled={(!code.trim() && !name.trim()) || !Number.isFinite(new Date(when).getTime())}
             onClick={() =>
               onCreate({
                 type,

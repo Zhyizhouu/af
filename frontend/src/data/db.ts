@@ -233,6 +233,13 @@ export interface TodoItemRow {
   deleted: boolean;
 }
 
+export interface SyncMarkRow {
+  name: string;
+  syncedAt: number;
+  pushedAt: number;
+  fullAt: number;
+}
+
 export class AfDatabase extends Dexie {
   calendarEvents!: EntityTable<CalendarEventRow, 'id'>;
   proctorSessions!: EntityTable<ProctorSessionRow, 'id'>;
@@ -245,6 +252,7 @@ export class AfDatabase extends Dexie {
   taskPages!: EntityTable<TaskPageRow, 'id'>;
   settings!: EntityTable<SettingsRow, 'id'>;
   todoItems!: EntityTable<TodoItemRow, 'id'>;
+  syncMarks!: EntityTable<SyncMarkRow, 'name'>;
 
   constructor(name: string) {
     super(name);
@@ -282,6 +290,7 @@ export class AfDatabase extends Dexie {
             row.updatedAt = now;
           });
       });
+    this.version(6).stores({ syncMarks: 'name' });
   }
 }
 

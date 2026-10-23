@@ -237,7 +237,7 @@ export function EventEditor({
             <Button
               variant="gradient"
               className="ml-auto"
-              disabled={!title.trim()}
+              disabled={!title.trim() || !Number.isFinite(new Date(from).getTime()) || !Number.isFinite(new Date(to).getTime())}
               onClick={() => {
                 const startAt = new Date(from);
                 const endAt = new Date(to);

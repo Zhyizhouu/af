@@ -10,6 +10,9 @@ import { Timestamp } from 'firebase/firestore';
 
 const remote = new Map<string, Record<string, unknown>>();
 const written = new Map<string, Record<string, unknown>>();
+const commits: number[] = [];
+const failingPrefixes = new Set<string>();
+const queried: string[] = [];
 
 vi.mock('./firebase', () => ({ firestore: () => ({}) }));
 
@@ -21,17 +24,43 @@ vi.mock('firebase/firestore', async () => {
       path: `users/${uid}/${name}`,
     }),
     doc: (parent: { path: string }, id: string) => ({ path: `${parent.path}/${id}` }),
-    getDocs: async (ref: { path: string }) => ({
-      docs: [...remote.entries()]
-        .filter(([key]) => key.startsWith(`${ref.path}/`))
-        .map(([key, data]) => ({ id: key.slice(ref.path.length + 1), data: () => data })),
-    }),
-    writeBatch: () => ({
-      set: (ref: { path: string }, data: Record<string, unknown>) => {
-        written.set(ref.path, data);
-      },
-      commit: async () => {},
-    }),
+    where: (field: string, op: string, value: unknown) => ({ field, op, value }),
+    query: (ref: { path: string }, ...constraints: unknown[]) => ({ ...ref, constraints }),
+    serverTimestamp: () => ({ serverTimestamp: true }),
+    getDocs: async (ref: {
+      path: string;
+      constraints?: { field: string; value: Timestamp }[];
+    }) => {
+      if (ref.constraints) queried.push(ref.path);
+      return {
+        docs: [...remote.entries()]
+          .filter(([key]) => key.startsWith(`${ref.path}/`))
+          .filter(([, data]) =>
+            (ref.constraints ?? []).every((constraint) => {
+              const value = data[constraint.field];
+              return value instanceof Timestamp && value.toMillis() > constraint.value.toMillis();
+            }),
+          )
+          .map(([key, data]) => ({ id: key.slice(ref.path.length + 1), data: () => data })),
+      };
+    },
+    writeBatch: () => {
+      const pending = new Map<string, Record<string, unknown>>();
+      return {
+        set: (ref: { path: string }, data: Record<string, unknown>) => {
+          pending.set(ref.path, data);
+        },
+        commit: async () => {
+          for (const path of pending.keys()) {
+            for (const prefix of failingPrefixes) {
+              if (path.startsWith(prefix)) throw new Error('commit refused');
+            }
+          }
+          commits.push(pending.size);
+          for (const [path, data] of pending) written.set(path, data);
+        },
+      };
+    },
   };
 });
 
@@ -42,6 +71,9 @@ describe('sync', () => {
   beforeEach(async () => {
     remote.clear();
     written.clear();
+    commits.length = 0;
+    failingPrefixes.clear();
+    queried.length = 0;
     await openScope(`test-${Math.random().toString(36).slice(2)}`);
   });
 
@@ -116,9 +148,9 @@ describe('sync', () => {
     expect(local!.updatedAt).toBe(5000);
   });
 
-  // Ties go to remote so two devices converge instead of pushing the same
-  // record back and forth for ever.
-  it('lets the newer side win, with ties to remote', async () => {
+  // A tie pushes nothing and pulls nothing, so two devices stop trading the
+  // same record back and forth.
+  it('lets the newer side win, leaving a tie untouched on both sides', async () => {
     await db().calendarEvents.put({
       id: 'evt-2',
       title: 'local wins',
@@ -151,14 +183,14 @@ describe('sync', () => {
       reminderMinutes: 0,
     });
     remote.set('users/uid-1/events/evt-3', {
-      title: 'remote wins',
+      title: 'remote tie',
       updatedAt: Timestamp.fromMillis(8000),
     });
 
     await syncAll('uid-1');
 
     expect(written.get('users/uid-1/events/evt-2')!.title).toBe('local wins');
-    expect((await db().calendarEvents.get('evt-3'))!.title).toBe('remote wins');
+    expect((await db().calendarEvents.get('evt-3'))!.title).toBe('local is older');
     expect(written.has('users/uid-1/events/evt-3')).toBe(false);
   });
 
@@ -415,5 +447,125 @@ describe('sync', () => {
 
     expect([...written.keys()].some((path) => path.includes('/habits/'))).toBe(false);
     expect([...written.keys()].some((path) => path.includes('/checklistItems/'))).toBe(false);
+  });
+
+  const event = (id: string, updatedAt: number, overrides: Record<string, unknown> = {}) => ({
+    id,
+    title: id,
+    notes: '',
+    start: 0,
+    end: 0,
+    allDay: false,
+    category: 'work',
+    createdAt: 0,
+    updatedAt,
+    deleted: false,
+    reminderMinutes: 0,
+    ...overrides,
+  });
+
+  it('commits 450 pushed rows in two batches', async () => {
+    await db().calendarEvents.bulkPut(
+      Array.from({ length: 450 }, (_, index) => event(`bulk-${index}`, 1000 + index)),
+    );
+
+    await syncAll('uid-1');
+
+    expect(commits).toEqual([400, 50]);
+    expect(written.size).toBe(450);
+    expect(written.get('users/uid-1/events/bulk-0')!.syncedAt).toEqual({ serverTimestamp: true });
+  });
+
+  it('keeps syncing later collections when one fails, then rejects naming it', async () => {
+    failingPrefixes.add('users/uid-1/checklistItems/');
+    await db().checklistItems.put({
+      id: 'item-1',
+      sessionId: 's',
+      label: 'x',
+      section: '',
+      isChecked: false,
+      sortOrder: 0,
+      updatedAt: 5,
+      deleted: false,
+    });
+    await db().calendarEvents.put(event('evt-after', 10));
+
+    await expect(syncAll('uid-1')).rejects.toThrow(/checklistItems/);
+
+    expect(written.has('users/uid-1/events/evt-after')).toBe(true);
+    expect(written.has('users/uid-1/checklistItems/item-1')).toBe(false);
+  });
+
+  it('pulls only newer syncedAt documents once a mark is set and rewrites no equal rows', async () => {
+    await db().calendarEvents.put(event('seen', 5000, { title: 'local copy' }));
+    await db().syncMarks.put({ name: 'events', syncedAt: 1_000_000, pushedAt: 6000, fullAt: Date.now() });
+    remote.set('users/uid-1/events/seen', {
+      title: 'remote copy',
+      updatedAt: Timestamp.fromMillis(5000),
+      syncedAt: Timestamp.fromMillis(1_000_000 + 1),
+    });
+    remote.set('users/uid-1/events/old', {
+      title: 'outside the window',
+      updatedAt: Timestamp.fromMillis(9000),
+      syncedAt: Timestamp.fromMillis(1_000_000 - 60_001),
+    });
+    remote.set('users/uid-1/events/fresh', {
+      title: 'fresh',
+      updatedAt: Timestamp.fromMillis(9000),
+      syncedAt: Timestamp.fromMillis(2_000_000),
+    });
+
+    await syncAll('uid-1');
+
+    expect(queried).toContain('users/uid-1/events');
+    expect((await db().calendarEvents.get('seen'))!.title).toBe('local copy');
+    expect(await db().calendarEvents.get('old')).toBeUndefined();
+    expect((await db().calendarEvents.get('fresh'))!.title).toBe('fresh');
+    expect((await db().syncMarks.get('events'))!.syncedAt).toBe(2_000_000);
+  });
+
+  it('pushes only rows edited since the last push once a mark is set', async () => {
+    await db().calendarEvents.put(event('untouched', 4000));
+    await db().calendarEvents.put(event('edited', 8000));
+    await db().syncMarks.put({ name: 'events', syncedAt: 1_000_000, pushedAt: 6000, fullAt: Date.now() });
+
+    await syncAll('uid-1');
+
+    expect(written.has('users/uid-1/events/edited')).toBe(true);
+    expect(written.has('users/uid-1/events/untouched')).toBe(false);
+  });
+
+  it('skips an oversized or invalid-date document without failing the collection', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await db().calendarEvents.put(event('huge', 10, { notes: 'x'.repeat(900_001) }));
+    await db().calendarEvents.put(event('bad-date', 10, { start: Number.NaN }));
+    await db().calendarEvents.put(event('fine', 10));
+
+    await expect(syncAll('uid-1')).resolves.toBeUndefined();
+
+    expect(written.has('users/uid-1/events/huge')).toBe(false);
+    expect(written.has('users/uid-1/events/bad-date')).toBe(false);
+    expect(written.has('users/uid-1/events/fine')).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
+  it('does a full read once the last full read is over 24 hours old', async () => {
+    await db().syncMarks.put({
+      name: 'events',
+      syncedAt: 1_000_000,
+      pushedAt: 6000,
+      fullAt: Date.now() - 25 * 60 * 60 * 1000,
+    });
+    remote.set('users/uid-1/events/legacy', {
+      title: 'no syncedAt',
+      updatedAt: Timestamp.fromMillis(9000),
+    });
+
+    await syncAll('uid-1');
+
+    expect(queried).not.toContain('users/uid-1/events');
+    expect((await db().calendarEvents.get('legacy'))!.title).toBe('no syncedAt');
+    expect(Date.now() - (await db().syncMarks.get('events'))!.fullAt).toBeLessThan(60_000);
   });
 });

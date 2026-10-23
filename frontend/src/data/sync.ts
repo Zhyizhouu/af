@@ -3,6 +3,9 @@ import {
   collection,
   doc,
   getDocs,
+  query,
+  serverTimestamp,
+  where,
   writeBatch,
   type DocumentData,
 } from 'firebase/firestore';
@@ -11,10 +14,12 @@ import { readDashboardLayout } from '../programs/dashboard/layout';
 import { jakartaDayKey } from '../programs/habits/time';
 import {
   db,
+  type AfDatabase,
   type AiConversationRow,
   type CalendarEventRow,
   type CategoryRow,
   type ChecklistItemRow,
+  type HabitDayRow,
   type HabitRow,
   type ProctorSessionRow,
   type SettingsRow,
@@ -55,6 +60,34 @@ const stamp = (ms: number) => Timestamp.fromMillis(ms);
 const userCollection = (uid: string, name: string) =>
   collection(firestore(), 'users', uid, name);
 
+const BATCH_LIMIT = 400;
+const MAX_DOCUMENT_CHARS = 900_000;
+const PULL_OVERLAP_MS = 60_000;
+const FULL_READ_MS = 24 * 60 * 60 * 1000;
+
+interface SyncTable<Row> {
+  toArray(): Promise<Row[]>;
+  bulkPut(rows: Row[]): Promise<unknown>;
+}
+
+const isPushable = (name: string, id: string, data: DocumentData): boolean => {
+  let finite = true;
+  const json = JSON.stringify(data, function (this: Record<string, unknown>, key, value) {
+    const raw = this[key];
+    if (raw instanceof Timestamp && !Number.isFinite(raw.toMillis())) finite = false;
+    return value;
+  });
+  if (!finite) {
+    console.warn(`sync: skipped ${name}/${id}, a timestamp is not a finite time`);
+    return false;
+  }
+  if (json.length > MAX_DOCUMENT_CHARS) {
+    console.warn(`sync: skipped ${name}/${id}, document is ${json.length} characters`);
+    return false;
+  }
+  return true;
+};
+
 /**
  * One pass over one collection.
  *
@@ -64,34 +97,63 @@ const userCollection = (uid: string, name: string) =>
  * per-device auto-increment integers; IndexedDB lets the record's own id be
  * the key, so the two meet at the same document either way.)
  */
-async function syncCollection<Row extends { id: string; updatedAt: number }>(
+async function syncCollection<Row extends { updatedAt: number }>(
+  database: AfDatabase,
   uid: string,
   name: string,
-  rows: Row[],
+  table: SyncTable<Row>,
   toDocument: (row: Row) => DocumentData,
   fromDocument: (id: string, data: DocumentData) => Row,
-  put: (row: Row) => Promise<unknown>,
+  keyOf: (row: Row) => string = (row) => (row as unknown as { id: string }).id,
 ): Promise<void> {
-  const remote = await getDocs(userCollection(uid, name));
+  const mark = await database.syncMarks.get(name);
+  const pushedAt = Date.now();
+  const incremental =
+    mark !== undefined && mark.syncedAt > 0 && pushedAt - mark.fullAt <= FULL_READ_MS;
+  const rows = await table.toArray();
+
+  const reference = userCollection(uid, name);
+  const remote = await getDocs(
+    mark && incremental
+      ? query(reference, where('syncedAt', '>', stamp(mark.syncedAt - PULL_OVERLAP_MS)))
+      : reference,
+  );
   const remoteDocs = new Map(remote.docs.map((snapshot) => [snapshot.id, snapshot.data()]));
 
-  const batch = writeBatch(firestore());
+  const writes: { id: string; data: DocumentData }[] = [];
   for (const row of rows) {
-    const data = remoteDocs.get(row.id);
-    if (!data || localWins(row.updatedAt, data)) {
-      batch.set(doc(userCollection(uid, name), row.id), toDocument(row));
-    }
+    if (mark && incremental && row.updatedAt <= mark.pushedAt) continue;
+    const id = keyOf(row);
+    const data = remoteDocs.get(id);
+    if (data && !localWins(row.updatedAt, data)) continue;
+    const document = toDocument(row);
+    if (isPushable(name, id, document)) writes.push({ id, data: document });
   }
 
-  const localById = new Map(rows.map((row) => [row.id, row]));
+  const localByKey = new Map(rows.map((row) => [keyOf(row), row]));
+  const pulled: Row[] = [];
+  let newest = mark?.syncedAt ?? 0;
   for (const [id, data] of remoteDocs) {
-    const local = localById.get(id);
-    if (!local || !localWins(local.updatedAt, data)) {
-      await put(fromDocument(id, data));
+    newest = Math.max(newest, millis(data.syncedAt));
+    const local = localByKey.get(id);
+    if (!local || millis(data.updatedAt) > local.updatedAt) pulled.push(fromDocument(id, data));
+  }
+  if (pulled.length) await table.bulkPut(pulled);
+
+  for (let start = 0; start < writes.length; start += BATCH_LIMIT) {
+    const batch = writeBatch(firestore());
+    for (const { id, data } of writes.slice(start, start + BATCH_LIMIT)) {
+      batch.set(doc(reference, id), { ...data, syncedAt: serverTimestamp() });
     }
+    await batch.commit();
   }
 
-  await batch.commit();
+  await database.syncMarks.put({
+    name,
+    syncedAt: newest,
+    pushedAt,
+    fullAt: incremental && mark ? mark.fullAt : Date.now(),
+  });
 }
 
 const eventToDocument = (row: CalendarEventRow): DocumentData => ({
@@ -346,39 +408,20 @@ const todoItemFromDocument = (id: string, data: DocumentData): TodoItemRow => ({
  * The one collection with no tombstones — a day is never deleted, only emptied
  * — so the pull has nothing to skip.
  */
-async function syncHabitDays(uid: string): Promise<void> {
-  const remote = await getDocs(userCollection(uid, 'habitDays'));
-  const remoteDocs = new Map(remote.docs.map((snapshot) => [snapshot.id, snapshot.data()]));
-
-  const batch = writeBatch(firestore());
-  const local = await db().habitDays.toArray();
-
-  for (const row of local) {
-    const data = remoteDocs.get(row.day);
-    if (!data || localWins(row.updatedAt, data)) {
-      batch.set(doc(userCollection(uid, 'habitDays'), row.day), {
-        completed: row.completed,
-        updatedAt: stamp(row.updatedAt),
-      });
-    }
-  }
-
-  const localByDay = new Map(local.map((row) => [row.day, row]));
-  for (const [day, data] of remoteDocs) {
-    const mine = localByDay.get(day);
-    if (!mine || !localWins(mine.updatedAt, data)) {
-      await db().habitDays.put({
-        day,
-        completed: Array.isArray(data.completed)
-          ? (data.completed as unknown[]).map(String)
-          : [],
-        updatedAt: millis(data.updatedAt),
-      });
-    }
-  }
-
-  await batch.commit();
-}
+const syncHabitDays = (database: AfDatabase, uid: string): Promise<void> =>
+  syncCollection<HabitDayRow>(
+    database,
+    uid,
+    'habitDays',
+    database.habitDays,
+    (row) => ({ completed: row.completed, updatedAt: stamp(row.updatedAt) }),
+    (day, data) => ({
+      day,
+      completed: Array.isArray(data.completed) ? (data.completed as unknown[]).map(String) : [],
+      updatedAt: millis(data.updatedAt),
+    }),
+    (row) => row.day,
+  );
 
 /**
  * Reconciles everything.
@@ -392,95 +435,49 @@ async function syncHabitDays(uid: string): Promise<void> {
  * Flutter build; task properties/pages are new but follow the same rule.
  */
 export async function syncAll(uid: string): Promise<void> {
-  await syncCollection(
-    uid,
-    'sessions',
-    await db().proctorSessions.toArray(),
-    sessionToDocument,
-    sessionFromDocument,
-    (row) => db().proctorSessions.put(row),
+  const database = db();
+  const failed: string[] = [];
+
+  const run = async (name: string, task: () => Promise<void>) => {
+    try {
+      await task();
+    } catch (error) {
+      console.error(`sync: ${name} failed`, error);
+      failed.push(`${name} (${error instanceof Error ? error.message : String(error)})`);
+    }
+  };
+
+  await run('sessions', () =>
+    syncCollection(database, uid, 'sessions', database.proctorSessions, sessionToDocument, sessionFromDocument),
+  );
+  await run('checklistItems', () =>
+    syncCollection(database, uid, 'checklistItems', database.checklistItems, itemToDocument, itemFromDocument),
+  );
+  await run('categories', () =>
+    syncCollection(database, uid, 'categories', database.categories, categoryToDocument, categoryFromDocument),
+  );
+  await run('events', () =>
+    syncCollection(database, uid, 'events', database.calendarEvents, eventToDocument, eventFromDocument),
+  );
+  await run('habits', () =>
+    syncCollection(database, uid, 'habits', database.habits, habitToDocument, habitFromDocument),
+  );
+  await run('habitDays', () => syncHabitDays(database, uid));
+  await run('taskProperties', () =>
+    syncCollection(database, uid, 'taskProperties', database.taskProperties, taskPropertyToDocument, taskPropertyFromDocument),
+  );
+  await run('taskPages', () =>
+    syncCollection(database, uid, 'taskPages', database.taskPages, taskPageToDocument, taskPageFromDocument),
+  );
+  await run('aiConversations', () =>
+    syncCollection(database, uid, 'aiConversations', database.aiConversations, conversationToDocument, conversationFromDocument),
+  );
+  await run('settings', () =>
+    syncCollection(database, uid, 'settings', database.settings, settingsToDocument, settingsFromDocument),
+  );
+  await run('todoItems', () =>
+    syncCollection(database, uid, 'todoItems', database.todoItems, todoItemToDocument, todoItemFromDocument),
   );
 
-  await syncCollection(
-    uid,
-    'checklistItems',
-    await db().checklistItems.toArray(),
-    itemToDocument,
-    itemFromDocument,
-    (row) => db().checklistItems.put(row),
-  );
-
-  await syncCollection(
-    uid,
-    'categories',
-    await db().categories.toArray(),
-    categoryToDocument,
-    categoryFromDocument,
-    (row) => db().categories.put(row),
-  );
-
-  await syncCollection(
-    uid,
-    'events',
-    await db().calendarEvents.toArray(),
-    eventToDocument,
-    eventFromDocument,
-    (row) => db().calendarEvents.put(row),
-  );
-
-  await syncCollection(
-    uid,
-    'habits',
-    await db().habits.toArray(),
-    habitToDocument,
-    habitFromDocument,
-    (row) => db().habits.put(row),
-  );
-
-  await syncHabitDays(uid);
-
-  await syncCollection(
-    uid,
-    'taskProperties',
-    await db().taskProperties.toArray(),
-    taskPropertyToDocument,
-    taskPropertyFromDocument,
-    (row) => db().taskProperties.put(row),
-  );
-
-  await syncCollection(
-    uid,
-    'taskPages',
-    await db().taskPages.toArray(),
-    taskPageToDocument,
-    taskPageFromDocument,
-    (row) => db().taskPages.put(row),
-  );
-
-  await syncCollection(
-    uid,
-    'aiConversations',
-    await db().aiConversations.toArray(),
-    conversationToDocument,
-    conversationFromDocument,
-    (row) => db().aiConversations.put(row),
-  );
-
-  await syncCollection(
-    uid,
-    'settings',
-    await db().settings.toArray(),
-    settingsToDocument,
-    settingsFromDocument,
-    (row) => db().settings.put(row),
-  );
-
-  await syncCollection(
-    uid,
-    'todoItems',
-    await db().todoItems.toArray(),
-    todoItemToDocument,
-    todoItemFromDocument,
-    (row) => db().todoItems.put(row),
-  );
+  if (failed.length) throw new Error(`Sync failed for ${failed.join('; ')}`);
 }

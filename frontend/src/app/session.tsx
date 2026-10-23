@@ -11,6 +11,7 @@ import {
 import { db, defaultSettings, localScope, openScope, type SettingsRow } from '../data/db';
 import { readDashboardLayout } from '../programs/dashboard/layout';
 import { syncAll } from '../data/sync';
+import { createSyncQueue } from './syncQueue';
 import { isAdmin, signOutNow, watchAuth, type User } from '../data/firebase';
 import { applyThemeConcept } from '../concepts';
 
@@ -97,7 +98,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [revision, setRevision] = useState(0);
 
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const running = useRef(false);
   const uid = useRef<string | null>(null);
 
   /** Reads the local settings row (seeding the default if this is the first
@@ -111,15 +111,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     applySettings(next);
   }, []);
 
-  const syncNow = useCallback(async () => {
+  const runSync = useCallback(async () => {
     const current = uid.current;
     if (!current) {
       setSyncStatus('signedOut');
       return;
     }
-    if (running.current) return;
 
-    running.current = true;
     setSyncStatus('syncing');
     try {
       await syncAll(current);
@@ -132,10 +130,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       setSyncStatus('failed');
       setSyncError(error instanceof Error ? error.message : String(error));
-    } finally {
-      running.current = false;
     }
   }, [loadSettings]);
+
+  const queue = useMemo(() => createSyncQueue(runSync), [runSync]);
+  const syncNow = queue.request;
 
   /** Coalesces the burst of writes that a single user action produces. */
   const requestSync = useCallback(() => {
@@ -146,6 +145,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return watchAuth((next) => {
       void (async () => {
+        await queue.idle().catch(() => undefined);
         uid.current = next?.uid ?? null;
         // Signing out swaps to the local scope rather than deleting anything,
         // so signing back in finds everything where it was.
@@ -162,7 +162,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         else setSyncStatus('signedOut');
       })();
     });
-  }, [syncNow, loadSettings]);
+  }, [queue, syncNow, loadSettings]);
 
   useEffect(
     () => () => {
