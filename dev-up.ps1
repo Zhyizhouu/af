@@ -88,6 +88,17 @@ function Resolve-Credentials([string]$explicit) {
   return $null
 }
 
+if (-not $env:LAN_IP) {
+  $lan = $null
+  $route = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
+    Sort-Object RouteMetric | Select-Object -First 1
+  if ($route) {
+    $lan = Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue |
+      Select-Object -First 1 -ExpandProperty IPAddress
+  }
+  $env:LAN_IP = if ($lan) { $lan } else { '127.0.0.1' }
+}
+
 # ---- 1. the whole stack ----------------------------------------------------
 
 Step 1 'Docker stack'

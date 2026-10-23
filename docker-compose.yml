@@ -6,6 +6,13 @@
 #   docker compose up --build
 #
 # Then: API on :8080, Temporal's UI on :8089, SeaweedFS's master UI on :9333.
+#
+# Exposure: every published port below is bound to 127.0.0.1, so only this
+# machine reaches them. Temporal's gRPC port and SeaweedFS's S3 port carry no
+# real authentication, so they must never listen on the LAN. The one deliberate
+# exception is the `web` service (ports 3000 and 8443), which serves the built
+# app through Caddy so a phone on the same network can open it. Caddy proxies
+# /v1 to the api over the compose network.
 
 name: reafresh
 
@@ -44,7 +51,7 @@ services:
     volumes:
       - ./docker/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
     ports:
-      - "7233:7233"
+      - "127.0.0.1:7233:7233"
     healthcheck:
       test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
       interval: 10s
@@ -62,7 +69,7 @@ services:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_CORS_ORIGINS: http://localhost:8089
     ports:
-      - "8089:8080"
+      - "127.0.0.1:8089:8080"
 
   # ---- the object store ----
   # One binary running master, volume, filer and the S3 gateway together. That
@@ -83,9 +90,8 @@ services:
       - seaweed:/data
       - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
     ports:
-      - "8333:8333"
-      - "9333:9333"
-      - "8888:8888"
+      - "127.0.0.1:8333:8333"
+      - "127.0.0.1:9333:9333"
     healthcheck:
       # 127.0.0.1 rather than localhost: busybox wget resolves localhost to
       # ::1 first and SeaweedFS binds IPv4 only, so the name form fails with a
@@ -132,7 +138,7 @@ services:
       # Leave unset to require a real Firebase ID token. See .env.example.
       AF_AUTH_DISABLED: ${AF_AUTH_DISABLED:-false}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     restart: unless-stopped
 
   # ---- the converters ----
@@ -156,8 +162,12 @@ services:
       # ffmpeg will use every core it is given, so one file at a time per
       # replica keeps each conversion fast. Add replicas, not concurrency.
       AF_WORKER_MAX_CONCURRENT: ${AF_WORKER_MAX_CONCURRENT:-1}
-    volumes:
-      - scratch:/work
+    # Sources are staged here mid-conversion and deleted straight after. A real
+    # tmpfs (RAM, capped at 2g per replica): uploads cap at 512 MB and the
+    # output is smaller, so a runaway job fails instead of filling the disk.
+    # Each replica gets its own; every job works in its own temp directory.
+    tmpfs:
+      - /work:size=2g,uid=10001,gid=10001
     deploy:
       replicas: 2
     restart: unless-stopped
@@ -170,7 +180,7 @@ services:
     depends_on:
       - api
     environment:
-      AF_LAN_HOST: ${AF_LAN_HOST:-192.168.1.28}
+      AF_LAN_HOST: ${LAN_IP:-127.0.0.1}
     volumes:
       - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -180,7 +190,7 @@ services:
     restart: unless-stopped
 
   tunnel:
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.10.3
     command: tunnel --no-autoupdate --url http://web:3000
     depends_on:
       - web
@@ -189,7 +199,4 @@ services:
 volumes:
   postgres:
   seaweed:
-  # Sources are staged here mid-conversion and deleted straight after. Shared
-  # between replicas is fine: every job works in its own temp directory.
-  scratch:
   caddy_data:

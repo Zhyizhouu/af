@@ -91,6 +91,12 @@ err()  { printf '%s    %s%s\n' "$RED" "$1" "$RESET"; }
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO"
 
+if [ -z "${LAN_IP:-}" ]; then
+  LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  LAN_IP="${LAN_IP:-127.0.0.1}"
+fi
+export LAN_IP
+
 # ---- 1. the whole stack ----------------------------------------------------
 
 step 1 "Docker stack"

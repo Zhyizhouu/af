@@ -1,7 +1,7 @@
 {
 	auto_https disable_redirects
 	skip_install_trust
-	default_sni {$AF_LAN_HOST:192.168.1.28}
+	default_sni {$AF_LAN_HOST:127.0.0.1}
 }
 
 (app) {
@@ -21,7 +21,7 @@ http://:3000 {
 	import app
 }
 
-https://{$AF_LAN_HOST:192.168.1.28}:8443, https://localhost:8443 {
+https://{$AF_LAN_HOST:127.0.0.1}:8443, https://localhost:8443 {
 	tls internal
 	import app
 }

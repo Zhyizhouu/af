@@ -22,8 +22,8 @@ USER af
 WORKDIR /work
 COPY --from=build /out/worker /usr/local/bin/worker
 
-# Sources are staged here mid-conversion. Compose mounts it as a tmpfs so a
-# 500MB upload never lands on the image's writable layer.
+# Sources are staged here mid-conversion. Compose mounts it as a 2g tmpfs, so
+# an upload never lands on the image's writable layer or a volume on disk.
 ENV AF_TEMP_DIR=/work
 
 ENTRYPOINT ["/usr/local/bin/worker"]
