@@ -4,7 +4,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 const CHROME_PATH = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const CREDENTIALS_PATH = process.env.AF_TEST_CREDENTIALS || 'C:/Users/rflxv/.secret/af-redesign-test.json';
 
-const ALL_SLUGS = ['dashboard', 'checklists', 'calendar', 'habits', 'tasks', 'audio', 'ai', 'qr'];
+const ALL_SLUGS = ['dashboard', 'todo', 'checklists', 'calendar', 'habits', 'tasks', 'audio', 'ai', 'qr'];
 
 const VIEWPORTS = [
   { width: 1440, height: 960, isMobile: false, hasTouch: false },
@@ -12,7 +12,7 @@ const VIEWPORTS = [
 ];
 
 function parseArgs(argv) {
-  const args = { url: 'http://localhost:5173', out: null, only: null, full: false, intro: false, concept: null };
+  const args = { url: 'http://localhost:5173', out: null, only: null, full: false, intro: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--url') {
@@ -25,8 +25,6 @@ function parseArgs(argv) {
       args.full = true;
     } else if (arg === '--intro') {
       args.intro = true;
-    } else if (arg === '--concept') {
-      args.concept = argv[++i];
     }
   }
   return args;
@@ -68,7 +66,6 @@ async function main() {
     process.exit(1);
   }
   const slugs = args.only && args.only.length > 0 ? args.only : ALL_SLUGS;
-  const query = args.concept ? `?concept=${encodeURIComponent(args.concept)}` : '';
 
   await mkdir(args.out, { recursive: true });
 
@@ -92,7 +89,7 @@ async function main() {
 
     for (const viewport of VIEWPORTS) {
       await page.setViewport(viewport);
-      await page.goto(`${args.url}/${query}`, { waitUntil: 'load' });
+      await page.goto(`${args.url}/`, { waitUntil: 'load' });
       await settle(1500);
       const landingPath = `${args.out}/landing-${viewport.width}.png`;
       await page.screenshot({ path: landingPath, fullPage: args.full });
@@ -101,7 +98,7 @@ async function main() {
 
     for (const viewport of VIEWPORTS) {
       await page.setViewport(viewport);
-      await page.goto(`${args.url}/signin${query}`, { waitUntil: 'load' });
+      await page.goto(`${args.url}/signin`, { waitUntil: 'load' });
       await settle(1500);
       const signinPath = `${args.out}/signin-${viewport.width}.png`;
       await page.screenshot({ path: signinPath, fullPage: args.full });
@@ -109,7 +106,7 @@ async function main() {
     }
 
     await page.setViewport(VIEWPORTS[0]);
-    await page.goto(`${args.url}/signin${query}`, { waitUntil: 'load' });
+    await page.goto(`${args.url}/signin`, { waitUntil: 'load' });
     await page.waitForSelector('#signin-email', { timeout: 15000 });
     await page.type('#signin-email', email);
     await page.type('#signin-password', password);
@@ -135,7 +132,7 @@ async function main() {
           } catch {}
         });
         const navStart = Date.now();
-        await page.goto(`${args.url}/dashboard${query}`, { waitUntil: 'load' });
+        await page.goto(`${args.url}/dashboard`, { waitUntil: 'load' });
         await waitUntilReady(page, 20000);
         for (const delay of INTRO_FRAME_DELAYS) {
           const remaining = delay - (Date.now() - navStart);
@@ -151,7 +148,7 @@ async function main() {
     for (const slug of slugs) {
       for (const viewport of VIEWPORTS) {
         await page.setViewport(viewport);
-        await page.goto(`${args.url}/${slug}${query}`, { waitUntil: 'load' });
+        await page.goto(`${args.url}/${slug}`, { waitUntil: 'load' });
         const ready = await waitUntilReady(page, 20000);
         await settle(800);
         const suffix = ready ? '' : '-TIMEOUT';

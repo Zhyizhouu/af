@@ -2,8 +2,8 @@ rules_version = '2';
 
 // Security rules for the `af-main` Firestore database.
 //
-// These are the only thing protecting the data: the API keys committed in
-// `lib/firebase_options.dart` are public identifiers by design, so anybody can
+// These are the only thing protecting the data: the Firebase web config shipped
+// in the frontend bundle holds public identifiers by design, so anybody can
 // point a client at this project. Assume every request is hostile and written
 // by hand.
 //

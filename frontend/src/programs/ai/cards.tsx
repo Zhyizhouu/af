@@ -4,6 +4,7 @@ import { cn } from 'cn';
 import { Calendar, CheckCircle2, RotateCcw, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import type { AgendaEntry } from '../../data/agenda';
+import { clock } from '../../data/format';
 import { QrCode } from '../qr/QrCode';
 import { isEcc, type Ecc } from '../qr/qr';
 import { sessionLabel, type EventProposal, type QrArtifact, type SessionProposal } from './api';
@@ -21,11 +22,6 @@ const day = new Intl.DateTimeFormat(undefined, {
   weekday: 'short',
   day: 'numeric',
   month: 'short',
-});
-const clock = new Intl.DateTimeFormat(undefined, {
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
 });
 
 type Tone = 'sky' | 'emerald' | 'amber' | 'rose';

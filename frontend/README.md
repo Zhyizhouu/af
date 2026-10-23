@@ -11,7 +11,7 @@ npm test                         # vitest
 npm run build                    # dist/
 ```
 
-The assistant needs an API. There is **no localhost default** — the Flutter
+The assistant needs an API. There is **no localhost default**. The earlier
 build had one, and on a deployed site it resolved to each visitor's own machine
 and failed as mixed content, silently. Set it explicitly:
 
@@ -53,18 +53,17 @@ All nine programs, the shell and the data layer.
 Plus **split view** (`/calendar?split=ai`), **Firebase Auth**, and **two-way
 Firestore sync** across every collection.
 
-### Sharing a Firestore with the Flutter app
+### The Firestore document contract
 
-Both apps read and write the **same documents** under `users/{uid}`, so while
-both exist they must agree on every field name and shape. `src/data/sync.ts` is
-a faithful port of `lib/sync/sync_service.dart` for that reason, and
-`sync.test.ts` pins the document contract rather than the plumbing.
+The app reads and writes documents under `users/{uid}`, and `sync.test.ts` pins
+that document contract rather than the plumbing, so a field rename shows up as
+a failing test instead of as data that quietly stops syncing.
 
 Two consequences worth knowing:
 
-- `ProctorSessionRow.reopened` is carried but never read here. The Flutter app
-  writes it; dropping it on the next push would silently un-exempt a session
-  from the archive sweep.
+- `ProctorSessionRow.reopened` exempts a manually reopened session from the
+  archive sweep, and it is part of the session document. Dropping it on the
+  next push would silently un-exempt the session.
 - Order matters in the sync pass: sessions before their checklist items, and
   categories before events. An event's colour resolves through its category, so
   pulling events first shows them all as "Other" until the next pass.
@@ -90,6 +89,6 @@ that at 1 MiB.
 ## Before the next deploy
 
 `AF_CONVERT_API` must be set as a Vercel **environment variable**, or the AI and
-the Audio Converter will say they are not configured. That is deliberate — the
-Flutter build defaulted to `http://localhost:8080`, which on a deployed site
-resolved to each visitor's own machine and failed silently as mixed content.
+the Audio Converter will say they are not configured. That is deliberate: a
+`http://localhost:8080` default, on a deployed site, resolves to each visitor's
+own machine and fails silently as mixed content.

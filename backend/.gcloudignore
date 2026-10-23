@@ -1,7 +1,7 @@
 # What `gcloud run deploy --source .` uploads from this directory.
 #
 # Without this file gcloud falls back to .gitignore, which lives at the repo
-# root and is Flutter-shaped — it knows nothing about what a Go build needs.
+# root and is shaped for the frontend, so it knows nothing about what a Go build needs.
 
 .git/
 .gitignore
