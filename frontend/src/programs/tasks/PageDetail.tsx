@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Calendar,
   CircleDot,
@@ -16,6 +16,7 @@ import { Checkbox } from '../../components/ui/checkbox';
 import { Input } from '../../components/ui/input';
 import type { TaskPageIcon, TaskPageRow, TaskPropertyRow, TaskPropertyType } from '../../data/db';
 import { hexToRgba, toneColor } from '../../data/tones';
+import { dateValueFromKey, dateValueKey } from './dateValue';
 import { IconPicker } from './IconPicker';
 import { PageBody } from './PageBody';
 import { deletePage, savePageField, savePageValue } from './store';
@@ -44,13 +45,21 @@ export function PageDetail({
   onChange: () => void;
 }) {
   const [title, setTitle] = useState(page.title);
+  const titleDraft = useRef(page.title);
+  const titleSaved = useRef(page.title);
+  const flushCtx = useRef({ id: page.id, onChange });
+  flushCtx.current = { id: page.id, onChange };
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // A different page opened into the same still-mounted detail view (side-peek
   // to side-peek without a close in between) — resync the local title draft.
-  useEffect(() => setTitle(page.title), [page.id, page.title]);
+  useEffect(() => {
+    setTitle(page.title);
+    titleDraft.current = page.title;
+    titleSaved.current = page.title;
+  }, [page.id, page.title]);
 
   useEffect(() => {
     setShowSettings(false);
@@ -75,8 +84,14 @@ export function PageDetail({
   }, [mode, onFullscreen, onExitFullscreen, onClose]);
 
   const commitTitle = () => {
-    if (title.trim() && title !== page.title) void savePageField(page.id, { title }).then(onChange);
+    const draft = titleDraft.current;
+    if (!draft.trim() || draft === titleSaved.current) return;
+    titleSaved.current = draft;
+    const { id, onChange: notify } = flushCtx.current;
+    void savePageField(id, { title: draft }).then(notify);
   };
+
+  useEffect(() => commitTitle, []);
 
   const setValue = (propertyId: string, value: unknown) => {
     void savePageValue(page.id, propertyId, value).then(onChange);
@@ -112,7 +127,10 @@ export function PageDetail({
         <input
           className="tsk__detail-title"
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => {
+            titleDraft.current = event.target.value;
+            setTitle(event.target.value);
+          }}
           onBlur={commitTitle}
         />
         <div className="tsk__detail-actions">
@@ -192,6 +210,7 @@ export function PageDetail({
               {property.name}
             </span>
             <PropertyValueInput
+              key={`${page.id}:${property.id}`}
               property={property}
               value={page.values[property.id]}
               onChange={(value) => setValue(property.id, value)}
@@ -263,46 +282,41 @@ function PropertyValueInput({
   switch (property.type) {
     case 'text':
       return (
-        <Input
+        <DraftInput
           className="inset-field rounded-[10px]"
-          placeholder="Empty"
-          defaultValue={typeof value === 'string' ? value : ''}
-          onBlur={(event) => onChange(event.target.value)}
+          saved={typeof value === 'string' ? value : ''}
+          onCommit={onChange}
         />
       );
 
     case 'url':
       return (
-        <Input
+        <DraftInput
           className="af-mono inset-field rounded-[10px]"
-          placeholder="Empty"
-          defaultValue={typeof value === 'string' ? value : ''}
-          onBlur={(event) => onChange(event.target.value)}
+          saved={typeof value === 'string' ? value : ''}
+          onCommit={onChange}
         />
       );
 
     case 'number':
       return (
-        <Input
+        <DraftInput
           type="number"
           className="af-mono inset-field rounded-[10px]"
-          placeholder="Empty"
-          defaultValue={typeof value === 'number' ? value : ''}
-          onBlur={(event) =>
-            onChange(event.target.value === '' ? null : Number(event.target.value))
-          }
+          saved={typeof value === 'number' ? String(value) : ''}
+          onCommit={(text) => onChange(text === '' ? null : Number(text))}
         />
       );
 
     case 'date': {
-      const iso = typeof value === 'number' ? new Date(value).toISOString().slice(0, 10) : '';
+      const iso = typeof value === 'number' ? dateValueKey(value) : '';
       return (
         <Input
           type="date"
           className="inset-field rounded-[10px]"
           defaultValue={iso}
           onChange={(event) =>
-            onChange(event.target.value ? new Date(event.target.value).getTime() : null)
+            onChange(event.target.value ? dateValueFromKey(event.target.value) : null)
           }
         />
       );
@@ -377,4 +391,47 @@ function PropertyValueInput({
       );
     }
   }
+}
+
+function DraftInput({
+  saved,
+  onCommit,
+  type,
+  className,
+}: {
+  saved: string;
+  onCommit: (text: string) => void;
+  type?: string;
+  className?: string;
+}) {
+  const draft = useRef(saved);
+  const last = useRef(saved);
+  const commitRef = useRef(onCommit);
+  commitRef.current = onCommit;
+
+  useEffect(
+    () => () => {
+      if (draft.current === last.current) return;
+      last.current = draft.current;
+      commitRef.current(draft.current);
+    },
+    [],
+  );
+
+  return (
+    <Input
+      type={type}
+      className={className}
+      placeholder="Empty"
+      defaultValue={saved}
+      onChange={(event) => {
+        draft.current = event.target.value;
+      }}
+      onBlur={(event) => {
+        draft.current = event.target.value;
+        last.current = draft.current;
+        onCommit(draft.current);
+      }}
+    />
+  );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Command } from 'lucide-react';
 import type { TaskPageRow } from '../../data/db';
+import { sanitizeBody } from './sanitize';
 import { savePageField } from './store';
 
 type BlockTag = 'p' | 'h1' | 'h2' | 'h3';
@@ -16,8 +17,9 @@ const slashOptions: readonly { label: string; tag: BlockTag }[] = [
  * A page's rich-text body: one `contentEditable` surface, a `/` menu for
  * block types, and Ctrl/Cmd+B/I for marks.
  *
- * Deliberately not a block-array model — this stores one sanitized HTML
- * string (`TaskPageRow.body`) and lets `execCommand` do the formatting, which
+ * Deliberately not a block-array model: this stores one HTML string
+ * (`TaskPageRow.body`), reduced by `sanitizeBody` to a small tag allow-list on
+ * every save and load, and lets `execCommand` do the formatting, which
  * covers exactly the requested surface (paragraphs, h1–h3, bold, italic)
  * without building a custom document model for it.
  */
@@ -27,17 +29,30 @@ export function PageBody({ page, onChange }: { page: TaskPageRow; onChange: () =
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [slash, setSlash] = useState<{ query: string; top: number; left: number } | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
+  const draft = useRef<{ id: string; html: string } | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   // A different page opened into the same still-mounted detail view — resync
   // the editable surface, mirroring `PageDetail`'s own title resync.
   useEffect(() => {
-    if (editor.current) editor.current.innerHTML = page.body;
+    if (editor.current) editor.current.innerHTML = sanitizeBody(page.body);
     setSlash(null);
   }, [page.id]);
 
   const commit = () => {
-    if (editor.current) void savePageField(page.id, { body: editor.current.innerHTML }).then(onChange);
+    if (!editor.current) return;
+    draft.current = null;
+    void savePageField(page.id, { body: sanitizeBody(editor.current.innerHTML) }).then(onChange);
   };
+
+  useEffect(
+    () => () => {
+      const pending = draft.current;
+      if (pending) void savePageField(pending.id, { body: sanitizeBody(pending.html) }).then(onChangeRef.current);
+    },
+    [],
+  );
 
   const applyBlock = (tag: BlockTag) => {
     document.execCommand('formatBlock', false, `<${tag}>`);
@@ -62,6 +77,7 @@ export function PageBody({ page, onChange }: { page: TaskPageRow; onChange: () =
     : [];
 
   const onInput = () => {
+    if (editor.current) draft.current = { id: page.id, html: editor.current.innerHTML };
     const selection = window.getSelection();
     const anchor = selection?.anchorNode;
     if (!selection?.isCollapsed || !anchor || !container.current) {

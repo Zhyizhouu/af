@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { cn } from 'cn';
 import { useSession } from '../../../app/session';
 import { readAgenda, type AgendaEntry } from '../../../data/agenda';
+import { dayFromKey, jakartaDayKey, jakartaOffsetMs } from '../../habits/time';
 import { listCategories, type EventCategory } from '../../calendar/categories';
 import { colourFor, dayStamp } from './shared';
 
@@ -24,9 +25,9 @@ export function TodayWidget() {
   }, [reload, revision]);
 
   const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfDay = dayFromKey(jakartaDayKey(now)).getTime() - jakartaOffsetMs;
   const todaysEntries = entries
-    .filter((entry) => entry.start >= startOfDay && entry.start < new Date(startOfDay.getTime() + 86_400_000))
+    .filter((entry) => entry.start.getTime() >= startOfDay && entry.start.getTime() < startOfDay + 86_400_000)
     .sort((a, b) => a.start.getTime() - b.start.getTime());
 
   const nextIndex = todaysEntries.findIndex((entry) => entry.end >= now);

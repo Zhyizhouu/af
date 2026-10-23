@@ -161,8 +161,10 @@ export interface TaskPageRow {
    * options up by id and renders a dash when the lookup misses.
    */
   values: Record<string, unknown>;
-  /** Sanitized HTML from the page's rich-text body editor. `''` for a page
-   *  written before this existed, or one whose body was never touched. */
+  /** HTML from the page's rich-text body editor, reduced to an allow-list of
+   *  tags with no attributes by `programs/tasks/sanitize.ts` on save and load.
+   *  `''` for a page written before this existed, or one whose body was never
+   *  touched. */
   body: string;
   sortOrder: number;
   createdAt: number;

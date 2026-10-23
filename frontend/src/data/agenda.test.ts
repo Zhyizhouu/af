@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { openScope } from './db';
 import { readAgenda } from './agenda';
+import { dateValueFromKey } from '../programs/tasks/dateValue';
 import { addOption, createPage, listProperties, saveProperty, savePageValue } from '../programs/tasks/store';
 
 beforeEach(async () => {
@@ -20,7 +21,7 @@ describe('readAgenda — Task Tracker date properties', () => {
     expect(entry).toBeDefined();
     expect(entry!.title).toBe('Ship the release');
     expect(entry!.subtitle).toBe('Due');
-    expect(entry!.start.getTime()).toBe(when);
+    expect(entry!.start.getTime()).toBe(dateValueFromKey('2026-09-10'));
     expect(entry!.allDay).toBe(true);
   });
 
@@ -56,5 +57,20 @@ describe('readAgenda — Task Tracker date properties', () => {
 
     const entry = (await readAgenda()).find((candidate) => candidate.kind === 'task')!;
     expect(entry.finished).toBe(true);
+  });
+});
+
+describe('readAgenda, date value generations', () => {
+  it('places a UTC-midnight value and a Jakarta-midnight value at the same instant', async () => {
+    const due = await saveProperty({ name: 'Due', type: 'date' });
+    const oldPage = await createPage('Old way');
+    const newPage = await createPage('New way');
+    await savePageValue(oldPage.id, due.id, new Date('2026-09-10').getTime());
+    await savePageValue(newPage.id, due.id, dateValueFromKey('2026-09-10'));
+
+    const starts = (await readAgenda()).filter((entry) => entry.kind === 'task').map((entry) => entry.start.getTime());
+
+    expect(starts).toHaveLength(2);
+    expect(starts[0]).toBe(starts[1]);
   });
 });

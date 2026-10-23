@@ -1,3 +1,4 @@
+import { dateValueFromKey, dateValueKey } from '../programs/tasks/dateValue';
 import { db, type CalendarEventRow, type ProctorSessionRow, type TaskPageRow, type TaskPropertyRow } from './db';
 
 /**
@@ -58,7 +59,7 @@ export const entryFromSession = (row: ProctorSessionRow): AgendaEntry => ({
  * resolved by the caller, which has the full property list on hand.
  */
 export const entryFromTaskPage = (page: TaskPageRow, property: TaskPropertyRow, finished: boolean): AgendaEntry => {
-  const when = new Date(page.values[property.id] as number);
+  const when = new Date(dateValueFromKey(dateValueKey(page.values[property.id] as number)));
   return {
     kind: 'task',
     id: `${page.id}:${property.id}`,

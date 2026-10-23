@@ -15,9 +15,11 @@ import {
   titleColumnKey,
 } from './columns';
 import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../data/db';
+import { formatDateValue } from './dateValue';
 import { FilterPanel } from './FilterPanel';
 import { PageDetail } from './PageDetail';
 import { PropertyPanel } from './PropertyPanel';
+import { safeUrl } from './sanitize';
 import {
   createPage,
   deletePage,
@@ -395,20 +397,23 @@ function renderCell(property: TaskPropertyRow, value: unknown): ReactNode {
     case 'date':
       return (
         <span className="af-meta">
-          {typeof value === 'number' ? new Date(value).toLocaleDateString() : '—'}
+          {typeof value === 'number' ? formatDateValue(value) : '—'}
         </span>
       );
 
     case 'checkbox':
       return <Checkbox checked={Boolean(value)} disabled aria-label="Checked" />;
 
-    case 'url':
-      return typeof value === 'string' && value ? (
-        <a href={value} target="_blank" rel="noreferrer" className="af-mono tsk__url">
+    case 'url': {
+      if (typeof value !== 'string' || !value) return <span className="tsk__cell-empty">—</span>;
+      const href = safeUrl(value);
+      return href ? (
+        <a href={href} target="_blank" rel="noreferrer" className="af-mono tsk__url">
           {value}
         </a>
       ) : (
-        <span className="tsk__cell-empty">—</span>
+        <span className="af-mono">{value}</span>
       );
+    }
   }
 }
