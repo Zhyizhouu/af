@@ -9,6 +9,7 @@
  * Go service does not know or care which framework is talking to it.
  */
 
+import { ApiClient, type ApiClientOptions } from '../../data/apiClient';
 import { convertApiBase } from '../../data/runtimeConfig';
 
 /**
@@ -240,52 +241,27 @@ export interface AiLimits {
   maxProposals: number;
 }
 
-export interface AiClientOptions {
-  base?: string;
-  token?: () => Promise<string | null>;
-  fetcher?: typeof fetch;
-}
+export type AiClientOptions = ApiClientOptions;
 
-export class AiApi {
-  private readonly explicitBase?: string;
-  private readonly token: () => Promise<string | null>;
-  private readonly fetcher: typeof fetch;
-
+export class AiApi extends ApiClient<AiError> {
   constructor(options: AiClientOptions = {}) {
-    this.explicitBase = options.base;
-    this.token = options.token ?? (async () => null);
-    this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
-  }
-
-  /**
-   * Resolved per call rather than captured in the constructor.
-   *
-   * A client built before the runtime config arrives would otherwise hold the
-   * build-time address for the life of the page — which on a deployed site is
-   * precisely the one that has stopped working.
-   */
-  get base(): string {
-    return (this.explicitBase ?? convertApiBase()).replace(/\/+$/, '');
-  }
-
-  private async headers(json = false): Promise<Record<string, string>> {
-    let token: string | null = null;
-    try {
-      token = await this.token();
-    } catch {
-      token = null;
-    }
-    if (!token) throw new AiError('Sign in to use the assistant.');
-    return {
-      Authorization: `Bearer ${token}`,
-      ...(json ? { 'Content-Type': 'application/json' } : {}),
-    };
+    super(options, {
+      subject: 'assistant',
+      signIn: 'Sign in to use the assistant.',
+      error: AiError,
+      flaggedStatus: 429,
+      statusMessages: {
+        401: 'Sign in to use the assistant.',
+        429: 'The assistant has hit its quota for now. Try again shortly.',
+        503: 'The assistant is not configured on this server.',
+      },
+    });
   }
 
   /** Signed like every other call: the server gates this behind an account
    *  too, so an unauthenticated reader cannot learn what is configured on it. */
   async limits(): Promise<AiLimits> {
-    const body = await this.send(async () =>
+    const body = await this.request(async () =>
       this.fetcher(`${this.base}/v1/ai/limits`, { headers: await this.headers() }),
     );
     return {
@@ -316,7 +292,7 @@ export class AiApi {
      *  `existing` is: the server stores none of it. */
     habits: AiHabit[];
   }): Promise<AiAnswer> {
-    const body = await this.send(async () =>
+    const body = await this.request(async () =>
       this.fetcher(`${this.base}/v1/ai/plan`, {
         method: 'POST',
         headers: await this.headers(true),
@@ -355,49 +331,6 @@ export class AiApi {
         }))
         .filter((code) => code.text !== ''),
     };
-  }
-
-  private async send(
-    call: () => Promise<Response>,
-  ): Promise<Record<string, unknown>> {
-    if (!this.base) {
-      throw new AiError(
-        'No assistant is configured. Set AF_CONVERT_API for the build, or point '
-        + 'config/runtime at a running gateway.',
-      );
-    }
-
-    let response: Response;
-    try {
-      response = await call();
-    } catch (error) {
-      if (error instanceof AiError) throw error;
-      throw new AiError(`The assistant at ${this.base} is not reachable.`);
-    }
-
-    let body: Record<string, unknown> = {};
-    try {
-      body = (await response.json()) as Record<string, unknown>;
-    } catch {
-      // A proxy in front of the API answers HTML, not the JSON shape.
-    }
-
-    if (response.ok) return body;
-    throw new AiError(this.messageOf(response.status, body), response.status === 429);
-  }
-
-  private messageOf(status: number, body: Record<string, unknown>): string {
-    if (typeof body.error === 'string') return body.error;
-    switch (status) {
-      case 401:
-        return 'Sign in to use the assistant.';
-      case 429:
-        return 'The assistant has hit its quota for now. Try again shortly.';
-      case 503:
-        return 'The assistant is not configured on this server.';
-      default:
-        return `The assistant returned ${status}.`;
-    }
   }
 }
 

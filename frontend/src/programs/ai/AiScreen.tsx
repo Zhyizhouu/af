@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from 'cn';
 import { ArrowUp, Menu, Paperclip, Plus } from 'lucide-react';
 import { Button } from '../../components/ui/button';
@@ -13,12 +13,12 @@ import {
   errorMessage,
   latestLogo,
   maxAttachmentBytes,
+  dropAll,
+  dropAt,
   hasProposals,
+  itemsOf,
   keptCount,
-  keptEvents,
-  keptHabitTicks,
-  keptRemovals,
-  keptSessions,
+  keptOf,
   toTurn,
   userMessage,
   type AiAttachment,
@@ -33,7 +33,8 @@ import {
   saveConversation,
 } from './conversations';
 import { commitTurn } from './commit';
-import { EventCard, HabitTickCard, ProposalsSummary, QrArtifactCard, RemovalCard, SessionCard } from './cards';
+import { ProposalsSummary, QrArtifactCard } from './cards';
+import { proposalKind, proposalKinds, type DroppedKey, type ProposalKind } from './proposals';
 import { readHabitsForAssistant } from '../habits/store';
 import type { AiConversationRow } from '../../data/db';
 import './ai.css';
@@ -302,30 +303,14 @@ export function AiScreen({
   );
 
   const drop = useCallback(
-    (index: number, field: 'droppedSessions' | 'droppedEvents' | 'droppedRemovals' | 'droppedHabitTicks', at: number) => {
-      setMessages((current) =>
-        current.map((m, i) =>
-          i === index ? { ...m, [field]: new Set([...m[field], at]) } : m,
-        ),
-      );
+    (index: number, field: DroppedKey, at: number) => {
+      setMessages((current) => current.map((m, i) => (i === index ? dropAt(m, field, at) : m)));
     },
     [],
   );
 
   const dismissAll = useCallback((index: number) => {
-    setMessages((current) =>
-      current.map((m, i) =>
-        i === index
-          ? {
-              ...m,
-              droppedSessions: new Set([...m.droppedSessions, ...m.sessions.keys()]),
-              droppedEvents: new Set([...m.droppedEvents, ...m.events.keys()]),
-              droppedHabitTicks: new Set([...m.droppedHabitTicks, ...m.habitTicks.keys()]),
-              droppedRemovals: new Set([...m.droppedRemovals, ...m.removals.keys()]),
-            }
-          : m,
-      ),
-    );
+    setMessages((current) => current.map((m, i) => (i === index ? dropAll(m) : m)));
   }, []);
 
   /**
@@ -626,7 +611,7 @@ function Turn({
   busy: boolean;
   onCommit: () => void;
   onDismiss: () => void;
-  onDrop: (field: 'droppedSessions' | 'droppedEvents' | 'droppedRemovals' | 'droppedHabitTicks', at: number) => void;
+  onDrop: (field: DroppedKey, at: number) => void;
 }) {
   if (message.role === 'user') {
     return (
@@ -676,40 +661,13 @@ function Turn({
 
         {hasProposals(message) && (
           <>
-            {message.sessions.map((proposal, i) =>
-              message.droppedSessions.has(i) ? null : (
-                <SessionCard
-                  key={`s${i}`}
-                  proposal={proposal}
-                  onRemove={locked ? undefined : () => onDrop('droppedSessions', i)}
-                />
-              ),
-            )}
-            {message.events.map((proposal, i) =>
-              message.droppedEvents.has(i) ? null : (
-                <EventCard
-                  key={`e${i}`}
-                  proposal={proposal}
-                  onRemove={locked ? undefined : () => onDrop('droppedEvents', i)}
-                />
-              ),
-            )}
-            {message.habitTicks.map((tick, i) =>
-              message.droppedHabitTicks.has(i) ? null : (
-                <HabitTickCard
-                  key={`h${i}`}
-                  tick={tick}
-                  onRemove={locked ? undefined : () => onDrop('droppedHabitTicks', i)}
-                />
-              ),
-            )}
-            {message.removals.map((entry, i) =>
-              message.droppedRemovals.has(i) ? null : (
-                <RemovalCard
-                  key={`r${i}`}
-                  entry={entry}
-                  onKeep={locked ? undefined : () => onDrop('droppedRemovals', i)}
-                />
+            {proposalKinds.map((kind) =>
+              itemsOf(message, kind).map((item, i) =>
+                message[kind.dropped].has(i) ? null : (
+                  <Fragment key={`${kind.key}${i}`}>
+                    {kind.card(item, locked ? undefined : () => onDrop(kind.dropped, i))}
+                  </Fragment>
+                ),
               ),
             )}
             <CommitControl message={message} busy={busy} onCommit={onCommit} onDismiss={onDismiss} />
@@ -724,20 +682,17 @@ const plural = (count: number, one: string, many: string) =>
   `${count} ${count === 1 ? one : many}`;
 
 function summarise(message: AiMessage): string {
-  const sessions = keptSessions(message).length;
-  const events = keptEvents(message).length;
-  const removals = keptRemovals(message).length;
-  const ticks = keptHabitTicks(message).length;
+  const { sessions, events, habitTicks, removals } = proposalKind;
+  const count = (kind: ProposalKind) => keptOf(message, kind).length;
+  const counted = (kind: ProposalKind) =>
+    count(kind) > 0 ? plural(count(kind), ...kind.noun) : '';
 
-  const added = [
-    sessions > 0 ? plural(sessions, 'session', 'sessions') : '',
-    events > 0 ? plural(events, 'event', 'events') : '',
-  ].filter(Boolean);
+  const added = [counted(sessions), counted(events)].filter(Boolean);
 
   return [
     added.length ? `Added ${added.join(' and ')}` : '',
-    ticks > 0 ? `marked ${plural(ticks, 'habit', 'habits')}` : '',
-    removals > 0 ? `deleted ${plural(removals, 'entry', 'entries')}` : '',
+    count(habitTicks) > 0 ? `marked ${counted(habitTicks)}` : '',
+    count(removals) > 0 ? `deleted ${counted(removals)}` : '',
   ]
     .filter(Boolean)
     .join(', ')
@@ -757,9 +712,10 @@ function CommitControl({
 }) {
   if (message.committed) return <p className="mt-1 text-[12.5px] text-emerald-400">{summarise(message)}</p>;
 
-  const adding = keptSessions(message).length + keptEvents(message).length;
-  const deleting = keptRemovals(message).length;
-  const ticks = keptHabitTicks(message);
+  const adding =
+    keptOf(message, proposalKind.sessions).length + keptOf(message, proposalKind.events).length;
+  const deleting = keptOf(message, proposalKind.removals).length;
+  const ticks = keptOf(message, proposalKind.habitTicks);
 
   // Habits get their own clause rather than being folded into "add": ticking
   // one adds nothing to the calendar, and a button claiming otherwise would be
@@ -768,10 +724,10 @@ function CommitControl({
     ticks.length === 0
       ? ''
       : ticks.every((tick) => tick.done)
-        ? `tick ${plural(ticks.length, 'habit', 'habits')}`
+        ? `tick ${plural(ticks.length, ...proposalKind.habitTicks.noun)}`
         : ticks.every((tick) => !tick.done)
-          ? `untick ${plural(ticks.length, 'habit', 'habits')}`
-          : `update ${plural(ticks.length, 'habit', 'habits')}`;
+          ? `untick ${plural(ticks.length, ...proposalKind.habitTicks.noun)}`
+          : `update ${plural(ticks.length, ...proposalKind.habitTicks.noun)}`;
 
   // Spelled out rather than counted whenever a deletion is involved: "Apply 3
   // changes" is not something anybody should have to decode before pressing a
@@ -779,7 +735,7 @@ function CommitControl({
   const clauses = [
     adding > 0 ? `add ${adding} to my calendar` : '',
     habits,
-    deleting > 0 ? `delete ${plural(deleting, 'entry', 'entries')}` : '',
+    deleting > 0 ? `delete ${plural(deleting, ...proposalKind.removals.noun)}` : '',
   ].filter(Boolean);
 
   const label =

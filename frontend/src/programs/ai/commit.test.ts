@@ -1,8 +1,16 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, openScope } from '../../data/db';
 import { commitTurn } from './commit';
 import type { AiMessage, HabitTickProposal } from './message';
+import { saveEvent } from '../calendar/store';
+import { createSession } from '../checklists/store';
+import { templateFor } from '../checklists/template';
 import { readHabitsForAssistant, setHabitDone, todayKey } from '../habits/store';
+
+vi.mock('../habits/store', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../habits/store')>();
+  return { ...actual, setHabitDone: vi.fn(actual.setHabitDone) };
+});
 
 /**
  * The commit half of a habit tick.
@@ -120,5 +128,159 @@ describe('readHabitsForAssistant', () => {
 
     const shown = await readHabitsForAssistant();
     expect(shown.map((h) => h.id)).toEqual(['h1']);
+  });
+});
+
+const emptyTurn = (parts: Partial<AiMessage>): AiMessage => ({
+  role: 'assistant',
+  text: '',
+  sessions: [],
+  events: [],
+  removals: [],
+  habitTicks: [],
+  qrCodes: [],
+  attachments: [],
+  droppedSessions: new Set(),
+  droppedEvents: new Set(),
+  droppedRemovals: new Set(),
+  droppedHabitTicks: new Set(),
+  committed: false,
+  failed: false,
+  ...parts,
+});
+
+const start = new Date(2026, 2, 2, 9, 0);
+const end = new Date(2026, 2, 2, 10, 0);
+
+const mixedTurn = (day: string): AiMessage =>
+  emptyTurn({
+    sessions: [
+      {
+        type: 'UAP',
+        start,
+        room: 'R1',
+        courseCode: 'COMP1',
+        courseName: 'Intro',
+        courseClass: 'LA01',
+      },
+    ],
+    events: [{ title: 'Lunch', notes: 'n', start, end, allDay: false, category: 'social' }],
+    habitTicks: [{ habitId: 'h1', name: 'Read', day, done: true }],
+  });
+
+const counts = async () => ({
+  sessions: await db().proctorSessions.count(),
+  items: await db().checklistItems.count(),
+  events: await db().calendarEvents.count(),
+  days: await db().habitDays.count(),
+});
+
+/**
+ * A turn is all or nothing.
+ *
+ * The failure is forced on the last write of the turn, after a session and an
+ * event have already been written, so what these prove is that the rows written
+ * by the store functions called from inside the commit were rolled back with it.
+ */
+describe('committing a whole turn', () => {
+  const day = todayKey();
+
+  beforeEach(async () => {
+    await openScope(`test-${Math.random().toString(36).slice(2)}`);
+    vi.mocked(setHabitDone).mockClear();
+  });
+
+  it('persists nothing from the turn when one item fails mid-commit', async () => {
+    vi.mocked(setHabitDone).mockRejectedValueOnce(new Error('boom'));
+
+    await expect(commitTurn(mixedTurn(day))).rejects.toThrow('boom');
+
+    expect(await counts()).toEqual({ sessions: 0, items: 0, events: 0, days: 0 });
+  });
+
+  it('leaves an entry it was going to delete untouched when the turn fails', async () => {
+    const keep = await saveEvent({ title: 'Keep', start, end });
+    vi.mocked(setHabitDone).mockRejectedValueOnce(new Error('boom'));
+    const turn = mixedTurn(day);
+    turn.removals = [
+      {
+        kind: 'event',
+        id: keep.id,
+        title: 'Keep',
+        subtitle: '',
+        start,
+        end,
+        allDay: false,
+        category: '',
+        finished: false,
+        reminderMinutes: 0,
+      },
+    ];
+
+    await expect(commitTurn(turn)).rejects.toThrow('boom');
+
+    expect((await db().calendarEvents.get(keep.id))?.deleted).toBe(false);
+  });
+
+  it('creates each item exactly once when a retry follows a failure', async () => {
+    vi.mocked(setHabitDone).mockRejectedValueOnce(new Error('boom'));
+    const turn = mixedTurn(day);
+
+    await expect(commitTurn(turn)).rejects.toThrow('boom');
+    await commitTurn(turn);
+
+    expect(await counts()).toEqual({
+      sessions: 1,
+      items: templateFor('UAP').length,
+      events: 1,
+      days: 1,
+    });
+    expect((await db().habitDays.get(day))?.completed).toEqual(['h1']);
+  });
+
+  it('gives a created event the same defaults saveEvent does', async () => {
+    const viaStore = await saveEvent({ title: 'Lunch', notes: 'n', start, end, category: 'social' });
+    const viaBare = await saveEvent({ title: 'Bare', start, end });
+
+    await commitTurn(mixedTurn(day));
+
+    const rows = await db().calendarEvents.toArray();
+    const created = rows.find((row) => row.id !== viaStore.id && row.id !== viaBare.id)!;
+    const { id: _a, createdAt: _b, updatedAt: _c, ...createdFields } = created;
+    const { id: _d, createdAt: _e, updatedAt: _f, ...storeFields } = viaStore;
+
+    expect(createdFields).toEqual(storeFields);
+    expect(created.reminderMinutes).toBe(viaBare.reminderMinutes);
+    expect(created.deleted).toBe(false);
+  });
+
+  it('tombstones the removed session with its checklist and the removed event', async () => {
+    const session = await createSession({
+      type: 'UAS',
+      dateTime: start,
+      room: 'R2',
+      courseCode: 'C',
+      courseName: 'N',
+      courseClass: 'K',
+    });
+    const event = await saveEvent({ title: 'Gone', start, end });
+    const entry = (kind: 'session' | 'event', id: string) => ({
+      kind,
+      id,
+      title: '',
+      subtitle: '',
+      start,
+      end,
+      allDay: false,
+      category: '',
+      finished: false,
+      reminderMinutes: 0,
+    });
+
+    await commitTurn(emptyTurn({ removals: [entry('session', session.id), entry('event', event.id)] }));
+
+    expect((await db().proctorSessions.get(session.id))?.deleted).toBe(true);
+    expect((await db().checklistItems.toArray()).every((item) => item.deleted)).toBe(true);
+    expect((await db().calendarEvents.get(event.id))?.deleted).toBe(true);
   });
 });

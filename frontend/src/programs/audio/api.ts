@@ -1,4 +1,4 @@
-import { convertApiBase } from '../../data/runtimeConfig';
+import { ApiClient, type ApiClientOptions } from '../../data/apiClient';
 
 /**
  * The converter's API.
@@ -61,37 +61,21 @@ export interface JobStatus {
   error?: string;
 }
 
-export interface AudioClientOptions {
-  base?: string;
-  token?: () => Promise<string | null>;
-  fetcher?: typeof fetch;
-}
+export type AudioClientOptions = ApiClientOptions;
 
-export class AudioApi {
-  private readonly explicitBase?: string;
-  private readonly token: () => Promise<string | null>;
-  private readonly fetcher: typeof fetch;
-
+export class AudioApi extends ApiClient<AudioError> {
   constructor(options: AudioClientOptions = {}) {
-    this.explicitBase = options.base;
-    this.token = options.token ?? (async () => null);
-    this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
-  }
-
-  /** Resolved per call — see AiApi.base for why. */
-  get base(): string {
-    return (this.explicitBase ?? convertApiBase()).replace(/\/+$/, '');
-  }
-
-  private async headers(): Promise<Record<string, string>> {
-    const token = await this.token().catch(() => null);
-    if (!token) throw new AudioError('Sign in to convert files.');
-    return { Authorization: `Bearer ${token}` };
+    super(options, {
+      subject: 'converter',
+      signIn: 'Sign in to convert files.',
+      error: AudioError,
+      flaggedStatus: 404,
+    });
   }
 
   /** Signed like every other call — the server gates this behind an account. */
   async limits(): Promise<AudioLimits> {
-    const body = await this.read(async () =>
+    const body = await this.request(async () =>
       this.fetcher(`${this.base}/v1/limits`, { headers: await this.headers() }),
     );
     return {
@@ -169,7 +153,7 @@ export class AudioApi {
       };
 
       request.onerror = () =>
-        reject(new AudioError(`The converter at ${this.base} is not reachable.`));
+        reject(this.unreachable());
       request.onabort = () => reject(new AudioError('Upload cancelled.'));
 
       input.signal?.addEventListener('abort', () => request.abort());
@@ -178,7 +162,7 @@ export class AudioApi {
   }
 
   async status(id: string): Promise<JobStatus> {
-    const body = await this.read(async () =>
+    const body = await this.request(async () =>
       this.fetcher(`${this.base}/v1/jobs/${id}`, { headers: await this.headers() }),
     );
     return {
@@ -189,7 +173,7 @@ export class AudioApi {
   }
 
   async cancel(id: string): Promise<void> {
-    await this.read(async () =>
+    await this.request(async () =>
       this.fetcher(`${this.base}/v1/jobs/${id}`, {
         method: 'DELETE',
         headers: await this.headers(),
@@ -206,36 +190,6 @@ export class AudioApi {
       throw new AudioError('That result is no longer available.', response.status === 404);
     }
     return response.blob();
-  }
-
-  private async read(call: () => Promise<Response>): Promise<Record<string, unknown>> {
-    if (!this.base) {
-      throw new AudioError(
-        'No converter is configured. Set AF_CONVERT_API for the build, or point '
-        + 'config/runtime at a running gateway.',
-      );
-    }
-
-    let response: Response;
-    try {
-      response = await call();
-    } catch (error) {
-      if (error instanceof AudioError) throw error;
-      throw new AudioError(`The converter at ${this.base} is not reachable.`);
-    }
-
-    let body: Record<string, unknown> = {};
-    try {
-      body = (await response.json()) as Record<string, unknown>;
-    } catch {
-      // Some responses carry no body at all; that is fine.
-    }
-
-    if (response.ok) return body;
-    throw new AudioError(
-      typeof body.error === 'string' ? body.error : `The converter returned ${response.status}.`,
-      response.status === 404,
-    );
   }
 }
 

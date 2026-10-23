@@ -1,17 +1,20 @@
-import type { AgendaEntry, AgendaKind } from '../../data/agenda';
+import type { AgendaEntry } from '../../data/agenda';
 import {
   type AttachmentRef,
   type QrArtifact,
-  eventFromJson,
-  eventToJson,
   formatLocal,
-  sessionFromJson,
-  sessionToJson,
   type AiAnswer,
   type AiTurn,
   type EventProposal,
   type SessionProposal,
 } from './api';
+import {
+  proposalKinds,
+  type DroppedKey,
+  type ProposalItem,
+  type ProposalKey,
+  type ProposalKind,
+} from './proposals';
 
 /**
  * One turn as it sits on screen, and as it is stored.
@@ -154,22 +157,38 @@ export function assistantMessage(
   };
 }
 
-const keep = <T,>(items: T[], dropped: Set<number>): T[] =>
-  items.filter((_, index) => !dropped.has(index));
+/** What survived review for one kind: its items, minus the dropped indices. */
+export const keptOf = <K extends ProposalKey>(
+  m: AiMessage,
+  kind: ProposalKind<K>,
+): ProposalItem<K>[] => itemsOf(m, kind).filter((_, index) => !m[kind.dropped].has(index));
 
-export const keptSessions = (m: AiMessage) => keep(m.sessions, m.droppedSessions);
-export const keptEvents = (m: AiMessage) => keep(m.events, m.droppedEvents);
-export const keptRemovals = (m: AiMessage) => keep(m.removals, m.droppedRemovals);
-export const keptHabitTicks = (m: AiMessage) => keep(m.habitTicks, m.droppedHabitTicks);
+/** Every item of one kind, dropped or not. */
+export const itemsOf = <K extends ProposalKey>(
+  m: AiMessage,
+  kind: ProposalKind<K>,
+): ProposalItem<K>[] => m[kind.key] as ProposalItem<K>[];
 
 /** Anything needing confirmation. QR codes are deliberately not among them. */
 export const hasProposals = (m: AiMessage) =>
-  m.sessions.length > 0 || m.events.length > 0 || m.removals.length > 0 ||
-  m.habitTicks.length > 0;
+  proposalKinds.some((kind) => m[kind.key].length > 0);
 
 export const keptCount = (m: AiMessage) =>
-  keptSessions(m).length + keptEvents(m).length + keptRemovals(m).length +
-  keptHabitTicks(m).length;
+  proposalKinds.reduce((total, kind) => total + keptOf(m, kind).length, 0);
+
+/** Drops one item from review. A new set, so React sees the change. */
+export const dropAt = (m: AiMessage, field: DroppedKey, at: number): AiMessage => ({
+  ...m,
+  [field]: new Set([...m[field], at]),
+});
+
+/** Drops everything still on the table. */
+export const dropAll = (m: AiMessage): AiMessage => ({
+  ...m,
+  ...(Object.fromEntries(
+    proposalKinds.map((kind) => [kind.dropped, new Set([...m[kind.dropped], ...m[kind.key].keys()])]),
+  ) as Pick<AiMessage, DroppedKey>),
+});
 
 /**
  * What the server is told about this turn next time.
@@ -180,60 +199,30 @@ export const keptCount = (m: AiMessage) =>
 export const toTurn = (m: AiMessage): AiTurn => ({
   role: m.role,
   text: m.text,
-  sessions: keptSessions(m),
-  events: keptEvents(m),
-  removals: keptRemovals(m).map((entry) => entry.id),
-  // The name is ours, not the server's — it only ever needed the id.
-  habitTicks: keptHabitTicks(m).map(({ habitId, day, done }) => ({ habitId, day, done })),
+  ...(Object.fromEntries(
+    proposalKinds.map((kind) => [kind.key, keptOf(m, kind).map(kind.wire)]),
+  ) as Pick<AiTurn, ProposalKey>),
   committed: m.committed,
 });
 
 // ---- storage ----
 
-const entryToStored = (entry: AgendaEntry) => ({
-  id: entry.id,
-  kind: entry.kind,
-  title: entry.title,
-  subtitle: entry.subtitle,
-  start: entry.start.toISOString(),
-  end: entry.end.toISOString(),
-  allDay: entry.allDay,
-});
-
-function entryFromStored(json: Record<string, unknown>): AgendaEntry | null {
-  const start = new Date(String(json.start ?? ''));
-  if (Number.isNaN(start.getTime())) return null;
-  const end = new Date(String(json.end ?? ''));
-  return {
-    kind: (json.kind === 'session' ? 'session' : 'event') as AgendaKind,
-    id: String(json.id ?? ''),
-    title: String(json.title ?? ''),
-    subtitle: String(json.subtitle ?? ''),
-    start,
-    end: Number.isNaN(end.getTime()) ? start : end,
-    allDay: Boolean(json.allDay),
-    category: '',
-    finished: false,
-    // Not part of this snapshot's stored shape — a reopened conversation
-    // shows the card as it was, not whatever reminder exists on it today.
-    reminderMinutes: 0,
-  };
-}
-
 export function messageToJson(m: AiMessage): Record<string, unknown> {
   return {
     role: m.role,
     text: m.text,
-    ...(m.sessions.length ? { sessions: m.sessions.map(sessionToJson) } : {}),
-    ...(m.events.length ? { events: m.events.map(eventToJson) } : {}),
-    ...(m.removals.length ? { removals: m.removals.map(entryToStored) } : {}),
-    ...(m.habitTicks.length ? { habitTicks: m.habitTicks } : {}),
+    ...Object.fromEntries(
+      proposalKinds
+        .filter((kind) => m[kind.key].length)
+        .map((kind) => [kind.key, itemsOf(m, kind).map(kind.toJson)]),
+    ),
     ...(m.qrCodes.length ? { qrCodes: m.qrCodes } : {}),
     ...(m.attachments.length ? { attachments: m.attachments } : {}),
-    ...(m.droppedSessions.size ? { droppedSessions: [...m.droppedSessions] } : {}),
-    ...(m.droppedEvents.size ? { droppedEvents: [...m.droppedEvents] } : {}),
-    ...(m.droppedRemovals.size ? { droppedRemovals: [...m.droppedRemovals] } : {}),
-    ...(m.droppedHabitTicks.size ? { droppedHabitTicks: [...m.droppedHabitTicks] } : {}),
+    ...Object.fromEntries(
+      proposalKinds
+        .filter((kind) => m[kind.dropped].size)
+        .map((kind) => [kind.dropped, [...m[kind.dropped]]]),
+    ),
     ...(m.committed ? { committed: true } : {}),
     ...(m.failed ? { failed: true } : {}),
   };
@@ -260,24 +249,14 @@ export function messageFromJson(json: Record<string, unknown>): AiMessage | null
   return {
     role,
     text: String(json.text ?? ''),
-    sessions: (Array.isArray(json.sessions) ? json.sessions : [])
-      .map((s) => sessionFromJson(s as Record<string, unknown>))
-      .filter((s): s is SessionProposal => s !== null),
-    events: (Array.isArray(json.events) ? json.events : [])
-      .map((e) => eventFromJson(e as Record<string, unknown>))
-      .filter((e): e is EventProposal => e !== null),
-    removals: (Array.isArray(json.removals) ? json.removals : [])
-      .map((r) => entryFromStored(r as Record<string, unknown>))
-      .filter((r): r is AgendaEntry => r !== null),
-    habitTicks: (Array.isArray(json.habitTicks) ? json.habitTicks : []).map((tick) => {
-      const t = tick as Record<string, unknown>;
-      return {
-        habitId: String(t.habitId ?? ''),
-        name: String(t.name ?? ''),
-        day: String(t.day ?? ''),
-        done: Boolean(t.done),
-      };
-    }).filter((tick) => tick.habitId !== '' && tick.day !== ''),
+    ...(Object.fromEntries(
+      proposalKinds.map((kind) => [
+        kind.key,
+        (Array.isArray(json[kind.key]) ? (json[kind.key] as unknown[]) : [])
+          .map((row) => kind.fromJson(row as Record<string, unknown>))
+          .filter((item) => item !== null),
+      ]),
+    ) as Pick<AiMessage, ProposalKey>),
     qrCodes: (Array.isArray(json.qrCodes) ? json.qrCodes : []).map((code) => {
       const c = code as Record<string, unknown>;
       return {
@@ -295,10 +274,9 @@ export function messageFromJson(json: Record<string, unknown>): AiMessage | null
         data: String(f.data ?? ''),
       };
     }).filter((file) => file.data !== ''),
-    droppedSessions: indices(json.droppedSessions),
-    droppedEvents: indices(json.droppedEvents),
-    droppedRemovals: indices(json.droppedRemovals),
-    droppedHabitTicks: indices(json.droppedHabitTicks),
+    ...(Object.fromEntries(
+      proposalKinds.map((kind) => [kind.dropped, indices(json[kind.dropped])]),
+    ) as Pick<AiMessage, DroppedKey>),
     committed: Boolean(json.committed),
     failed: Boolean(json.failed),
   };
