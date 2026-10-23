@@ -1,6 +1,7 @@
-# The MP3 converter's backend. Nothing here is needed to build or serve the
-# Flutter app — Vercel only ever sees build/web — so `docker compose up` is
-# opt-in, for working on the converter.
+# The audio converter's backend, plus the built React frontend served by Caddy.
+# Nothing here is needed for the Vercel build, which only builds frontend/ and
+# publishes frontend/dist, so `docker compose up` is opt-in, for working on the
+# converter and the assistant.
 #
 #   docker compose up --build
 #
