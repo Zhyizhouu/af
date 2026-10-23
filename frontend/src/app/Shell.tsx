@@ -6,6 +6,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   House,
+  ListTodo,
   Music,
   QrCode,
   Settings,
@@ -56,6 +57,7 @@ const programIcons: Record<string, typeof House> = {
   tasks: Table2,
   audio: Music,
   qr: QrCode,
+  todo: ListTodo,
 };
 
 function ProgramIcon({ slug }: { slug: string }) {

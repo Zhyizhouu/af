@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { cn } from 'cn';
 import { Button } from '../../components/ui/button';
 import { Checkbox } from '../../components/ui/checkbox';
@@ -89,6 +89,8 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
   const [items, setItems] = useState<TodoItemRow[]>([]);
   const [text, setText] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  const [weekAddDay, setWeekAddDay] = useState<string | null>(null);
+  const [monthText, setMonthText] = useState('');
 
   const { from, to } = useMemo(() => rangeFor(view, day), [view, day]);
 
@@ -128,6 +130,11 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
   const submit = () => {
     if (!text.trim()) return;
     void after(() => addTodo(text, day)).then(() => setText(''));
+  };
+
+  const submitMonth = () => {
+    if (!monthText.trim()) return;
+    void after(() => addTodo(monthText, day)).then(() => setMonthText(''));
   };
 
   const open = forDay(day).filter((item) => !item.checked);
@@ -303,6 +310,12 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
                     </ul>
                   )}
                   {done > 0 && <span className="text-[11.5px] text-muted-foreground">{done} archived</span>}
+                  <WeekAdd
+                    open={weekAddDay === key}
+                    onOpen={() => setWeekAddDay(key)}
+                    onClose={() => setWeekAddDay((current) => (current === key ? null : current))}
+                    onAdd={(value) => after(() => addTodo(value, key))}
+                  />
                 </div>
               );
             })}
@@ -334,7 +347,7 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
                       key === today && 'border-white/25',
                       key === day && 'glow-active border-white/[0.08]',
                     )}
-                    onClick={() => pick(key)}
+                    onClick={() => setDay(key)}
                   >
                     <span
                       className={cn(
@@ -352,8 +365,87 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
             </div>
           </div>
         )}
+
+        {view === 'month' && (
+          <div className="surface-3d shrink-0 rounded-2xl p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-[15px] font-semibold">
+                {day === today ? 'Today' : dayFormat.format(dayFromKey(day))}
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => pick(day)}>
+                Open day
+              </Button>
+            </div>
+
+            <div className="flex gap-2">
+              <Input
+                className="inset-field flex-1"
+                placeholder="Add an item…"
+                value={monthText}
+                onChange={(event) => setMonthText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') submitMonth();
+                }}
+              />
+              <Button variant="raised" size="sm" disabled={!monthText.trim()} onClick={submitMonth}>
+                Add
+              </Button>
+            </div>
+
+            {open.length === 0 ? (
+              <p className="mt-3 text-[13px] text-muted-foreground">Nothing open on this day.</p>
+            ) : (
+              <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0">
+                {open.map((item) => (
+                  <TodoRow key={item.id} item={item} after={after} />
+                ))}
+              </ul>
+            )}
+            {archived.length > 0 && <p className="mt-3 text-xs text-muted-foreground">{archived.length} archived</p>}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function WeekAdd({
+  open,
+  onOpen,
+  onClose,
+  onAdd,
+}: {
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  onAdd: (text: string) => Promise<void>;
+}) {
+  const [text, setText] = useState('');
+
+  if (!open) {
+    return (
+      <Button variant="ghost" size="xs" className="mt-auto justify-start" onClick={onOpen}>
+        <Plus size={14} aria-hidden />
+        Add
+      </Button>
+    );
+  }
+
+  return (
+    <Input
+      autoFocus
+      className="inset-field mt-auto h-8 text-[13px]"
+      placeholder="Add an item…"
+      value={text}
+      onChange={(event) => setText(event.target.value)}
+      onBlur={() => {
+        if (!text.trim()) onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') onClose();
+        if (event.key === 'Enter' && text.trim()) void onAdd(text).then(() => setText(''));
+      }}
+    />
   );
 }
 

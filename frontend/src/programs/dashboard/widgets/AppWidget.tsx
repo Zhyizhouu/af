@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Activity, CalendarDays, ClipboardCheck, Music, QrCode, Table2 } from 'lucide-react';
+import { Activity, CalendarDays, ClipboardCheck, ListTodo, Music, QrCode, Table2 } from 'lucide-react';
 import { cn } from 'cn';
 import type { Program } from '../../../app/programs';
 import { AIMark } from '../../../components/brand/AIMark';
@@ -11,6 +11,7 @@ const icons: Partial<Record<Program['slug'], typeof ClipboardCheck>> = {
   tasks: Table2,
   audio: Music,
   qr: QrCode,
+  todo: ListTodo,
 };
 
 /**
