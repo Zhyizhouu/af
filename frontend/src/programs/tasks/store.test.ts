@@ -223,6 +223,22 @@ describe('reorderProperty', () => {
   });
 });
 
+describe('createPage default status', () => {
+  it('defaults to Not started when a status property is seeded', async () => {
+    await seedDefaultProperties();
+
+    const page = await createPage('X');
+
+    expect(page.values['seed:status']).toBe('seed:status:not-started');
+  });
+
+  it('leaves values empty when no properties exist', async () => {
+    const page = await createPage('Y');
+
+    expect(page.values).toEqual({});
+  });
+});
+
 describe('page CRUD', () => {
   it('creates, edits fields, sets values, and round-trips through db()', async () => {
     const property = await saveProperty({ name: 'Notes', type: 'text' });

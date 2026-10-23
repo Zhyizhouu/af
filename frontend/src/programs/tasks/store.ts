@@ -229,11 +229,15 @@ export async function listPages(): Promise<TaskPageRow[]> {
 
 export async function createPage(title?: string): Promise<TaskPageRow> {
   const now = Date.now();
+  const statusProperty = (await listProperties()).find((property) => property.type === 'status');
+  const defaultOption =
+    statusProperty?.options.find((option) => option.label.trim().toLowerCase() === 'not started') ??
+    statusProperty?.options[0];
   const row: TaskPageRow = {
     id: crypto.randomUUID(),
     title: title?.trim() || 'Untitled',
     icon: null,
-    values: {},
+    values: statusProperty && defaultOption ? { [statusProperty.id]: defaultOption.id } : {},
     body: '',
     sortOrder: await db().taskPages.count(),
     createdAt: now,

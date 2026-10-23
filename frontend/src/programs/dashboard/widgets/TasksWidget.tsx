@@ -75,6 +75,9 @@ export function TasksWidget() {
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {open.slice(0, 8).map((page) => {
             const option = status?.options.find((candidate) => candidate.id === page.values[status.id]);
+            const notStarted = status?.options.find(
+              (candidate) => candidate.label.trim().toLowerCase() === 'not started',
+            );
             return (
               <li key={page.id} className="flex items-center justify-between gap-2.5">
                 <Link
@@ -83,7 +86,11 @@ export function TasksWidget() {
                 >
                   {page.title}
                 </Link>
-                {option && <AFTag label={option.label} toneIndex={option.toneIndex} />}
+                {option ? (
+                  <AFTag label={option.label} toneIndex={option.toneIndex} />
+                ) : (
+                  status && <AFTag label="Not started" toneIndex={notStarted?.toneIndex ?? 4} />
+                )}
               </li>
             );
           })}
