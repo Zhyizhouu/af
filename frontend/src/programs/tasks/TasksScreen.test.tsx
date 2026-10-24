@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import { openScope } from '../../data/db';
 import { TasksWidget } from '../dashboard/widgets/TasksWidget';
-import { createPage, listPages, savePageValue, seedDefaultProperties } from './store';
+import { createPage, fillTaskDefaults, listPages, savePageValue, seedDefaultProperties } from './store';
 import { TasksScreen } from './TasksScreen';
 
 vi.mock('../../app/session', () => ({
@@ -209,6 +209,87 @@ describe('Console view drag and move', () => {
     fireEvent.keyDown(chip, { key: 'ArrowRight', altKey: true });
 
     await waitFor(async () => expect(await valuesOf('Key me')).toMatchObject({ [priority]: high, [status]: progress }));
+  });
+});
+
+describe('Console view unset row and column', () => {
+  beforeEach(fillTaskDefaults);
+
+  const cellOf = (priorityId: string, statusId: string) =>
+    document.querySelector<HTMLElement>(`[data-triage-priority="${priorityId}"][data-triage-status="${statusId}"]`)!;
+
+  const orphaned = async (title: string) => {
+    const page = await createPage(title);
+    await savePageValue(page.id, priority, 'seed:priority:gone');
+    return page;
+  };
+
+  it('shows no Unset row or column while every page has real values', async () => {
+    await createPage('Fine');
+    render(<TasksScreen />);
+    await screen.findByRole('button', { name: 'Fine' });
+    expect(screen.queryByRole('rowheader', { name: 'Unset' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Unset' })).toBeNull();
+  });
+
+  it('shows a page with an orphaned priority in the Unset row', async () => {
+    await orphaned('Lost');
+    render(<TasksScreen />);
+    const chip = await screen.findByRole('button', { name: 'Lost' });
+    const row = chip.closest('tr') as HTMLElement;
+    expect(within(row).getByRole('rowheader')).toHaveTextContent('Unset');
+    expect(chip.closest('td')).toHaveClass('is-unset');
+    expect(screen.queryByRole('columnheader', { name: 'Unset' })).toBeNull();
+  });
+
+  it('shows a page with a cleared status in the Unset column', async () => {
+    const page = await createPage('Blank');
+    await savePageValue(page.id, status, null);
+    render(<TasksScreen />);
+    const chip = await screen.findByRole('button', { name: 'Blank' });
+    const row = chip.closest('tr') as HTMLElement;
+    const column = Array.from(row.children).indexOf(chip.closest('td') as HTMLElement);
+    const headers = screen.getAllByRole('columnheader');
+    expect(headers[headers.length - 1]).toHaveTextContent('Unset');
+    expect(headers[column - 1]).toHaveTextContent('Unset');
+  });
+
+  it('sets the value when a page is dragged from the Unset row to a real cell', async () => {
+    vi.stubGlobal('PointerEvent', TestPointerEvent);
+    await orphaned('Lost');
+    render(<TasksScreen />);
+    const chip = await screen.findByRole('button', { name: 'Lost' });
+    const target = cellOf(medium, notStarted);
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => target });
+
+    fireEvent.pointerDown(chip, { clientX: 10, clientY: 10, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 40, clientY: 60 });
+    fireEvent.pointerUp(window, { clientX: 40, clientY: 60 });
+
+    await waitFor(async () => expect(await valuesOf('Lost')).toMatchObject({ [priority]: medium, [status]: notStarted }));
+    delete (document as { elementFromPoint?: unknown }).elementFromPoint;
+    vi.unstubAllGlobals();
+  });
+
+  it('does not accept a drop into an Unset cell', async () => {
+    vi.stubGlobal('PointerEvent', TestPointerEvent);
+    await orphaned('Lost');
+    const page = await createPage('Mover');
+    await savePageValue(page.id, priority, high);
+    render(<TasksScreen />);
+    const chip = await screen.findByRole('button', { name: 'Mover' });
+    const target = document.querySelector<HTMLElement>('.tsk-grid__cell.is-unset')!;
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => target });
+
+    fireEvent.pointerDown(chip, { clientX: 10, clientY: 10, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 40, clientY: 60 });
+    expect(target).not.toHaveClass('is-over');
+    fireEvent.pointerUp(window, { clientX: 40, clientY: 60 });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await valuesOf('Mover')).toMatchObject({ [priority]: high, [status]: notStarted });
+    delete (document as { elementFromPoint?: unknown }).elementFromPoint;
+    vi.unstubAllGlobals();
   });
 });
 

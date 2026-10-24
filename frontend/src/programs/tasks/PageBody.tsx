@@ -30,26 +30,46 @@ export function PageBody({ page, onChange }: { page: TaskPageRow; onChange: () =
   const [slash, setSlash] = useState<{ query: string; top: number; left: number } | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const draft = useRef<{ id: string; html: string } | null>(null);
+  const focused = useRef(false);
+  const shownId = useRef<string | null>(null);
+  const saved = useRef(sanitizeBody(page.body));
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
   // A different page opened into the same still-mounted detail view — resync
   // the editable surface, mirroring `PageDetail`'s own title resync.
   useEffect(() => {
-    if (editor.current) editor.current.innerHTML = sanitizeBody(page.body);
-    setSlash(null);
-  }, [page.id]);
+    const el = editor.current;
+    if (!el) return;
+    const sameBody = shownId.current === page.id;
+    saved.current = sanitizeBody(page.body);
+    if (sameBody && (focused.current || draft.current)) return;
+    shownId.current = page.id;
+    if (!sameBody) setSlash(null);
+    if (sanitizeBody(el.innerHTML) !== saved.current) el.innerHTML = saved.current;
+  }, [page.id, page.body]);
+
+  const save = (id: string, html: string) => {
+    const clean = sanitizeBody(html);
+    if (clean === saved.current) return;
+    saved.current = clean;
+    void savePageField(id, { body: clean }).then(onChangeRef.current);
+  };
 
   const commit = () => {
-    if (!editor.current) return;
+    focused.current = false;
+    const el = editor.current;
+    if (!el) return;
+    const edited = draft.current;
     draft.current = null;
-    void savePageField(page.id, { body: sanitizeBody(editor.current.innerHTML) }).then(onChange);
+    if (edited) save(page.id, el.innerHTML);
+    else if (sanitizeBody(el.innerHTML) !== saved.current) el.innerHTML = saved.current;
   };
 
   useEffect(
     () => () => {
       const pending = draft.current;
-      if (pending) void savePageField(pending.id, { body: sanitizeBody(pending.html) }).then(onChangeRef.current);
+      if (pending) save(pending.id, pending.html);
     },
     [],
   );
@@ -165,6 +185,9 @@ export function PageBody({ page, onChange }: { page: TaskPageRow; onChange: () =
         className="tsk__body-editor"
         contentEditable
         suppressContentEditableWarning
+        onFocus={() => {
+          focused.current = true;
+        }}
         onBlur={commit}
         onInput={onInput}
         onKeyDown={onKeyDown}

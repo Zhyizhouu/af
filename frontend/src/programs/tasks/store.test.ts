@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, openScope } from '../../data/db';
 import {
   addOption,
@@ -260,6 +260,61 @@ describe('migrateTaskProperties', () => {
   });
 });
 
+describe('migrateTaskProperties once per scope', () => {
+  it('does nothing on a second call even if an option is later named In Correction', async () => {
+    await seedDefaultProperties();
+    await migrateTaskProperties();
+    const status = (await db().taskProperties.get('seed:status'))!;
+    await renameOption('seed:status', 'seed:status:in-correction', 'In Correction');
+    const renamed = (await db().taskProperties.get('seed:status'))!;
+    expect(renamed.updatedAt).toBeGreaterThanOrEqual(status.updatedAt);
+
+    await migrateTaskProperties();
+
+    expect(await db().taskProperties.get('seed:status')).toEqual(renamed);
+    expect(
+      (await db().taskProperties.get('seed:status'))!.options.find((o) => o.id === 'seed:status:in-correction')!.label,
+    ).toBe('In Correction');
+  });
+
+  it('still runs when storage is unavailable', async () => {
+    await seedDefaultProperties();
+    await renameOption('seed:status', 'seed:status:in-correction', 'In Correction');
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+
+    await migrateTaskProperties();
+
+    spy.mockRestore();
+    set.mockRestore();
+    const option = (await db().taskProperties.get('seed:status'))!.options.find(
+      (o) => o.id === 'seed:status:in-correction',
+    )!;
+    expect(option.label).toBe('Quality Check');
+  });
+});
+
+describe('createPage initial values', () => {
+  it('merges initial values over the defaults in a single write', async () => {
+    await seedDefaultProperties();
+    const writes = vi.spyOn(db().taskPages, 'put');
+
+    const page = await createPage('X', { 'seed:priority': 'seed:priority:high' });
+
+    expect(writes).toHaveBeenCalledTimes(1);
+    expect(page.values).toEqual({
+      'seed:status': 'seed:status:not-started',
+      'seed:priority': 'seed:priority:high',
+    });
+    expect((await db().taskPages.get(page.id))!.values).toEqual(page.values);
+    writes.mockRestore();
+  });
+});
+
 describe('createPage default priority', () => {
   it('sets both defaults from the seeded properties', async () => {
     await seedDefaultProperties();
@@ -340,6 +395,34 @@ describe('fillTaskDefaults', () => {
     expect((await get('set')).updatedAt).toBe(1);
     expect((await get('removed')).updatedAt).toBe(1);
     expect((await get('removed')).values).toEqual({});
+  });
+});
+
+describe('fillTaskDefaults once per scope', () => {
+  it('leaves a value orphaned after the first run alone', async () => {
+    await seedDefaultProperties();
+    const page = await createPage('P');
+    await fillTaskDefaults();
+    await savePageValue(page.id, 'seed:priority', 'gone');
+    await savePageValue(page.id, 'seed:status', null);
+    const before = (await db().taskPages.get(page.id))!;
+
+    await fillTaskDefaults();
+
+    expect(await db().taskPages.get(page.id)).toEqual(before);
+  });
+
+  it('does not use up the run while there are no properties to default from', async () => {
+    const page = await createPage('P');
+    await fillTaskDefaults();
+    await seedDefaultProperties();
+
+    await fillTaskDefaults();
+
+    expect((await db().taskPages.get(page.id))!.values).toEqual({
+      'seed:status': 'seed:status:not-started',
+      'seed:priority': 'seed:priority:medium',
+    });
   });
 });
 

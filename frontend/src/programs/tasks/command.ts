@@ -1,4 +1,5 @@
 import type { TaskPropertyOption } from '../../data/db';
+import { statusRole, type StatusRole } from './roles';
 
 export interface TaskCommandToken {
   kind: 'status' | 'priority';
@@ -30,17 +31,17 @@ export const initials = (label: string): string =>
     .map((word) => word[0])
     .join('');
 
-const statusAliases: Record<string, string> = { start: 'not started' };
+const statusAliases: Record<string, StatusRole> = { start: 'todo' };
 
 function matchOption(
   word: string,
   options: readonly TaskPropertyOption[],
-  aliases: Record<string, string> = {},
+  aliases: Record<string, StatusRole> = {},
 ): TaskPropertyOption | undefined {
   const needle = word.toLowerCase();
   const aliased = aliases[needle];
   if (aliased) {
-    const target = options.find((option) => option.label.trim().toLowerCase() === aliased);
+    const target = options.find((option) => statusRole({ options }, option) === aliased);
     if (target) return target;
   }
   return (

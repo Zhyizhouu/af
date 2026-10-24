@@ -17,6 +17,7 @@ import { isPageDone } from '../../data/agenda';
 import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../data/db';
 import { initials, parseTaskCommand, startsMatch, type TaskCommandResult } from './command';
 import { PriorityText } from './PriorityText';
+import { optionOfPage, priorityRank, statusUrgency } from './roles';
 import { StatusBadge, toneStyle } from './StatusBadge';
 import { defaultOptions, findPriorityProperty, savePageValue } from './store';
 import type { TriageDrag } from './useTriageDrag';
@@ -26,6 +27,8 @@ const placeholder = 'New page… try: Grade quiz 3 !high >progress';
 const pickedPlaceholder = 'Add !priority or >status and press Enter';
 
 const maxRows = 8;
+const emptyTitleHint = 'Type a title first';
+const failedHint = 'Could not add, try again';
 const shakeMs = 260;
 const addedMs = 900;
 const flightMs = 420;
@@ -47,13 +50,6 @@ const isTitleCase = (label: string): boolean => {
   const words = label.split(/\s+/).filter(Boolean);
   return words.length >= 2 && words.every((word) => /^\p{Lu}/u.test(word));
 };
-const statusUrgency = ['in progress', 'quality check', 'not started'];
-
-const urgencyOf = (label: string | undefined): number => {
-  const at = statusUrgency.indexOf(label?.trim().toLowerCase() ?? '');
-  return at < 0 ? statusUrgency.length : at;
-};
-
 /**
  * The quick-add tag that resolves to `option`: the first of its initials (only
  * for a Title Case label of two or more words, so "Quality Check" is `>qc`),
@@ -125,7 +121,7 @@ interface CommandBarProps {
  */
 export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen }: CommandBarProps) {
   const [text, setText] = useState('');
-  const [hint, setHint] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [active, setActive] = useState(0);
   const [suggest, setSuggest] = useState(0);
@@ -134,6 +130,7 @@ export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen }
   const [added, setAdded] = useState(false);
   const [flight, setFlight] = useState<Flight | null>(null);
   const alive = useRef(true);
+  const submitting = useRef(false);
   const timers = useRef(new Set<number>());
   const inputRef = useRef<HTMLInputElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -158,16 +155,14 @@ export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen }
   const matches = useMemo(() => {
     if (!finding) return [];
     const needle = text.slice(1).trim().toLowerCase();
-    const priorityRank = (page: TaskPageRow) => {
-      const at = priority ? priorityOptions.findIndex((option) => option.id === page.values[priority.id]) : -1;
-      return at < 0 ? priorityOptions.length : at;
-    };
-    const statusRank = (page: TaskPageRow) =>
-      urgencyOf(statusOptions.find((option) => option.id === (status && page.values[status.id]))?.label);
+    const priorityOwner = priority ?? { options: [] };
+    const statusOwner = status ?? { options: [] };
+    const rankPriority = (page: TaskPageRow) => priorityRank(priorityOwner, optionOfPage(priority, page));
+    const rankStatus = (page: TaskPageRow) => statusUrgency(statusOwner, optionOfPage(status, page));
     return pages
       .filter((page) => !isPageDone(page, properties) && page.title.toLowerCase().includes(needle))
-      .sort((a, b) => priorityRank(a) - priorityRank(b) || statusRank(a) - statusRank(b));
-  }, [finding, text, pages, properties, priority, priorityOptions, status, statusOptions]);
+      .sort((a, b) => rankPriority(a) - rankPriority(b) || rankStatus(a) - rankStatus(b));
+  }, [finding, text, pages, properties, priority, status]);
   const rows = matches.slice(0, maxRows);
   const activeRow = Math.min(active, rows.length - 1);
 
@@ -282,19 +277,29 @@ export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen }
   );
 
   function submit() {
+    if (submitting.current) return;
     if (!command.title) {
-      setHint(true);
+      setHint(emptyTitleHint);
       setShaking(true);
       later(() => setShaking(false), shakeMs);
       return;
     }
     const from = inputRef.current?.getBoundingClientRect();
     const title = command.title;
-    setText('');
-    setHint(false);
-    void Promise.resolve(onSubmit(command)).then((pageId) => {
-      if (typeof pageId === 'string' && alive.current) celebrate(pageId, title, from);
-    });
+    submitting.current = true;
+    setHint(null);
+    new Promise<string | void>((resolve) => resolve(onSubmit(command))).then(
+      (pageId) => {
+        submitting.current = false;
+        if (!alive.current) return;
+        setText('');
+        if (typeof pageId === 'string') celebrate(pageId, title, from);
+      },
+      () => {
+        submitting.current = false;
+        if (alive.current) setHint(failedHint);
+      },
+    );
   }
 
   function pick(page: TaskPageRow) {
@@ -428,7 +433,7 @@ export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen }
             value={text}
             onChange={(event) => {
               setText(event.target.value);
-              setHint(false);
+              setHint(null);
               setActive(0);
               setSuggest(0);
               track(event.target);
@@ -534,7 +539,7 @@ export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen }
           )}
           {hint && (
             <span role="alert" className="tsk-command__hint">
-              Type a title first
+              {hint}
             </span>
           )}
         </div>

@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { openScope } from '../../data/db';
-import { createPage, listPages, savePageValue, seedDefaultProperties } from './store';
+import { CommandBar } from './CommandBar';
+import type { TaskCommandResult } from './command';
+import { createPage, listPages, listProperties, savePageValue, seedDefaultProperties } from './store';
 import { TasksScreen } from './TasksScreen';
+import { useTriageDrag } from './useTriageDrag';
 
 vi.mock('../../app/session', () => ({
   useSession: () => ({ revision: 0, requestSync: () => {} }),
@@ -231,5 +234,76 @@ describe('Command bar tags', () => {
     fireEvent.scroll(input);
 
     expect(mirror.scrollLeft).toBe(120);
+  });
+});
+
+describe('Command bar submit', () => {
+  const runAction = async (action: () => Promise<unknown>) => {
+    await action();
+  };
+
+  function Bar({ onSubmit, properties }: { onSubmit: (c: TaskCommandResult) => Promise<string | void>; properties: Awaited<ReturnType<typeof listProperties>> }) {
+    const drag = useTriageDrag(runAction, undefined, undefined);
+    return (
+      <>
+        {drag.layer}
+        <CommandBar properties={properties} pages={[]} drag={drag} commit={runAction} onSubmit={onSubmit} onOpen={() => {}} />
+      </>
+    );
+  }
+
+  const typed = async (onSubmit: (c: TaskCommandResult) => Promise<string | void>) => {
+    render(<Bar onSubmit={onSubmit} properties={await listProperties()} />);
+    const input = await screen.findByLabelText('New page command');
+    fireEvent.change(input, { target: { value: 'Write notes !high' } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+    return input;
+  };
+
+  it('keeps the text and shows a retry hint when the save rejects', async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new Error('offline'));
+    const input = await typed(onSubmit);
+
+    expect(await screen.findByText('Could not add, try again')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not add, try again');
+    expect(input).toHaveValue('Write notes !high');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the text and shows the hint when onSubmit throws synchronously', async () => {
+    const input = await typed(() => {
+      throw new Error('boom');
+    });
+
+    expect(await screen.findByText('Could not add, try again')).toBeInTheDocument();
+    expect(input).toHaveValue('Write notes !high');
+  });
+
+  it('clears the text only after the save resolves, and ignores Enter while it is pending', async () => {
+    let finish: (id: string) => void = () => {};
+    const onSubmit = vi.fn(() => new Promise<string>((resolve) => (finish = resolve)));
+    const input = await typed(onSubmit);
+
+    expect(input).toHaveValue('Write notes !high');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+
+    finish('page-1');
+    await waitFor(() => expect(input).toHaveValue(''));
+    expect(screen.queryByText('Could not add, try again')).toBeNull();
+  });
+
+  it('retries after a failure and clears the hint once it succeeds', async () => {
+    const onSubmit = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce('page-1');
+    const input = await typed(onSubmit);
+    await screen.findByText('Could not add, try again');
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(input).toHaveValue(''));
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Could not add, try again')).toBeNull();
   });
 });

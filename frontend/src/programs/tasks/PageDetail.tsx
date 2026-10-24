@@ -19,7 +19,7 @@ import { tintStyle, toneColor } from '../../data/tones';
 import { dateValueFromKey, dateValueKey } from './dateValue';
 import { IconPicker } from './IconPicker';
 import { PageBody } from './PageBody';
-import { deletePage, savePageField, savePageValue } from './store';
+import { deletePage, findPriorityProperty, savePageField, savePageValue } from './store';
 
 /**
  * One page's detail: icon, title, and one field per active property.
@@ -92,6 +92,8 @@ export function PageDetail({
   };
 
   useEffect(() => commitTitle, []);
+
+  const priorityId = findPriorityProperty(properties)?.id;
 
   const setValue = (propertyId: string, value: unknown) => {
     void savePageValue(page.id, propertyId, value).then(onChange);
@@ -212,6 +214,7 @@ export function PageDetail({
             <PropertyValueInput
               key={`${page.id}:${property.id}`}
               property={property}
+              required={property.type === 'status' || property.id === priorityId}
               value={page.values[property.id]}
               onChange={(value) => setValue(property.id, value)}
             />
@@ -272,10 +275,12 @@ function PropertyTypeIcon({ type }: { type: TaskPropertyType }) {
 
 function PropertyValueInput({
   property,
+  required,
   value,
   onChange,
 }: {
   property: TaskPropertyRow;
+  required: boolean;
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
@@ -311,13 +316,11 @@ function PropertyValueInput({
     case 'date': {
       const iso = typeof value === 'number' ? dateValueKey(value) : '';
       return (
-        <Input
+        <DraftInput
           type="date"
           className="inset-field rounded-[10px]"
-          defaultValue={iso}
-          onChange={(event) =>
-            onChange(event.target.value ? dateValueFromKey(event.target.value) : null)
-          }
+          saved={iso}
+          onCommit={(text) => onChange(text ? dateValueFromKey(text) : null)}
         />
       );
     }
@@ -345,7 +348,10 @@ function PropertyValueInput({
                 type="button"
                 className={`tsk__option tsk__pill${active ? ' is-active glow-active' : ''}`}
                 style={tintStyle(color)}
-                onClick={() => onChange(active ? null : option.id)}
+                onClick={() => {
+                  if (active && required) return;
+                  onChange(active ? null : option.id);
+                }}
               >
                 {option.label}
               </button>
@@ -396,33 +402,50 @@ function DraftInput({
   type?: string;
   className?: string;
 }) {
+  const [shown, setShown] = useState(saved);
   const draft = useRef(saved);
-  const last = useRef(saved);
+  const savedRef = useRef(saved);
+  const dirty = useRef(false);
+  const focused = useRef(false);
   const commitRef = useRef(onCommit);
   commitRef.current = onCommit;
+  savedRef.current = saved;
 
-  useEffect(
-    () => () => {
-      if (draft.current === last.current) return;
-      last.current = draft.current;
-      commitRef.current(draft.current);
-    },
-    [],
-  );
+  const flush = () => {
+    if (!dirty.current) return;
+    dirty.current = false;
+    if (draft.current !== savedRef.current) commitRef.current(draft.current);
+  };
+
+  useEffect(() => {
+    if (focused.current || dirty.current) return;
+    draft.current = saved;
+    setShown(saved);
+  }, [saved]);
+
+  useEffect(() => flush, []);
 
   return (
     <Input
       type={type}
       className={className}
       placeholder="Empty"
-      defaultValue={saved}
-      onChange={(event) => {
-        draft.current = event.target.value;
+      value={shown}
+      onFocus={() => {
+        focused.current = true;
       }}
-      onBlur={(event) => {
+      onChange={(event) => {
+        dirty.current = true;
         draft.current = event.target.value;
-        last.current = draft.current;
-        onCommit(draft.current);
+        setShown(event.target.value);
+      }}
+      onBlur={() => {
+        focused.current = false;
+        if (dirty.current) flush();
+        else {
+          draft.current = savedRef.current;
+          setShown(savedRef.current);
+        }
       }}
     />
   );

@@ -112,10 +112,10 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
   const createFromCommand = async (command: TaskCommandResult) => {
     let pageId = '';
     await commit(async () => {
-      const page = await createPage(command.title);
-      pageId = page.id;
-      if (status && command.statusId) await savePageValue(page.id, status.id, command.statusId);
-      if (priority && command.priorityId) await savePageValue(page.id, priority.id, command.priorityId);
+      const initial: Record<string, unknown> = {};
+      if (status && command.statusId) initial[status.id] = command.statusId;
+      if (priority && command.priorityId) initial[priority.id] = command.priorityId;
+      pageId = (await createPage(command.title, initial)).id;
     });
     return pageId;
   };

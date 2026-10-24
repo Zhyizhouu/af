@@ -719,6 +719,16 @@
     0 0 16px color-mix(in srgb, var(--c-accent, var(--color-ring)) 40%, transparent);
 }
 
+.tsk-grid__cell.is-unset {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--color-card) 55%, transparent);
+}
+
+.tsk-grid thead th.tsk-grid__unset {
+  font-style: italic;
+  font-weight: 500;
+}
+
 .tsk-grid__cell.is-hot {
   background: color-mix(in srgb, var(--color-destructive) 8%, var(--color-card));
   border-color: color-mix(in srgb, var(--color-destructive) 35%, var(--color-border));

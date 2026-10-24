@@ -32,7 +32,7 @@ interface Hover {
 
 function resolveHover(x: number, y: number): Hover | null {
   const cell = document.elementFromPoint(x, y)?.closest<HTMLElement>('.tsk-grid__cell');
-  if (!cell) return null;
+  if (!cell || cell.classList.contains('is-unset')) return null;
   return { priority: cell.dataset.triagePriority, status: cell.dataset.triageStatus };
 }
 

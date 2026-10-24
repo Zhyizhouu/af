@@ -1,4 +1,5 @@
 import { dateValueFromKey, dateValueKey } from '../programs/tasks/dateValue';
+import { isDoneOption } from '../programs/tasks/roles';
 import { db, type CalendarEventRow, type ProctorSessionRow, type TaskPageRow, type TaskPropertyRow } from './db';
 
 /**
@@ -75,13 +76,12 @@ export const entryFromTaskPage = (page: TaskPageRow, property: TaskPropertyRow, 
 };
 
 /** True when the page's Status-type property (if it has one) resolves to an
- *  option labelled "Done" — the same word Task Tracker's own seeded default
- *  uses (`programs/tasks/store.ts`'s `seedDefaultProperties`). */
+ *  option playing the done role (`programs/tasks/roles.ts`). */
 export const isPageDone = (page: TaskPageRow, properties: TaskPropertyRow[]): boolean => {
   const status = properties.find((property) => property.type === 'status');
   if (!status) return false;
   const option = status.options.find((candidate) => candidate.id === page.values[status.id]);
-  return option?.label.trim().toLowerCase() === 'done';
+  return isDoneOption(status, option);
 };
 
 /**

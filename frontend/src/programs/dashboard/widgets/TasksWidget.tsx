@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '../../../components/ui/button';
 import { useSession } from '../../../app/session';
 import { OptionMark, OptionMenu } from '../../tasks/OptionMenu';
+import { optionOfPage, priorityRank, statusUrgency } from '../../tasks/roles';
 import {
   findPriorityProperty,
   listPages,
@@ -13,18 +14,13 @@ import {
 import { isPageDone } from '../../../data/agenda';
 import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../../data/db';
 
-const statusUrgency = ['in progress', 'quality check', 'not started'];
+const emptyOwner = { options: [] };
 
-const optionIndex = (property: TaskPropertyRow | undefined, page: TaskPageRow): number => {
-  const index = property?.options.findIndex((option) => option.id === page.values[property.id]) ?? -1;
-  return index < 0 ? Number.MAX_SAFE_INTEGER : index;
-};
+const optionIndex = (property: TaskPropertyRow | undefined, page: TaskPageRow): number =>
+  priorityRank(property ?? emptyOwner, optionOfPage(property, page));
 
-const statusRank = (status: TaskPropertyRow | undefined, page: TaskPageRow): number => {
-  const label = status?.options.find((option) => option.id === page.values[status.id])?.label;
-  const rank = statusUrgency.indexOf(label?.trim().toLowerCase() ?? '');
-  return rank < 0 ? statusUrgency.length : rank;
-};
+const statusRank = (status: TaskPropertyRow | undefined, page: TaskPageRow): number =>
+  statusUrgency(status ?? emptyOwner, optionOfPage(status, page));
 
 /**
  * The single page to work on next, with the few after it.
