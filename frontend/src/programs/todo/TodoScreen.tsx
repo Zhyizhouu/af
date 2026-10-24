@@ -8,9 +8,11 @@ import { useSession } from '../../app/session';
 import type { TodoItemRow } from '../../data/db';
 import { dayFromKey, jakartaDayKey, keyFromDay } from '../habits/time';
 import { addTodo, deleteTodo, listTodosInRange, toggleTodo } from './store';
+import { useTodoDrag } from './useTodoDrag';
 
 type View = 'day' | 'week' | 'month';
 type After = (action: () => Promise<unknown>) => Promise<void>;
+type RowProps = ReturnType<ReturnType<typeof useTodoDrag>['row']>;
 
 const views: { id: View; label: string }[] = [
   { id: 'day', label: 'Day' },
@@ -22,6 +24,13 @@ const dayFormat = new Intl.DateTimeFormat(undefined, {
   weekday: 'short',
   day: 'numeric',
   month: 'short',
+  timeZone: 'UTC',
+});
+const weekdayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: 'UTC' });
+const dayLongFormat = new Intl.DateTimeFormat(undefined, {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
   timeZone: 'UTC',
 });
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -110,6 +119,8 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
     },
     [reload, requestSync],
   );
+
+  const drag = useTodoDrag(after);
 
   const forDay = (key: string) => items.filter((item) => item.day === key);
 
@@ -204,7 +215,7 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
       <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto">
         {view === 'day' && (
           <>
-            <div className="surface-3d shrink-0 rounded-2xl p-5">
+            <div data-todo-day={day} className={cn('surface-3d shrink-0 rounded-2xl p-5', drag.over(day))}>
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-[15px] font-semibold">
                   {day === today ? 'Today' : dayFormat.format(dayFromKey(day))}
@@ -228,11 +239,13 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
               </div>
 
               {open.length === 0 ? (
-                <p className="mt-3 text-[13px] text-muted-foreground">Nothing open on this day.</p>
+                <p data-todo-empty className="mt-3 text-[13px] text-muted-foreground">
+                  Nothing open on this day.
+                </p>
               ) : (
                 <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0">
-                  {open.map((item) => (
-                    <TodoRow key={item.id} item={item} after={after} />
+                  {open.map((item, index) => (
+                    <TodoRow key={item.id} item={item} after={after} rowProps={drag.row(item, index)} />
                   ))}
                 </ul>
               )}
@@ -269,53 +282,88 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
         )}
 
         {view === 'week' && (
-          <div
-            className={cn('grid shrink-0 gap-2', paneWidth === 'split' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-7')}
-          >
+          <div className="surface-3d shrink-0 rounded-2xl">
             {Array.from({ length: 7 }, (_, index) => addDays(from, index)).map((key) => {
               const dayItems = forDay(key);
               const dayOpen = dayItems.filter((item) => !item.checked);
               const done = dayItems.length - dayOpen.length;
+              const wide = paneWidth !== 'split';
+              const isToday = key === today;
+              const muted = key < today;
               return (
                 <div
                   key={key}
+                  data-todo-day={key}
                   className={cn(
-                    'surface-3d flex min-w-0 flex-col gap-2 rounded-2xl border border-transparent p-3',
-                    key === today && 'border-white/25',
+                    'group/row grid grid-cols-[56px_minmax(0,1fr)] gap-x-4 border-t border-white/[0.06] px-4 py-4 first:border-t-0',
+                    wide && 'md:grid-cols-[92px_minmax(0,1fr)_auto] md:gap-x-5 md:px-5',
+                    drag.over(key),
                   )}
                 >
                   <button
                     type="button"
+                    aria-label={`Open ${dayLongFormat.format(dayFromKey(key))}`}
                     className={cn(
-                      'text-left text-[13px] font-semibold',
-                      key === today ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                      'row-span-2 flex flex-col items-start gap-1 self-start rounded-md text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                      wide && 'md:row-span-1',
                     )}
                     onClick={() => pick(key)}
                   >
-                    {dayFormat.format(dayFromKey(key))}
+                    <span
+                      className={cn(
+                        'text-[11.5px] font-semibold tracking-widest uppercase',
+                        isToday ? 'text-foreground' : 'text-muted-foreground',
+                      )}
+                    >
+                      {weekdayFormat.format(dayFromKey(key))}
+                      {wide && isToday && <span className="max-md:hidden"> · Today</span>}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-[24px] leading-none font-semibold tabular-nums',
+                        wide && 'md:text-[30px]',
+                        isToday ? 'text-glow' : muted && 'text-muted-foreground',
+                      )}
+                    >
+                      {dayFromKey(key).getUTCDate()}
+                    </span>
                   </button>
-                  {dayOpen.length > 0 && (
-                    <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-                      {dayOpen.map((item) => (
-                        <li key={item.id} className="flex items-center gap-2">
-                          <Checkbox
-                            checked={false}
-                            onCheckedChange={() => void after(() => toggleTodo(item.id))}
-                            aria-label={item.text}
-                            className="inset-field size-4 rounded-[5px] border-white/10 text-white"
-                          />
-                          <span className="min-w-0 flex-1 truncate text-[13px]">{item.text}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {done > 0 && <span className="text-[11.5px] text-muted-foreground">{done} archived</span>}
-                  <WeekAdd
-                    open={weekAddDay === key}
-                    onOpen={() => setWeekAddDay(key)}
-                    onClose={() => setWeekAddDay((current) => (current === key ? null : current))}
-                    onAdd={(value) => after(() => addTodo(value, key))}
-                  />
+
+                  <div className="flex min-w-0 flex-col gap-2.5">
+                    {dayOpen.length === 0 ? (
+                      <p data-todo-empty className="m-0 text-[13px] text-muted-foreground">
+                        Nothing open.
+                      </p>
+                    ) : (
+                      <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-x-6 gap-y-[9px] p-0">
+                        {dayOpen.map((item, index) => (
+                          <WeekItem key={item.id} item={item} after={after} rowProps={drag.row(item, index)} />
+                        ))}
+                      </ul>
+                    )}
+                    <WeekAdd
+                      open={weekAddDay === key}
+                      onOpen={() => setWeekAddDay(key)}
+                      onClose={() => setWeekAddDay((current) => (current === key ? null : current))}
+                      onAdd={(value) => after(() => addTodo(value, key))}
+                    />
+                  </div>
+
+                  <div
+                    className={cn(
+                      'col-start-2 mt-2.5 flex flex-wrap items-center gap-3',
+                      wide && 'md:col-start-3 md:row-start-1 md:mt-0 md:flex-col md:items-end md:gap-2',
+                    )}
+                  >
+                    {done > 0 && (
+                      <span className="inline-flex h-6 shrink-0 items-center rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 text-xs font-medium text-muted-foreground">
+                        {done} archived
+                      </span>
+                    )}
+                    <Button variant="ghost" size="sm" onClick={() => pick(key)}>
+                      Open day
+                    </Button>
+                  </div>
                 </div>
               );
             })}
@@ -342,10 +390,13 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
                   <button
                     key={key}
                     type="button"
+                    data-todo-day={key}
+                    data-todo-append=""
                     className={cn(
                       'flex min-h-[62px] flex-col items-start gap-1 rounded-[10px] border border-white/[0.06] bg-white/[0.02] p-1.5 text-left',
                       key === today && 'border-white/25',
                       key === day && 'glow-active border-white/[0.08]',
+                      drag.over(key),
                     )}
                     onClick={() => setDay(key)}
                   >
@@ -367,7 +418,7 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
         )}
 
         {view === 'month' && (
-          <div className="surface-3d shrink-0 rounded-2xl p-5">
+          <div data-todo-day={day} className={cn('surface-3d shrink-0 rounded-2xl p-5', drag.over(day))}>
             <div className="mb-3 flex items-center justify-between">
               <span className="text-[15px] font-semibold">
                 {day === today ? 'Today' : dayFormat.format(dayFromKey(day))}
@@ -393,11 +444,13 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
             </div>
 
             {open.length === 0 ? (
-              <p className="mt-3 text-[13px] text-muted-foreground">Nothing open on this day.</p>
+              <p data-todo-empty className="mt-3 text-[13px] text-muted-foreground">
+                Nothing open on this day.
+              </p>
             ) : (
               <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0">
-                {open.map((item) => (
-                  <TodoRow key={item.id} item={item} after={after} />
+                {open.map((item, index) => (
+                  <TodoRow key={item.id} item={item} after={after} rowProps={drag.row(item, index)} />
                 ))}
               </ul>
             )}
@@ -405,6 +458,7 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
           </div>
         )}
       </div>
+      {drag.layer}
     </div>
   );
 }
@@ -424,9 +478,14 @@ function WeekAdd({
 
   if (!open) {
     return (
-      <Button variant="ghost" size="xs" className="mt-auto justify-start" onClick={onOpen}>
+      <Button
+        variant="ghost"
+        size="xs"
+        className="w-full justify-start border border-dashed border-transparent text-muted-foreground hover:border-white/10 focus-visible:border-white/10"
+        onClick={onOpen}
+      >
         <Plus size={14} aria-hidden />
-        Add
+        Add an item
       </Button>
     );
   }
@@ -434,7 +493,7 @@ function WeekAdd({
   return (
     <Input
       autoFocus
-      className="inset-field mt-auto h-8 text-[13px]"
+      className="inset-field h-8 w-full text-[13px]"
       placeholder="Add an item…"
       value={text}
       onChange={(event) => setText(event.target.value)}
@@ -449,9 +508,32 @@ function WeekAdd({
   );
 }
 
-function TodoRow({ item, after }: { item: TodoItemRow; after: After }) {
+function WeekItem({ item, after, rowProps }: { item: TodoItemRow; after: After; rowProps: RowProps }) {
   return (
-    <li className="flex items-center gap-2.5">
+    <li {...rowProps} className={cn('group/item flex items-start gap-2.5', rowProps.className)}>
+      <Checkbox
+        checked={false}
+        onCheckedChange={() => void after(() => toggleTodo(item.id))}
+        aria-label={item.text}
+        className="inset-field mt-0.5 size-[18px] shrink-0 rounded-[5px] border-white/10 text-white"
+      />
+      <span className="min-w-0 flex-1 text-sm [overflow-wrap:anywhere]">{item.text}</span>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label="Delete"
+        className="shrink-0 opacity-0 group-focus-within/item:opacity-100 group-hover/item:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+        onClick={() => void after(() => deleteTodo(item.id))}
+      >
+        <X size={14} aria-hidden />
+      </Button>
+    </li>
+  );
+}
+
+function TodoRow({ item, after, rowProps }: { item: TodoItemRow; after: After; rowProps?: RowProps }) {
+  return (
+    <li {...rowProps} className={cn('flex items-center gap-2.5', rowProps?.className)}>
       <Checkbox
         checked={item.checked}
         onCheckedChange={() => void after(() => toggleTodo(item.id))}

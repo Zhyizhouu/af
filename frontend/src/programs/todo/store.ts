@@ -55,3 +55,36 @@ export async function deleteTodo(id: string): Promise<void> {
   if (!existing || existing.deleted) return;
   await db().todoItems.put({ ...existing, deleted: true, updatedAt: Date.now() });
 }
+
+/**
+ * Moves an open item to `toDay` at `toIndex` among that day's open items
+ * (counted with the item itself removed, so it is the index the item ends up
+ * at), then renumbers `sortOrder` 0..n-1 on the target day and, when the day
+ * changed, on the source day. Only rows whose day or order changed are
+ * written, each with a bumped `updatedAt` so the move syncs. Checked items
+ * are archived in place and never move.
+ */
+export async function moveTodo(id: string, toDay: string, toIndex: number): Promise<void> {
+  const table = db().todoItems;
+  await db().transaction('rw', table, async () => {
+    const item = await table.get(id);
+    if (!item || item.deleted || item.checked) return;
+
+    const openOn = async (day: string) => (await listTodosForDay(day)).filter((row) => !row.checked && row.id !== id);
+    const target = await openOn(toDay);
+    const at = Math.max(0, Math.min(Math.trunc(toIndex), target.length));
+    const placed = [...target.slice(0, at), item, ...target.slice(at)];
+
+    const now = Date.now();
+    const changed: TodoItemRow[] = [];
+    placed.forEach((row, index) => {
+      if (row.day !== toDay || row.sortOrder !== index) changed.push({ ...row, day: toDay, sortOrder: index, updatedAt: now });
+    });
+    if (item.day !== toDay) {
+      (await openOn(item.day)).forEach((row, index) => {
+        if (row.sortOrder !== index) changed.push({ ...row, sortOrder: index, updatedAt: now });
+      });
+    }
+    if (changed.length > 0) await table.bulkPut(changed);
+  });
+}
