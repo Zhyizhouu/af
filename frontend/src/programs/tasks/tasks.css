@@ -13,24 +13,17 @@
 .tsk__table-wrap {
   overflow-x: auto;
   border-radius: 16px;
-  /* The table itself is a fixed pixel width now (dragged columns need a real
-     width to drag against) — without this the wrap kept stretching to the
-     page's full width regardless, leaving an empty bordered strip trailing
-     off to the right of a narrower table. `fit-content` hugs the table;
-     `max-width` is what still caps it and turns on the scrollbar once
-     dragged columns actually exceed the page. */
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
 }
 
 .tsk__table {
-  table-layout: fixed;
+  width: 100%;
   border-collapse: collapse;
   font-size: 13.5px;
 }
 
 .tsk__table th {
-  position: relative;
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -39,49 +32,61 @@
   padding: 10px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   white-space: nowrap;
+}
+
+.tsk__table th,
+.tsk__table td {
+  width: 1%;
+}
+
+.tsk__table td {
+  white-space: nowrap;
+}
+
+.tsk__table .tsk__col-title {
+  width: auto;
+  white-space: normal;
+}
+
+.tsk__col--text,
+.tsk__col--url {
+  min-width: 140px;
+}
+
+.tsk__col--select,
+.tsk__col--status,
+.tsk__col--multiSelect {
+  min-width: 120px;
+}
+
+.tsk__col--date {
+  min-width: 110px;
+}
+
+.tsk__col--number,
+.tsk__col--checkbox {
+  min-width: 72px;
+}
+
+.tsk__cell-text {
+  display: inline-block;
+  max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 
-/* A grab strip on each column's right edge — dragged widths persist to
-   `localStorage`, see `TasksScreen.tsx`'s `useColumnWidths`. The hit target
-   is wider than what's drawn (a 2px bar), the same asymmetry a window
-   manager's own edge-resize uses — a strip exactly as wide as its visible
-   line is too thin to reliably grab. */
-.tsk__col-resize {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 10px;
-  min-width: 8px;
-  cursor: col-resize;
-  touch-action: none;
+.tsk__cell-set {
+  padding: 2px 8px;
+  border: 1px dashed var(--color-border);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
 }
 
-.tsk__col-resize::after {
-  content: '';
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  right: 4px;
-  width: 2px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  transition: background 120ms ease, box-shadow 120ms ease;
-}
-
-.tsk__col-resize:hover::after {
-  background: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
-}
-
-/* Stays lit for the whole drag — `useColumnWidths` locks the cursor at the
-   same time, so both the pointer icon and this bar agree a drag is still
-   happening even once the pointer has moved off the strip itself. */
-.tsk__col-resize.is-dragging::after {
-  background: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+.tsk__cell-set:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
 }
 
 .tsk__table td {
@@ -237,29 +242,6 @@
 .tsk__ghost-icon:disabled {
   opacity: 0.35;
   cursor: not-allowed;
-}
-
-.tsk__new-row td {
-  padding: 0;
-}
-
-.tsk__new-page {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  border: none;
-  background: none;
-  padding: 9px 12px;
-  color: var(--af-muted);
-  font-size: 13px;
-  cursor: pointer;
-  transition: color 120ms ease, background 120ms ease;
-}
-
-.tsk__new-page:hover {
-  color: var(--af-ink);
-  background: rgba(255, 255, 255, 0.03);
 }
 
 /* ---- side peek ---- */

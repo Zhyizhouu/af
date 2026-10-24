@@ -1,94 +1,183 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AFTag } from '../../../components/AF';
-import { Input } from '../../../components/ui/input';
 import { Button } from '../../../components/ui/button';
 import { useSession } from '../../../app/session';
-import { createPage, listPages, listProperties } from '../../tasks/store';
+import { OptionMark, OptionMenu } from '../../tasks/OptionMenu';
+import {
+  findPriorityProperty,
+  listPages,
+  listProperties,
+  prepareTaskData,
+  savePageValue,
+} from '../../tasks/store';
 import { isPageDone } from '../../../data/agenda';
-import type { TaskPageRow, TaskPropertyRow } from '../../../data/db';
+import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../../data/db';
+
+const statusUrgency = ['in progress', 'quality check', 'not started'];
+
+const optionIndex = (property: TaskPropertyRow | undefined, page: TaskPageRow): number => {
+  const index = property?.options.findIndex((option) => option.id === page.values[property.id]) ?? -1;
+  return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+};
+
+const statusRank = (status: TaskPropertyRow | undefined, page: TaskPageRow): number => {
+  const label = status?.options.find((option) => option.id === page.values[status.id])?.label;
+  const rank = statusUrgency.indexOf(label?.trim().toLowerCase() ?? '');
+  return rank < 0 ? statusUrgency.length : rank;
+};
 
 /**
- * Incomplete Task Tracker pages, plus a quick way to add one.
+ * The single page to work on next, with the few after it.
  *
- * Creating a page here never opens `PageDetail` — a dashboard widget is a
- * glance, not a place to land mid-edit.
+ * Open pages are ordered by priority (first option highest), then by how far
+ * along they are: In progress, then Quality Check, then Not started. "Move to"
+ * advances the status one option; "Not now" only skips locally.
  */
 export function TasksWidget() {
   const { revision, requestSync } = useSession();
   const [pages, setPages] = useState<TaskPageRow[]>([]);
   const [properties, setProperties] = useState<TaskPropertyRow[]>([]);
-  const [title, setTitle] = useState('');
+  const [skipped, setSkipped] = useState(0);
+  const [menu, setMenu] = useState<{ anchor: HTMLElement; propertyId: string } | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const alive = useRef(true);
+
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   const reload = useCallback(async () => {
-    setProperties(await listProperties());
-    setPages(await listPages());
+    await prepareTaskData();
+    const nextProperties = await listProperties();
+    const nextPages = await listPages();
+    if (!alive.current) return;
+    setProperties(nextProperties);
+    setPages(nextPages);
+    setLoaded(true);
   }, []);
 
   useEffect(() => {
     void reload();
   }, [reload, revision]);
 
-  const open = pages.filter((page) => !isPageDone(page, properties));
   const status = properties.find((property) => property.type === 'status');
+  const priority = findPriorityProperty(properties);
 
-  const submit = () => {
-    if (!title.trim()) return;
-    void createPage(title).then(async () => {
-      setTitle('');
+  const queue = pages
+    .filter((page) => !isPageDone(page, properties))
+    .sort(
+      (a, b) =>
+        optionIndex(priority, a) - optionIndex(priority, b) || statusRank(status, a) - statusRank(status, b),
+    );
+  const current = queue.length > 0 ? queue[skipped % queue.length] : undefined;
+  const upcoming = queue.filter((page) => page !== current).slice(0, 3);
+
+  const set = (propertyId: string, pageId: string, optionId: string) =>
+    void (async () => {
+      await savePageValue(pageId, propertyId, optionId);
       await reload();
       requestSync();
-    });
-  };
+    })();
+
+  const optionOf = (property: TaskPropertyRow | undefined, page: TaskPageRow): TaskPropertyOption | undefined =>
+    property?.options.find((option) => option.id === page.values[property.id]);
+
+  const statusOption = current && optionOf(status, current);
+  const priorityOption = current && optionOf(priority, current);
+  const nextStatus =
+    status && statusOption ? status.options[status.options.indexOf(statusOption) + 1] : undefined;
+  const menuProperty = menu && properties.find((property) => property.id === menu.propertyId);
+
+  const open = (propertyId: string) => (anchor: HTMLElement) =>
+    setMenu((existing) => (existing?.anchor === anchor ? null : { anchor, propertyId }));
 
   return (
     <div className="flex h-full flex-col gap-3.5">
       <div className="flex items-center justify-between">
         <h2 className="text-[15px] font-semibold">Tasks</h2>
-        <span className="text-xs text-muted-foreground">{open.length}</span>
+        <span className="text-xs text-muted-foreground">{queue.length} open</span>
       </div>
 
-      <div className="flex gap-2">
-        <Input
-          className="inset-field flex-1"
-          placeholder="New page…"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') submit();
+      {!loaded ? null : !current ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-[15px] font-semibold">Everything is done.</p>
+          <Link to="/tasks" className="text-[13px] text-muted-foreground underline hover:text-foreground">
+            Open Task Tracker
+          </Link>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3">
+            <span className="text-xs font-semibold text-muted-foreground">Do next</span>
+            <h3 className="m-0 text-[21px] leading-tight font-semibold">
+              <Link to="/tasks" className="text-foreground no-underline hover:text-glow">
+                {current.title}
+              </Link>
+            </h3>
+            <div className="flex flex-wrap items-center gap-2">
+              {priority && priorityOption && (
+                <OptionMark
+                  property={priority}
+                  option={priorityOption}
+                  isPriority
+                  onClick={(event) => open(priority.id)(event.currentTarget)}
+                />
+              )}
+              {status && statusOption && (
+                <OptionMark
+                  property={status}
+                  option={statusOption}
+                  isPriority={false}
+                  onClick={(event) => open(status.id)(event.currentTarget)}
+                />
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {status && nextStatus && (
+                <Button size="sm" onClick={() => set(status.id, current.id, nextStatus.id)}>
+                  Move to {nextStatus.label}
+                </Button>
+              )}
+              {queue.length > 1 && (
+                <Button variant="raised" size="sm" onClick={() => setSkipped((count) => count + 1)}>
+                  Not now
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {upcoming.length > 0 && (
+            <ul className="m-0 flex list-none flex-col gap-1.5 border-t border-border p-0 pt-2.5">
+              {upcoming.map((page) => (
+                <li key={page.id} className="flex items-baseline justify-between gap-2 text-[12.5px]">
+                  <span className="min-w-0 [overflow-wrap:anywhere]">{page.title}</span>
+                  <span className="shrink-0 text-muted-foreground">{optionOf(priority, page)?.label}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+
+      {menu && menuProperty && current && (
+        <OptionMenu
+          anchor={menu.anchor}
+          sections={[
+            {
+              property: menuProperty,
+              value: current.values[menuProperty.id],
+              isPriority: menuProperty.id === priority?.id,
+            },
+          ]}
+          onClose={() => setMenu(null)}
+          onPick={(propertyId, optionId) => {
+            setMenu(null);
+            set(propertyId, current.id, optionId);
           }}
         />
-        <Button variant="raised" size="sm" disabled={!title.trim()} onClick={submit}>
-          Add
-        </Button>
-      </div>
-
-      {open.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">Nothing open. New page above, or in Task Tracker.</p>
-      ) : (
-        <ul className="m-0 flex list-none flex-col gap-2 p-0">
-          {open.slice(0, 8).map((page) => {
-            const option = status?.options.find((candidate) => candidate.id === page.values[status.id]);
-            const notStarted = status?.options.find(
-              (candidate) => candidate.label.trim().toLowerCase() === 'not started',
-            );
-            return (
-              <li key={page.id} className="flex items-center justify-between gap-2.5">
-                <Link
-                  to="/tasks"
-                  className="min-w-0 flex-1 truncate text-sm text-foreground no-underline hover:text-glow"
-                >
-                  {page.title}
-                </Link>
-                {option ? (
-                  <AFTag label={option.label} toneIndex={option.toneIndex} />
-                ) : (
-                  status && <AFTag label="Not started" toneIndex={notStarted?.toneIndex ?? 4} />
-                )}
-              </li>
-            );
-          })}
-        </ul>
       )}
     </div>
   );

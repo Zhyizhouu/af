@@ -39,7 +39,7 @@ export async function seedDefaultProperties(): Promise<void> {
     options: [
       { id: seedOptionId('status', 'Not started'), label: 'Not started', toneIndex: 4 },
       { id: seedOptionId('status', 'In progress'), label: 'In progress', toneIndex: 0 },
-      { id: seedOptionId('status', 'In Correction'), label: 'In Correction', toneIndex: 3 },
+      { id: seedOptionId('status', 'In Correction'), label: 'Quality Check', toneIndex: 3 },
       { id: seedOptionId('status', 'Done'), label: 'Done', toneIndex: 1 },
     ],
     sortOrder: 0,
@@ -66,11 +66,39 @@ export async function seedDefaultProperties(): Promise<void> {
   await db().taskProperties.bulkPut([status, priority]);
 }
 
+/** Renames the legacy "In Correction" status option to "Quality Check" on
+ *  every active status property, keeping its id and tone so existing page
+ *  values keep resolving. Idempotent: writes nothing once no option matches. */
+export async function migrateTaskProperties(): Promise<void> {
+  const database = db();
+  await database.transaction('rw', database.taskProperties, async () => {
+    const now = Date.now();
+    const changed: TaskPropertyRow[] = [];
+    const rows = await database.taskProperties.filter((row) => !row.deleted && row.type === 'status').toArray();
+    for (const row of rows) {
+      if (!row.options.some(isLegacyCorrection)) continue;
+      changed.push({
+        ...row,
+        options: row.options.map((option) =>
+          isLegacyCorrection(option) ? { ...option, label: 'Quality Check' } : option,
+        ),
+        updatedAt: now,
+      });
+    }
+    if (changed.length > 0) await database.taskProperties.bulkPut(changed);
+  });
+}
+
+const isLegacyCorrection = (option: TaskPropertyOption): boolean =>
+  option.label.trim().toLowerCase() === 'in correction';
+
 /** Active properties, in column order. */
-export async function listProperties(): Promise<TaskPropertyRow[]> {
-  const rows = await db().taskProperties.filter((row) => !row.deleted).toArray();
+async function activeProperties(database: ReturnType<typeof db>): Promise<TaskPropertyRow[]> {
+  const rows = await database.taskProperties.filter((row) => !row.deleted).toArray();
   return rows.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
 }
+
+export const listProperties = (): Promise<TaskPropertyRow[]> => activeProperties(db());
 
 /**
  * Creates or renames a property. `type` is only honoured on create — an
@@ -227,17 +255,57 @@ export async function listPages(): Promise<TaskPageRow[]> {
     .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
 }
 
+/** The priority property: `seed:priority`, else the first select named
+ *  "priority". Undefined once the user has deleted it. */
+export function findPriorityProperty(
+  properties: readonly TaskPropertyRow[],
+): TaskPropertyRow | undefined {
+  return (
+    properties.find((property) => property.id === 'seed:priority') ??
+    properties.find(
+      (property) => property.type === 'select' && property.name.trim().toLowerCase() === 'priority',
+    )
+  );
+}
+
+/**
+ * The option every page starts with, per property that has one: the first
+ * status property defaults to "not started" (else its first option), and the
+ * priority property (`seed:priority`, else the first select named "priority")
+ * defaults to "medium" (else its middle option). Shared by `createPage` and
+ * `fillTaskDefaults` so a new page and a backfilled one never disagree.
+ */
+export function defaultOptions(
+  properties: readonly TaskPropertyRow[],
+): { property: TaskPropertyRow; option: TaskPropertyOption }[] {
+  const picked: { property: TaskPropertyRow; option: TaskPropertyOption }[] = [];
+
+  const status = properties.find((property) => property.type === 'status');
+  const statusOption =
+    status?.options.find((option) => option.label.trim().toLowerCase() === 'not started') ??
+    status?.options[0];
+  if (status && statusOption) picked.push({ property: status, option: statusOption });
+
+  const priority = findPriorityProperty(properties);
+  const priorityOption =
+    priority?.options.find((option) => option.label.trim().toLowerCase() === 'medium') ??
+    priority?.options[Math.floor((priority.options.length - 1) / 2)];
+  if (priority && priorityOption) picked.push({ property: priority, option: priorityOption });
+
+  return picked;
+}
+
 export async function createPage(title?: string): Promise<TaskPageRow> {
   const now = Date.now();
-  const statusProperty = (await listProperties()).find((property) => property.type === 'status');
-  const defaultOption =
-    statusProperty?.options.find((option) => option.label.trim().toLowerCase() === 'not started') ??
-    statusProperty?.options[0];
+  const values: Record<string, unknown> = {};
+  for (const { property, option } of defaultOptions(await listProperties())) {
+    values[property.id] = option.id;
+  }
   const row: TaskPageRow = {
     id: crypto.randomUUID(),
     title: title?.trim() || 'Untitled',
     icon: null,
-    values: statusProperty && defaultOption ? { [statusProperty.id]: defaultOption.id } : {},
+    values,
     body: '',
     sortOrder: await db().taskPages.count(),
     createdAt: now,
@@ -246,6 +314,52 @@ export async function createPage(title?: string): Promise<TaskPageRow> {
   };
   await db().taskPages.put(row);
   return row;
+}
+
+/**
+ * Gives every active page whose status or priority value is missing, or
+ * points at an option that no longer exists, the same default `createPage`
+ * would. Pages already holding a valid value are untouched, and `updatedAt`
+ * moves only on pages that change.
+ */
+export async function fillTaskDefaults(): Promise<void> {
+  const database = db();
+  await database.transaction('rw', database.taskProperties, database.taskPages, async () => {
+    const defaults = defaultOptions(await activeProperties(database));
+    if (defaults.length === 0) return;
+    const now = Date.now();
+    const changed: TaskPageRow[] = [];
+    const pages = await database.taskPages.filter((row) => !row.deleted).toArray();
+    for (const page of pages) {
+      let values = page.values;
+      for (const { property, option } of defaults) {
+        const current = values[property.id];
+        if (typeof current === 'string' && property.options.some((o) => o.id === current)) continue;
+        values = { ...values, [property.id]: option.id };
+      }
+      if (values !== page.values) changed.push({ ...page, values, updatedAt: now });
+    }
+    if (changed.length > 0) await database.taskPages.bulkPut(changed);
+  });
+}
+
+let sessionPrep: { scope: string; done: Promise<void> } | null = null;
+
+/** Runs `migrateTaskProperties` then `fillTaskDefaults` once per session
+ *  (per open database); every Task Tracker entry point awaits the same
+ *  promise. A failed run is forgotten so the next load retries. */
+export function prepareTaskData(): Promise<void> {
+  const scope = db().name;
+  if (!sessionPrep || sessionPrep.scope !== scope) {
+    const done = migrateTaskProperties()
+      .then(fillTaskDefaults)
+      .catch((error) => {
+        sessionPrep = null;
+        throw error;
+      });
+    sessionPrep = { scope, done };
+  }
+  return sessionPrep.done;
 }
 
 export async function savePageField(

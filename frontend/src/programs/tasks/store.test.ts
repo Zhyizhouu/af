@@ -6,9 +6,11 @@ import {
   deleteOption,
   deletePage,
   deleteProperty,
+  fillTaskDefaults,
   listPages,
   listProperties,
   matchesFilters,
+  migrateTaskProperties,
   moveOption,
   recolorOption,
   renameOption,
@@ -34,7 +36,7 @@ describe('seedDefaultProperties', () => {
     const status = properties.find((p) => p.name === 'Status')!;
     expect(status.type).toBe('status');
     expect(status.options.map((o) => o.label)).toEqual([
-      'Not started', 'In progress', 'In Correction', 'Done',
+      'Not started', 'In progress', 'Quality Check', 'Done',
     ]);
     const priority = properties.find((p) => p.name === 'Priority')!;
     expect(priority.options.map((o) => o.label)).toEqual(['High', 'Medium', 'Low']);
@@ -220,6 +222,124 @@ describe('reorderProperty', () => {
     await reorderProperty(a.id, -1);
 
     expect((await listProperties()).map((p) => p.name)).toEqual(['A', 'B']);
+  });
+});
+
+describe('migrateTaskProperties', () => {
+  async function seedLegacy() {
+    await seedDefaultProperties();
+    const status = (await db().taskProperties.get('seed:status'))!;
+    await db().taskProperties.put({
+      ...status,
+      options: status.options.map((o) =>
+        o.id === 'seed:status:in-correction' ? { ...o, label: ' in correction ' } : o,
+      ),
+      updatedAt: 1,
+    });
+  }
+
+  it('renames the legacy option, keeping its id and tone, and bumps updatedAt', async () => {
+    await seedLegacy();
+
+    await migrateTaskProperties();
+
+    const status = (await db().taskProperties.get('seed:status'))!;
+    const option = status.options.find((o) => o.id === 'seed:status:in-correction')!;
+    expect(option).toEqual({ id: 'seed:status:in-correction', label: 'Quality Check', toneIndex: 3 });
+    expect(status.updatedAt).toBeGreaterThan(1);
+  });
+
+  it('is idempotent and writes nothing when no option matches', async () => {
+    await seedLegacy();
+    await migrateTaskProperties();
+    const first = await db().taskProperties.get('seed:status');
+
+    await migrateTaskProperties();
+
+    expect(await db().taskProperties.get('seed:status')).toEqual(first);
+  });
+});
+
+describe('createPage default priority', () => {
+  it('sets both defaults from the seeded properties', async () => {
+    await seedDefaultProperties();
+
+    const page = await createPage('X');
+
+    expect(page.values['seed:status']).toBe('seed:status:not-started');
+    expect(page.values['seed:priority']).toBe('seed:priority:medium');
+  });
+
+  it('sets status only when there is no priority property', async () => {
+    await seedDefaultProperties();
+    await deleteProperty('seed:priority');
+
+    const page = await createPage('X');
+
+    expect(page.values).toEqual({ 'seed:status': 'seed:status:not-started' });
+  });
+
+  it('falls back to a select named priority, then the middle option', async () => {
+    const priority = await saveProperty({ name: ' Priority ', type: 'select' });
+    await addOption(priority.id, 'Urgent');
+    await addOption(priority.id, 'Normal');
+    await addOption(priority.id, 'Later');
+
+    const page = await createPage('X');
+
+    const options = (await listProperties())[0]!.options;
+    expect(page.values[priority.id]).toBe(options[1]!.id);
+  });
+});
+
+describe('fillTaskDefaults', () => {
+  it('fills missing and dangling values, leaves set ones alone, bumps only changed rows', async () => {
+    await seedDefaultProperties();
+    const base = {
+      icon: null,
+      body: '',
+      sortOrder: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      deleted: false,
+    };
+    await db().taskPages.bulkPut([
+      { ...base, id: 'missing', title: 'm', values: {} },
+      {
+        ...base,
+        id: 'dangling',
+        title: 'd',
+        values: { 'seed:status': 'gone', 'seed:priority': 'seed:priority:low' },
+      },
+      {
+        ...base,
+        id: 'set',
+        title: 's',
+        values: { 'seed:status': 'seed:status:done', 'seed:priority': 'seed:priority:high' },
+      },
+      { ...base, id: 'removed', title: 'r', values: {}, deleted: true },
+    ]);
+
+    await fillTaskDefaults();
+
+    const get = async (id: string) => (await db().taskPages.get(id))!;
+    expect((await get('missing')).values).toEqual({
+      'seed:status': 'seed:status:not-started',
+      'seed:priority': 'seed:priority:medium',
+    });
+    expect((await get('dangling')).values).toEqual({
+      'seed:status': 'seed:status:not-started',
+      'seed:priority': 'seed:priority:low',
+    });
+    expect((await get('set')).values).toEqual({
+      'seed:status': 'seed:status:done',
+      'seed:priority': 'seed:priority:high',
+    });
+    expect((await get('missing')).updatedAt).toBeGreaterThan(1);
+    expect((await get('dangling')).updatedAt).toBeGreaterThan(1);
+    expect((await get('set')).updatedAt).toBe(1);
+    expect((await get('removed')).updatedAt).toBe(1);
+    expect((await get('removed')).values).toEqual({});
   });
 });
 

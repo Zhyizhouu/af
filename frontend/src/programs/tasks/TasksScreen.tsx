@@ -1,118 +1,63 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { FileText, Maximize2, Plus, SlidersHorizontal, Table2, X } from 'lucide-react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { FileText, Maximize2, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Checkbox } from '../../components/ui/checkbox';
 import { cn } from 'cn';
-import { lockCursor } from '../../components/pointerDrag';
 import { useSession } from '../../app/session';
 import { tintStyle, toneColor } from '../../data/tones';
-import {
-  actionsColumnWidth,
-  defaultColumnWidth,
-  defaultTitleWidth,
-  fitColumnWidths,
-  minColumnWidth,
-  titleColumnKey,
-} from './columns';
 import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../data/db';
+import type { TaskCommandResult } from './command';
+import { CommandBar } from './CommandBar';
 import { formatDateValue } from './dateValue';
 import { FilterPanel } from './FilterPanel';
+import { OptionMark, OptionMenu, type MenuSection } from './OptionMenu';
 import { PageDetail } from './PageDetail';
 import { PropertyPanel } from './PropertyPanel';
 import { safeUrl } from './sanitize';
 import {
   createPage,
   deletePage,
+  findPriorityProperty,
   listPages,
   listProperties,
   matchesFilters,
+  prepareTaskData,
+  savePageValue,
   seedDefaultProperties,
   type PropertyFilter,
 } from './store';
+import { TriageGrid } from './TriageGrid';
+import { useTriageDrag } from './useTriageDrag';
 import './tasks.css';
 
 type OpenPage = { id: string; mode: 'peek' | 'fullscreen' };
+type View = 'console' | 'table';
+type MenuState = { anchor: HTMLElement; pageId: string; propertyIds: string[]; withOpen: boolean };
 
-const widthsStorageKey = 'af.tasks.columnWidths';
+const viewStorageKey = 'af.tasks.view';
 
-const loadColumnWidths = (): Record<string, number> => {
+const loadView = (): View => {
   try {
-    const raw = localStorage.getItem(widthsStorageKey);
-    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+    return localStorage.getItem(viewStorageKey) === 'table' ? 'table' : 'console';
   } catch {
-    return {};
+    return 'console';
+  }
+};
+
+const saveView = (view: View) => {
+  try {
+    localStorage.setItem(viewStorageKey, view);
+  } catch {
+    return;
   }
 };
 
 /**
- * Per-device column widths, dragged from a handle on each `<th>`.
- *
- * Persisted to `localStorage` rather than synced settings — the same choice
- * `SplitView`'s remembered divider ratio already made, for the same reason:
- * this is a display preference for one screen, not data.
- */
-function useColumnWidths() {
-  const [widths, setWidths] = useState<Record<string, number>>(loadColumnWidths);
-  const [draggingKey, setDraggingKey] = useState<string | null>(null);
-  const drag = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
-
-  const widthFor = useCallback(
-    (key: string, fallback: number) => widths[key] ?? fallback,
-    [widths],
-  );
-
-  useEffect(() => {
-    function onMove(event: globalThis.PointerEvent) {
-      if (!drag.current) return;
-      const { key, startX, startWidth } = drag.current;
-      const next = Math.max(minColumnWidth, startWidth + (event.clientX - startX));
-      setWidths((prev) => ({ ...prev, [key]: next }));
-    }
-    function onUp() {
-      if (!drag.current) return;
-      drag.current = null;
-      setDraggingKey(null);
-      setWidths((prev) => {
-        localStorage.setItem(widthsStorageKey, JSON.stringify(prev));
-        return prev;
-      });
-    }
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-  }, []);
-
-  /** Replaces every column width at once — what "Fit columns" commits. */
-  const applyWidths = useCallback((next: Record<string, number>) => {
-    setWidths(next);
-    localStorage.setItem(widthsStorageKey, JSON.stringify(next));
-  }, []);
-
-  const startResize = useCallback(
-    (key: string, fallback: number) => (event: PointerEvent) => {
-      event.preventDefault();
-      drag.current = { key, startX: event.clientX, startWidth: widths[key] ?? fallback };
-      setDraggingKey(key);
-      // Locked for the whole drag, not left to `:hover` on the 10px handle —
-      // the pointer is off that strip for nearly the entire gesture, and an
-      // unlocked cursor flickering back to the default arrow is what makes a
-      // drag read as broken.
-      const unlock = lockCursor('col-resize');
-      window.addEventListener('pointerup', unlock, { once: true });
-    },
-    [widths],
-  );
-
-  return { widthFor, startResize, draggingKey, applyWidths };
-}
-
-/**
- * reAFresh · Task Tracker — a table of user-defined "pages", each one a task
- * with typed, CRUD-able properties. A page's own detail view is built once
- * and rendered in two containers (side-peek or fullscreen) rather than twice.
+ * reAFresh · Task Tracker: user-defined "pages", each one a task with typed,
+ * CRUD-able properties, shown either as a triage console (a priority-by-status
+ * grid under a quick-add command line) or as a table. A page's own detail
+ * view is built once and rendered in two containers (side-peek or fullscreen)
+ * rather than twice.
  */
 export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split' }) {
   const { revision, requestSync } = useSession();
@@ -124,9 +69,12 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<PropertyFilter[]>([]);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [view, setView] = useState<View>(loadView);
+  const [menu, setMenu] = useState<MenuState | null>(null);
 
   const reload = useCallback(async () => {
     await seedDefaultProperties();
+    await prepareTaskData();
     setProperties(await listProperties());
     setPages(await listPages());
   }, []);
@@ -144,28 +92,47 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
     [reload, requestSync],
   );
 
+  const closeMenu = useCallback(() => setMenu(null), []);
+
   const visiblePages = pages.filter((page) => matchesFilters(page, filters));
   const openPageRow = openPage ? pages.find((page) => page.id === openPage.id) : undefined;
+  const status = properties.find((property) => property.type === 'status');
+  const priority = findPriorityProperty(properties);
+  const drag = useTriageDrag(commit, priority, status);
 
-  const { widthFor, startResize, draggingKey, applyWidths } = useColumnWidths();
-  const tableWidth = useMemo(
-    () =>
-      widthFor(titleColumnKey, defaultTitleWidth) +
-      properties.reduce((sum, property) => sum + widthFor(property.id, defaultColumnWidth), 0) +
-      actionsColumnWidth,
-    [widthFor, properties],
-  );
+  const chooseView = (next: View) => {
+    setView(next);
+    saveView(next);
+    setMenu(null);
+  };
 
-  // The toolbar spans exactly the content width available to the table, so
-  // it is what "Fit columns" measures against — the table's own wrapper
-  // hugs the table and would only ever report the width it already has.
-  const bar = useRef<HTMLDivElement>(null);
-  const fitColumns = () =>
-    applyWidths(fitColumnWidths(properties, bar.current?.clientWidth ?? 0));
+  const toggleMenu = (next: MenuState) =>
+    setMenu((current) => (current?.anchor === next.anchor ? null : next));
+
+  const createFromCommand = async (command: TaskCommandResult) => {
+    let pageId = '';
+    await commit(async () => {
+      const page = await createPage(command.title);
+      pageId = page.id;
+      if (status && command.statusId) await savePageValue(page.id, status.id, command.statusId);
+      if (priority && command.priorityId) await savePageValue(page.id, priority.id, command.priorityId);
+    });
+    return pageId;
+  };
+
+  const menuPage = menu ? pages.find((page) => page.id === menu.pageId) : undefined;
+  const menuSections: MenuSection[] = menu && menuPage
+    ? menu.propertyIds.flatMap((id) => {
+        const property = properties.find((candidate) => candidate.id === id);
+        return property
+          ? [{ property, value: menuPage.values[id], isPriority: property.id === priority?.id }]
+          : [];
+      })
+    : [];
 
   return (
     <div className={`page page--tall tsk font-sans text-foreground px-4! py-4! md:px-8! md:py-6!${paneWidth === 'split' ? ' tsk--split' : ''}`}>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-[15px] font-semibold text-foreground">Task Tracker</h1>
           <span className="text-xs text-muted-foreground">
@@ -173,63 +140,65 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
             {properties.length === 1 ? 'property' : 'properties'}
           </span>
         </div>
+        <div className="tsk-seg" role="group" aria-label="View">
+          {(['console', 'table'] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={view === option}
+              onClick={() => chooseView(option)}
+            >
+              {option === 'console' ? 'Console' : 'Table'}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="tsk__bar" ref={bar}>
-        <Button
-          variant="raised"
-          onClick={() => setShowFilters(true)}
-        >
+      <div className="tsk__bar">
+        <Button variant="raised" onClick={() => setShowFilters(true)}>
           <SlidersHorizontal size={16} aria-hidden />
           {filters.length > 0 ? `Filter (${filters.length})` : 'Filter'}
-        </Button>
-        <Button variant="raised" title="Size every column to the table's width" onClick={fitColumns}>
-          <Table2 size={16} aria-hidden />
-          Fit columns
         </Button>
         <Button variant="raised" onClick={() => setShowProperties(true)}>
           Properties
         </Button>
-        <span className="page__spacer" />
-        <Button
-          variant="gradient"
-          // Does not open PageDetail — a "new page" click from the table
-          // creates and stays put, matching the dashboard's Tasks widget.
-          onClick={() => void commit(() => createPage())}
-        >
-          <Plus size={16} aria-hidden />
-          New page
-        </Button>
       </div>
 
+      {drag.layer}
+      <CommandBar
+        properties={properties}
+        pages={pages}
+        drag={drag}
+        commit={commit}
+        onSubmit={createFromCommand}
+        onOpen={(id) => setOpenPage({ id, mode: 'peek' })}
+      />
+
       {pages.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">No pages yet. New page to get started.</p>
+        <p className="text-[13px] text-muted-foreground">No pages yet. Type a title above to add one.</p>
+      ) : view === 'console' ? (
+        <TriageGrid
+          pages={visiblePages}
+          properties={properties}
+          drag={drag}
+          onChip={(page, anchor) =>
+            toggleMenu({
+              anchor,
+              pageId: page.id,
+              propertyIds: [status?.id, priority?.id].filter((id): id is string => Boolean(id)),
+              withOpen: true,
+            })
+          }
+        />
       ) : (
         <div className="tsk__table-wrap surface-3d">
-          <table className="tsk__table" style={{ width: tableWidth }}>
-            <colgroup>
-              <col style={{ width: widthFor(titleColumnKey, defaultTitleWidth) }} />
-              {properties.map((property) => (
-                <col key={property.id} style={{ width: widthFor(property.id, defaultColumnWidth) }} />
-              ))}
-              <col style={{ width: actionsColumnWidth }} />
-            </colgroup>
+          <table className="tsk__table">
             <thead>
               <tr>
-                <th className="tsk__col-title">
-                  Page
-                  <span
-                    className={`tsk__col-resize${draggingKey === titleColumnKey ? ' is-dragging' : ''}`}
-                    onPointerDown={startResize(titleColumnKey, defaultTitleWidth)}
-                  />
-                </th>
+                <th className="tsk__col-title">Page</th>
                 {properties.map((property) => (
-                  <th key={property.id}>
+                  <th key={property.id} className={`tsk__col--${property.type}`}>
                     {property.name}
-                    <span
-                      className={`tsk__col-resize${draggingKey === property.id ? ' is-dragging' : ''}`}
-                      onPointerDown={startResize(property.id, defaultColumnWidth)}
-                    />
                   </th>
                 ))}
                 <th className="tsk__col-actions" />
@@ -271,7 +240,11 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
                   </td>
 
                   {properties.map((property) => (
-                    <td key={property.id}>{renderCell(property, page.values[property.id])}</td>
+                    <td key={property.id} className={`tsk__col--${property.type}`}>
+                      {renderCell(property, page.values[property.id], property.id === priority?.id, (anchor) =>
+                        toggleMenu({ anchor, pageId: page.id, propertyIds: [property.id], withOpen: false }),
+                      )}
+                    </td>
                   ))}
 
                   <td className="tsk__col-actions">
@@ -291,21 +264,30 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
                   </td>
                 </tr>
               ))}
-              <tr className="tsk__new-row">
-                <td colSpan={properties.length + 2}>
-                  <button
-                    type="button"
-                    className="tsk__new-page"
-                    onClick={() => void commit(() => createPage())}
-                  >
-                    <Plus size={14} aria-hidden />
-                    New page
-                  </button>
-                </td>
-              </tr>
             </tbody>
           </table>
         </div>
+      )}
+
+      {menu && menuPage && (
+        <OptionMenu
+          anchor={menu.anchor}
+          sections={menuSections}
+          priorityStyle="text"
+          onClose={closeMenu}
+          onPick={(propertyId, optionId) => {
+            closeMenu();
+            void commit(() => savePageValue(menu.pageId, propertyId, optionId));
+          }}
+          onOpenPage={
+            menu.withOpen
+              ? () => {
+                  closeMenu();
+                  setOpenPage({ id: menu.pageId, mode: 'peek' });
+                }
+              : undefined
+          }
+        />
       )}
 
       {openPage && openPageRow && (
@@ -346,25 +328,46 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
   );
 }
 
-/** One switch, not eight components — each type's cell is a couple of lines. */
-function renderCell(property: TaskPropertyRow, value: unknown): ReactNode {
+/** One switch, not eight components: each type's cell is a couple of lines. */
+function renderCell(
+  property: TaskPropertyRow,
+  value: unknown,
+  isPriority: boolean,
+  onOpenMenu: (anchor: HTMLElement) => void,
+): ReactNode {
   switch (property.type) {
     case 'text':
-      return <span className="af-body">{typeof value === 'string' ? value : ''}</span>;
+      return <span className="af-body tsk__cell-text">{typeof value === 'string' ? value : ''}</span>;
 
     case 'number':
       return (
-        <span className="af-mono tsk__cell-num">{typeof value === 'number' ? value : '—'}</span>
+        <span className="af-mono tsk__cell-num">{typeof value === 'number' ? value : '-'}</span>
       );
 
     case 'select':
     case 'status': {
       const option = property.options.find((o) => o.id === value);
-      if (!option) return <span className="tsk__cell-empty">—</span>;
+      if (!option) {
+        return (
+          <button
+            type="button"
+            className="tsk__cell-set tsk__cell-empty"
+            aria-haspopup="menu"
+            aria-label={`${property.name}: not set`}
+            onClick={(event) => onOpenMenu(event.currentTarget)}
+          >
+            -
+          </button>
+        );
+      }
       return (
-        <span className="tsk__pill" style={tintStyle(toneColor(option.toneIndex))}>
-          {option.label}
-        </span>
+        <OptionMark
+          property={property}
+          option={option}
+          isPriority={isPriority}
+          priorityStyle="text"
+          onClick={(event) => onOpenMenu(event.currentTarget)}
+        />
       );
     }
 
@@ -382,14 +385,14 @@ function renderCell(property: TaskPropertyRow, value: unknown): ReactNode {
           ))}
         </span>
       ) : (
-        <span className="tsk__cell-empty">—</span>
+        <span className="tsk__cell-empty">-</span>
       );
     }
 
     case 'date':
       return (
         <span className="af-meta">
-          {typeof value === 'number' ? formatDateValue(value) : '—'}
+          {typeof value === 'number' ? formatDateValue(value) : '-'}
         </span>
       );
 
@@ -397,7 +400,7 @@ function renderCell(property: TaskPropertyRow, value: unknown): ReactNode {
       return <Checkbox checked={Boolean(value)} disabled aria-label="Checked" />;
 
     case 'url': {
-      if (typeof value !== 'string' || !value) return <span className="tsk__cell-empty">—</span>;
+      if (typeof value !== 'string' || !value) return <span className="tsk__cell-empty">-</span>;
       const href = safeUrl(value);
       return href ? (
         <a href={href} target="_blank" rel="noreferrer" className="af-mono tsk__url">
