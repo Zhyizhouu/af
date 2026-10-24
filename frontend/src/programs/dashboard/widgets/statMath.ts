@@ -4,7 +4,7 @@ import { dayFromKey, jakartaDayKey, jakartaOffsetMs } from '../../habits/time';
 
 const dayMs = 86_400_000;
 
-function startOfJakartaDay(now: Date): number {
+export function startOfJakartaDay(now: Date): number {
   return dayFromKey(jakartaDayKey(now)).getTime() - jakartaOffsetMs;
 }
 

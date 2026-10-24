@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../../../app/session';
-import { clock } from '../../../data/format';
+import { clock, dayStamp } from '../../../data/format';
 import { entryColour, listCategories, type EventCategory } from '../../calendar/categories';
 import { useAgenda } from '../AgendaContext';
-import { dayStamp } from './shared';
 
 export function UpNextWidget() {
   const { revision } = useSession();

@@ -11,9 +11,9 @@ npm test                         # vitest
 npm run build                    # dist/
 ```
 
-The assistant needs an API. There is **no localhost default**. The earlier
-build had one, and on a deployed site it resolved to each visitor's own machine
-and failed as mixed content, silently. Set it explicitly:
+The assistant needs an API. There is **no localhost default**: on a deployed
+site it would resolve to each visitor's own machine and fail as mixed content,
+silently. Set it explicitly:
 
 ```
 AF_CONVERT_API=http://localhost:8080 npm run dev
@@ -26,17 +26,16 @@ something.
 
 | Path | What |
 | --- | --- |
-| `src/theme/tokens.css` | The design tokens, value-for-value from `af_tokens.dart` |
-| `src/components/AF.tsx` | The `AF*` widget kit |
+| `src/theme/tokens.css` | The design tokens |
 | `src/app/Shell.tsx` | Nav bar, routing, split-view host |
 | `src/app/SplitView.tsx` | Two programs side by side |
 | `src/app/registry.tsx` | Which component draws which program |
-| `src/data/db.ts` | Dexie/IndexedDB, per-account, in place of Hive |
+| `src/data/db.ts` | Dexie/IndexedDB, per-account |
 | `src/programs/<name>/` | One directory per program: store, screen, styles |
 
-## Ported
+## Programs
 
-All nine programs, the shell and the data layer.
+Nine programs, plus the shell and the data layer.
 
 | Program | Notes |
 | --- | --- |
@@ -55,18 +54,20 @@ Firestore sync** across every collection.
 
 ### The Firestore document contract
 
-The app reads and writes documents under `users/{uid}`, and `sync.test.ts` pins
-that document contract rather than the plumbing, so a field rename shows up as
-a failing test instead of as data that quietly stops syncing.
+The app syncs documents under `users/{uid}`, and `sync.test.ts` pins that
+document contract rather than the plumbing, so a field rename shows up as a
+failing test instead of as data that quietly stops syncing.
 
 Two consequences worth knowing:
 
 - `ProctorSessionRow.reopened` exempts a manually reopened session from the
   archive sweep, and it is part of the session document. Dropping it on the
   next push would silently un-exempt the session.
-- Order matters in the sync pass: sessions before their checklist items, and
-  categories before events. An event's colour resolves through its category, so
-  pulling events first shows them all as "Other" until the next pass.
+- Order matters in the sync pass: sessions before their checklist items,
+  categories before events, and task properties before task pages. An event's
+  colour resolves through its category, so pulling events first shows them all
+  as "Other" until the next pass. A page's option values resolve through its
+  property's options the same way.
 
 ### Proposals versus artifacts
 

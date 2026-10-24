@@ -33,7 +33,8 @@ export function TasksWidget() {
   const { revision, requestSync } = useSession();
   const [pages, setPages] = useState<TaskPageRow[]>([]);
   const [properties, setProperties] = useState<TaskPropertyRow[]>([]);
-  const [skipped, setSkipped] = useState(0);
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
+  const [saveFailed, setSaveFailed] = useState(false);
   const [menu, setMenu] = useState<{ anchor: HTMLElement; propertyId: string } | null>(null);
   const [loaded, setLoaded] = useState(false);
   const alive = useRef(true);
@@ -68,15 +69,25 @@ export function TasksWidget() {
       (a, b) =>
         optionIndex(priority, a) - optionIndex(priority, b) || statusRank(status, a) - statusRank(status, b),
     );
-  const current = queue.length > 0 ? queue[skipped % queue.length] : undefined;
+  const current = queue.find((page) => !skipped.has(page.id)) ?? queue[0];
   const upcoming = queue.filter((page) => page !== current).slice(0, 3);
 
-  const set = (propertyId: string, pageId: string, optionId: string) =>
-    void (async () => {
+  const skip = () => {
+    if (!current) return;
+    const next = new Set(skipped).add(current.id);
+    setSkipped(queue.every((page) => next.has(page.id)) ? new Set() : next);
+  };
+
+  const set = async (propertyId: string, pageId: string, optionId: string) => {
+    try {
       await savePageValue(pageId, propertyId, optionId);
       await reload();
       requestSync();
-    })();
+      if (alive.current) setSaveFailed(false);
+    } catch {
+      if (alive.current) setSaveFailed(true);
+    }
+  };
 
   const optionOf = (property: TaskPropertyRow | undefined, page: TaskPageRow): TaskPropertyOption | undefined =>
     property?.options.find((option) => option.id === page.values[property.id]);
@@ -133,16 +144,17 @@ export function TasksWidget() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {status && nextStatus && (
-                <Button size="sm" onClick={() => set(status.id, current.id, nextStatus.id)}>
+                <Button size="sm" onClick={() => void set(status.id, current.id, nextStatus.id)}>
                   Move to {nextStatus.label}
                 </Button>
               )}
               {queue.length > 1 && (
-                <Button variant="raised" size="sm" onClick={() => setSkipped((count) => count + 1)}>
+                <Button variant="raised" size="sm" onClick={skip}>
                   Not now
                 </Button>
               )}
             </div>
+            {saveFailed && <p className="m-0 text-xs text-destructive">Could not save</p>}
           </div>
 
           {upcoming.length > 0 && (
@@ -171,7 +183,7 @@ export function TasksWidget() {
           onClose={() => setMenu(null)}
           onPick={(propertyId, optionId) => {
             setMenu(null);
-            set(propertyId, current.id, optionId);
+            void set(propertyId, current.id, optionId);
           }}
         />
       )}

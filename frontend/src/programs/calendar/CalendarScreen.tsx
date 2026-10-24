@@ -4,7 +4,7 @@ import { cn } from 'cn';
 import { Button } from '../../components/ui/button';
 import { useSession } from '../../app/session';
 import { readAgenda, type AgendaEntry } from '../../data/agenda';
-import { clock } from '../../data/format';
+import { clock, dayStamp } from '../../data/format';
 import { hexToRgba } from '../../data/tones';
 import {
   builtInCategories,
@@ -216,13 +216,12 @@ export function CalendarScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 's
 }
 
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
-const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 
 function rangeLabel(view: CalendarView, anchor: Date): string {
   if (view === 'year') return String(anchor.getFullYear());
   if (view === 'month') return monthFormat.format(anchor);
   const { start, end } = visibleRange(view, anchor);
-  return view === 'day' ? dayFormat.format(start) : `${dayFormat.format(start)} – ${dayFormat.format(end)}`;
+  return view === 'day' ? dayStamp.format(start) : `${dayStamp.format(start)} – ${dayStamp.format(end)}`;
 }
 
 const withHour = (day: Date, hour: number) =>
@@ -386,7 +385,7 @@ function DayAgenda({
   return (
     <div className="surface-3d shrink-0 rounded-2xl p-5">
       <div className="flex items-center justify-between">
-        <span className="text-[15px] font-semibold">{dayFormat.format(day)}</span>
+        <span className="text-[15px] font-semibold">{dayStamp.format(day)}</span>
         <span className="text-[12px] text-muted-foreground">{today.length} entries</span>
       </div>
       {today.length === 0 ? (
@@ -476,7 +475,7 @@ function TimeGrid({
                   isToday ? 'text-foreground' : 'text-muted-foreground',
                 )}
               >
-                {dayFormat.format(day).split(',')[0]}
+                {dayStamp.format(day).split(',')[0]}
               </span>
               <span
                 className={cn(

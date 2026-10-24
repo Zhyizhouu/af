@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { cn } from 'cn';
 import { useSession } from '../../../app/session';
-import { clock } from '../../../data/format';
-import { dayFromKey, jakartaDayKey, jakartaOffsetMs } from '../../habits/time';
+import { clock, dayStamp } from '../../../data/format';
 import { entryColour, listCategories, type EventCategory } from '../../calendar/categories';
 import { useAgenda } from '../AgendaContext';
-import { dayStamp } from './shared';
+import { startOfJakartaDay } from './statMath';
 
 /** Named for what it holds, not for the day: "Up next" is also about today,
  *  and two headings reading TODAY on one dashboard is one heading too many. */
@@ -23,7 +22,7 @@ export function TodayWidget() {
   }, [reload, revision]);
 
   const now = new Date();
-  const startOfDay = dayFromKey(jakartaDayKey(now)).getTime() - jakartaOffsetMs;
+  const startOfDay = startOfJakartaDay(now);
   const todaysEntries = entries
     .filter((entry) => entry.start.getTime() >= startOfDay && entry.start.getTime() < startOfDay + 86_400_000)
     .sort((a, b) => a.start.getTime() - b.start.getTime());

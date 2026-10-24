@@ -4,7 +4,7 @@ import { cn } from 'cn';
 import { Calendar, CheckCircle2, RotateCcw, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import type { AgendaEntry } from '../../data/agenda';
-import { clock } from '../../data/format';
+import { clock, dayStamp } from '../../data/format';
 import { QrCode } from '../qr/QrCode';
 import { isEcc, type Ecc } from '../qr/qr';
 import { sessionLabel, type EventProposal, type QrArtifact, type SessionProposal } from './api';
@@ -17,12 +17,6 @@ import type { HabitTickProposal } from './message';
  * room is exactly the kind of thing worth noticing before confirming, and a
  * card that quietly omitted it would hide the one mistake worth catching.
  */
-
-const day = new Intl.DateTimeFormat(undefined, {
-  weekday: 'short',
-  day: 'numeric',
-  month: 'short',
-});
 
 type Tone = 'sky' | 'emerald' | 'amber' | 'rose';
 
@@ -130,7 +124,7 @@ export function SessionCard({
         )
       }
     >
-      <Row label="When" value={`${day.format(proposal.start)} · ${clock.format(proposal.start)}`} />
+      <Row label="When" value={`${dayStamp.format(proposal.start)} · ${clock.format(proposal.start)}`} />
       <Row label="Room" value={proposal.room} missing={!proposal.room} />
       <Row label="Class" value={proposal.courseClass} missing={!proposal.courseClass} />
     </ProposalCard>
@@ -145,8 +139,8 @@ export function EventCard({
   onRemove?: () => void;
 }) {
   const when = proposal.allDay
-    ? `${day.format(proposal.start)} · all day`
-    : `${day.format(proposal.start)} · ${clock.format(proposal.start)}–${clock.format(proposal.end)}`;
+    ? `${dayStamp.format(proposal.start)} · all day`
+    : `${dayStamp.format(proposal.start)} · ${clock.format(proposal.start)}–${clock.format(proposal.end)}`;
 
   return (
     <ProposalCard
@@ -318,10 +312,10 @@ export function RemovalCard({
   onKeep?: () => void;
 }) {
   const when = entry.allDay
-    ? `${day.format(entry.start)} · all day`
+    ? `${dayStamp.format(entry.start)} · all day`
     : entry.end > entry.start
-      ? `${day.format(entry.start)} · ${clock.format(entry.start)}–${clock.format(entry.end)}`
-      : `${day.format(entry.start)} · ${clock.format(entry.start)}`;
+      ? `${dayStamp.format(entry.start)} · ${clock.format(entry.start)}–${clock.format(entry.end)}`
+      : `${dayStamp.format(entry.start)} · ${clock.format(entry.start)}`;
 
   return (
     <ProposalCard
