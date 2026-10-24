@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { cn } from 'cn';
 import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../data/db';
 import { optionOfPage, statusRole } from './roles';
@@ -17,6 +18,7 @@ interface TriageGridProps {
   properties: TaskPropertyRow[];
   onChip: (page: TaskPageRow, anchor: HTMLElement) => void;
   drag: TriageDrag;
+  containerRef?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -30,7 +32,7 @@ interface TriageGridProps {
  * or column, shown only while a page needs it; chips can be dragged out of it
  * but nothing can be dropped into it.
  */
-export function TriageGrid({ pages, properties, onChip, drag }: TriageGridProps) {
+export function TriageGrid({ pages, properties, onChip, drag, containerRef }: TriageGridProps) {
   const status = properties.find((property) => property.type === 'status');
   const priority = findPriorityProperty(properties);
   const hasPriority = Boolean(priority?.options.length);
@@ -61,7 +63,7 @@ export function TriageGrid({ pages, properties, onChip, drag }: TriageGridProps)
     );
 
   return (
-    <div className="tsk-grid-wrap">
+    <div className="tsk-grid-wrap" ref={containerRef}>
       <table className="tsk-grid">
         <thead>
           <tr>

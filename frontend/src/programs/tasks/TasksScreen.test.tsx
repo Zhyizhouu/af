@@ -210,6 +210,27 @@ describe('Console view drag and move', () => {
 
     await waitFor(async () => expect(await valuesOf('Key me')).toMatchObject({ [priority]: high, [status]: progress }));
   });
+
+  it('refocuses the grid chip, not the palette row, after Alt+ArrowRight while the palette is open', async () => {
+    await placed('Key me', high, notStarted);
+    render(<TasksScreen />);
+    const input = await screen.findByLabelText('New page command');
+    fireEvent.change(input, { target: { value: '/' } });
+    const row = await screen.findByRole('option');
+    expect(row).toHaveAttribute('data-triage-palette-id');
+    expect(row).not.toHaveAttribute('data-triage-id');
+    const chip = screen.getByRole('button', { name: 'Key me' });
+
+    fireEvent.keyDown(chip, { key: 'ArrowRight', altKey: true });
+
+    await waitFor(async () => expect(await valuesOf('Key me')).toMatchObject({ [status]: progress }));
+    await waitFor(() => {
+      const focused = screen.getByRole('button', { name: 'Key me' });
+      expect(focused).toHaveFocus();
+      expect(focused).toHaveAttribute('data-triage-id');
+    });
+    expect(screen.getByRole('option')).not.toHaveFocus();
+  });
 });
 
 describe('Console view unset row and column', () => {

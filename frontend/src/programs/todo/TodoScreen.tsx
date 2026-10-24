@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { cn } from 'cn';
 import { Button } from '../../components/ui/button';
 import { Checkbox } from '../../components/ui/checkbox';
@@ -8,11 +8,10 @@ import { useSession } from '../../app/session';
 import type { TodoItemRow } from '../../data/db';
 import { dayFromKey, jakartaDayKey, keyFromDay } from '../habits/time';
 import { addTodo, deleteTodo, listTodosInRange, toggleTodo } from './store';
-import { useTodoDrag } from './useTodoDrag';
+import { DayPanel } from './DayPanel';
+import { useTodoDrag, type After, type RowProps } from './useTodoDrag';
 
 type View = 'day' | 'week' | 'month';
-type After = (action: () => Promise<unknown>) => Promise<void>;
-type RowProps = ReturnType<ReturnType<typeof useTodoDrag>['row']>;
 
 const views: { id: View; label: string }[] = [
   { id: 'day', label: 'Day' },
@@ -96,10 +95,7 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
   const [view, setView] = useState<View>('day');
   const [day, setDay] = useState(today);
   const [items, setItems] = useState<TodoItemRow[]>([]);
-  const [text, setText] = useState('');
-  const [showArchived, setShowArchived] = useState(false);
   const [weekAddDay, setWeekAddDay] = useState<string | null>(null);
-  const [monthText, setMonthText] = useState('');
 
   const { from, to } = useMemo(() => rangeFor(view, day), [view, day]);
 
@@ -138,18 +134,9 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
     setView('day');
   };
 
-  const submit = () => {
-    if (!text.trim()) return;
-    void after(() => addTodo(text, day)).then(() => setText(''));
-  };
-
-  const submitMonth = () => {
-    if (!monthText.trim()) return;
-    void after(() => addTodo(monthText, day)).then(() => setMonthText(''));
-  };
-
   const open = forDay(day).filter((item) => !item.checked);
   const archived = forDay(day).filter((item) => item.checked);
+  const dayTitle = day === today ? 'Today' : dayFormat.format(dayFromKey(day));
 
   return (
     <div className="page page--tall px-4! py-4! md:px-8! md:py-6! font-sans text-foreground">
@@ -214,71 +201,16 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
 
       <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto">
         {view === 'day' && (
-          <>
-            <div data-todo-day={day} className={cn('surface-3d shrink-0 rounded-2xl p-5', drag.over(day))}>
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-[15px] font-semibold">
-                  {day === today ? 'Today' : dayFormat.format(dayFromKey(day))}
-                </span>
-                <span className="text-xs text-muted-foreground">{open.length} open</span>
-              </div>
-
-              <div className="flex gap-2">
-                <Input
-                  className="inset-field flex-1"
-                  placeholder="Add an item…"
-                  value={text}
-                  onChange={(event) => setText(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') submit();
-                  }}
-                />
-                <Button variant="raised" size="sm" disabled={!text.trim()} onClick={submit}>
-                  Add
-                </Button>
-              </div>
-
-              {open.length === 0 ? (
-                <p data-todo-empty className="mt-3 text-[13px] text-muted-foreground">
-                  Nothing open on this day.
-                </p>
-              ) : (
-                <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0">
-                  {open.map((item, index) => (
-                    <TodoRow key={item.id} item={item} after={after} rowProps={drag.row(item, index)} />
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {archived.length > 0 && (
-              <div className="surface-3d shrink-0 rounded-2xl p-5">
-                <button
-                  type="button"
-                  aria-expanded={showArchived}
-                  className="flex w-full items-center justify-between text-left"
-                  onClick={() => setShowArchived((value) => !value)}
-                >
-                  <span className="text-[15px] font-semibold">Archived</span>
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    {archived.length}
-                    <ChevronDown
-                      size={14}
-                      aria-hidden
-                      className={cn('transition-transform', showArchived && 'rotate-180')}
-                    />
-                  </span>
-                </button>
-                {showArchived && (
-                  <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0">
-                    {archived.map((item) => (
-                      <TodoRow key={item.id} item={item} after={after} />
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </>
+          <DayPanel
+            day={day}
+            title={dayTitle}
+            headerAction={<span className="text-xs text-muted-foreground">{open.length} open</span>}
+            open={open}
+            after={after}
+            rowProps={drag.row}
+            over={drag.over(day)}
+            archived={archived}
+          />
         )}
 
         {view === 'week' && (
@@ -418,44 +350,20 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
         )}
 
         {view === 'month' && (
-          <div data-todo-day={day} className={cn('surface-3d shrink-0 rounded-2xl p-5', drag.over(day))}>
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-[15px] font-semibold">
-                {day === today ? 'Today' : dayFormat.format(dayFromKey(day))}
-              </span>
+          <DayPanel
+            day={day}
+            title={dayTitle}
+            headerAction={
               <Button variant="ghost" size="sm" onClick={() => pick(day)}>
                 Open day
               </Button>
-            </div>
-
-            <div className="flex gap-2">
-              <Input
-                className="inset-field flex-1"
-                placeholder="Add an item…"
-                value={monthText}
-                onChange={(event) => setMonthText(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') submitMonth();
-                }}
-              />
-              <Button variant="raised" size="sm" disabled={!monthText.trim()} onClick={submitMonth}>
-                Add
-              </Button>
-            </div>
-
-            {open.length === 0 ? (
-              <p data-todo-empty className="mt-3 text-[13px] text-muted-foreground">
-                Nothing open on this day.
-              </p>
-            ) : (
-              <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0">
-                {open.map((item, index) => (
-                  <TodoRow key={item.id} item={item} after={after} rowProps={drag.row(item, index)} />
-                ))}
-              </ul>
-            )}
-            {archived.length > 0 && <p className="mt-3 text-xs text-muted-foreground">{archived.length} archived</p>}
-          </div>
+            }
+            open={open}
+            after={after}
+            rowProps={drag.row}
+            over={drag.over(day)}
+            footer={archived.length > 0 && <p className="mt-3 text-xs text-muted-foreground">{archived.length} archived</p>}
+          />
         )}
       </div>
       {drag.layer}
@@ -525,25 +433,6 @@ function WeekItem({ item, after, rowProps }: { item: TodoItemRow; after: After; 
         className="shrink-0 opacity-0 group-focus-within/item:opacity-100 group-hover/item:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
         onClick={() => void after(() => deleteTodo(item.id))}
       >
-        <X size={14} aria-hidden />
-      </Button>
-    </li>
-  );
-}
-
-function TodoRow({ item, after, rowProps }: { item: TodoItemRow; after: After; rowProps?: RowProps }) {
-  return (
-    <li {...rowProps} className={cn('flex items-center gap-2.5', rowProps?.className)}>
-      <Checkbox
-        checked={item.checked}
-        onCheckedChange={() => void after(() => toggleTodo(item.id))}
-        aria-label={item.text}
-        className="inset-field size-[18px] rounded-[5px] border-white/10 text-white data-[state=checked]:border-white/20 data-[state=checked]:bg-white/10"
-      />
-      <span className={cn('min-w-0 flex-1 truncate text-sm', item.checked && 'text-subtle-foreground line-through')}>
-        {item.text}
-      </span>
-      <Button variant="ghost" size="icon-xs" aria-label="Delete" onClick={() => void after(() => deleteTodo(item.id))}>
         <X size={14} aria-hidden />
       </Button>
     </li>

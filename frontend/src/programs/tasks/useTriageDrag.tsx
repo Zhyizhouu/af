@@ -1,26 +1,17 @@
 import {
   useCallback,
-  useEffect,
   useId,
-  useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { cn } from 'cn';
-import { lockCursor } from '../../components/pointerDrag';
+import { usePointerDrag } from '../../components/pointerDragController';
 import type { TaskPageRow, TaskPropertyRow } from '../../data/db';
 import { savePageValue } from './store';
 
 type After = (action: () => Promise<unknown>) => Promise<void>;
-
-/** Pixels a mouse or pen must travel before a press becomes a drag. */
-const MOVE_THRESHOLD = 5;
-/** How long a finger must rest on a chip before it lifts, so a swipe still scrolls. */
-const HOLD_MS = 220;
-/** How far a finger may drift during that hold before it counts as a scroll. */
-const HOLD_SLOP = 8;
 
 const HINT = 'Drag, or press Alt and an arrow key, to change priority and status';
 
@@ -58,11 +49,8 @@ export function useTriageDrag(
 ) {
   const hintId = useId();
   const [dragId, setDragId] = useState<string | null>(null);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [hover, setHover] = useState<Hover | null>(null);
-  const stop = useRef<(() => void) | null>(null);
-
-  useEffect(() => () => stop.current?.(), []);
+  const { start, offset } = usePointerDrag<Hover>();
 
   const place = useCallback(
     (page: TaskPageRow, target: Hover) => {
@@ -82,82 +70,21 @@ export function useTriageDrag(
   );
 
   const press = useCallback(
-    (page: TaskPageRow) => (event: ReactPointerEvent<HTMLElement>) => {
-      if (event.button !== 0 || !event.isPrimary) return;
-      const { pointerId, pointerType, clientX: startX, clientY: startY } = event;
-      const touch = pointerType === 'touch';
-      if (!touch) {
-        event.preventDefault();
-        event.currentTarget.focus({ preventScroll: true });
-      }
-      let active = false;
-      let unlock = () => {};
-      let hit: Hover | null = null;
-
-      const begin = () => {
-        active = true;
-        window.getSelection()?.removeAllRanges();
-        document.addEventListener('selectstart', noSelect);
-        unlock = lockCursor('grabbing');
-        setDragId(page.id);
-      };
-      const timer = touch ? window.setTimeout(begin, HOLD_MS) : 0;
-
-      const move = (e: PointerEvent) => {
-        if (e.pointerId !== pointerId) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        if (!active) {
-          if (touch && Math.hypot(dx, dy) > HOLD_SLOP) return end(false);
-          if (!touch && Math.hypot(dx, dy) >= MOVE_THRESHOLD) begin();
-          else return;
-        }
-        setOffset({ x: dx, y: dy });
-        hit = resolveHover(e.clientX, e.clientY);
-        setHover(hit);
-      };
-      const up = (e: PointerEvent) => {
-        if (e.pointerId === pointerId) end(true);
-      };
-      const cancel = (e: PointerEvent) => {
-        if (e.pointerId === pointerId) end(false);
-      };
-      const escape = (e: globalThis.KeyboardEvent) => {
-        if (e.key === 'Escape') end(false);
-      };
-      const noSelect = (e: Event) => e.preventDefault();
-      const hold = (e: TouchEvent) => {
-        if (active) e.preventDefault();
-      };
-      const swallowClick = (e: Event) => e.stopPropagation();
-
-      function end(drop: boolean) {
-        window.clearTimeout(timer);
-        window.removeEventListener('pointermove', move);
-        window.removeEventListener('pointerup', up);
-        window.removeEventListener('pointercancel', cancel);
-        window.removeEventListener('keydown', escape);
-        window.removeEventListener('touchmove', hold);
-        document.removeEventListener('selectstart', noSelect);
-        stop.current = null;
-        unlock();
-        setDragId(null);
-        setOffset({ x: 0, y: 0 });
-        setHover(null);
-        if (!active) return;
-        window.addEventListener('click', swallowClick, { capture: true, once: true });
-        window.setTimeout(() => window.removeEventListener('click', swallowClick, true), 0);
-        if (drop && hit) void place(page, hit);
-      }
-
-      window.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', up);
-      window.addEventListener('pointercancel', cancel);
-      window.addEventListener('keydown', escape);
-      window.addEventListener('touchmove', hold, { passive: false });
-      stop.current = () => end(false);
-    },
-    [place],
+    (page: TaskPageRow) => (event: ReactPointerEvent<HTMLElement>) =>
+      start(event, {
+        onBegin: () => setDragId(page.id),
+        onMove: (x, y) => {
+          const hit = resolveHover(x, y);
+          setHover(hit);
+          return hit;
+        },
+        onDrop: (hit) => void place(page, hit),
+        onEnd: () => {
+          setDragId(null);
+          setHover(null);
+        },
+      }),
+    [start, place],
   );
 
   const key = useCallback(
@@ -184,16 +111,16 @@ export function useTriageDrag(
   );
 
   /** Props for one draggable chip: its handle, the keyboard moves, and its lifted look. */
-  const chip = (page: TaskPageRow) => {
+  const chip = (page: TaskPageRow, { keyboard = true, palette = false } = {}) => {
     const lifted = dragId === page.id;
     const style: CSSProperties | undefined = lifted
       ? { transform: `translate3d(${offset.x}px, ${offset.y}px, 0)` }
       : undefined;
     return {
-      'data-triage-id': page.id,
+      [palette ? 'data-triage-palette-id' : 'data-triage-id']: page.id,
       'aria-describedby': hintId,
       onPointerDown: press(page),
-      onKeyDown: key(page),
+      onKeyDown: keyboard ? key(page) : undefined,
       style,
       className: cn('tsk-grid__chip', lifted && 'is-lifted'),
     };

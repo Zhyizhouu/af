@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { FileText, Maximize2, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Checkbox } from '../../components/ui/checkbox';
@@ -99,6 +99,7 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
   const status = properties.find((property) => property.type === 'status');
   const priority = findPriorityProperty(properties);
   const drag = useTriageDrag(commit, priority, status);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const chooseView = (next: View) => {
     setView(next);
@@ -169,6 +170,7 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
         properties={properties}
         pages={pages}
         drag={drag}
+        gridRef={gridRef}
         commit={commit}
         onSubmit={createFromCommand}
         onOpen={(id) => setOpenPage({ id, mode: 'peek' })}
@@ -181,6 +183,7 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
           pages={visiblePages}
           properties={properties}
           drag={drag}
+          containerRef={gridRef}
           onChip={(page, anchor) =>
             toggleMenu({
               anchor,

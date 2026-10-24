@@ -1,8 +1,6 @@
 import {
   useCallback,
-  useEffect,
   useId,
-  useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
@@ -10,19 +8,13 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from 'cn';
-import { lockCursor } from '../../components/pointerDrag';
+import { usePointerDrag } from '../../components/pointerDragController';
 import type { TodoItemRow } from '../../data/db';
 import { dayFromKey, keyFromDay } from '../habits/time';
 import { moveTodo } from './store';
 
-type After = (action: () => Promise<unknown>) => Promise<void>;
+export type After = (action: () => Promise<unknown>) => Promise<void>;
 
-/** Pixels a mouse or pen must travel before a press becomes a drag. */
-const MOVE_THRESHOLD = 5;
-/** How long a finger must rest on a row before it lifts, so a swipe still scrolls. */
-const HOLD_MS = 220;
-/** How far a finger may drift during that hold before it counts as a scroll. */
-const HOLD_SLOP = 8;
 /** An index past any list, which `moveTodo` clamps to the end. */
 const END = Number.MAX_SAFE_INTEGER;
 /** Controls inside a row that keep their own click and must not start a drag. */
@@ -101,88 +93,30 @@ function resolveHover(x: number, y: number, dragId: string): Hover | null {
 export function useTodoDrag(after: After) {
   const hintId = useId();
   const [dragId, setDragId] = useState<string | null>(null);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [hover, setHover] = useState<Hover | null>(null);
-  const stop = useRef<(() => void) | null>(null);
-
-  useEffect(() => () => stop.current?.(), []);
+  const { start, offset } = usePointerDrag<Hover>();
 
   const press = useCallback(
     (item: TodoItemRow, index: number) => (event: ReactPointerEvent<HTMLElement>) => {
-      if (event.button !== 0 || !event.isPrimary || (event.target as Element).closest(NOT_A_HANDLE)) return;
-      const { pointerId, pointerType, clientX: startX, clientY: startY } = event;
-      const touch = pointerType === 'touch';
-      if (!touch) {
-        event.preventDefault();
-        event.currentTarget.focus({ preventScroll: true });
-      }
-      let active = false;
-      let unlock = () => {};
-      let hit: Hover | null = null;
-
-      const begin = () => {
-        active = true;
-        window.getSelection()?.removeAllRanges();
-        document.addEventListener('selectstart', noSelect);
-        unlock = lockCursor('grabbing');
-        setDragId(item.id);
-      };
-      const timer = touch ? window.setTimeout(begin, HOLD_MS) : 0;
-
-      const move = (e: PointerEvent) => {
-        if (e.pointerId !== pointerId) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        if (!active) {
-          if (touch && Math.hypot(dx, dy) > HOLD_SLOP) return end(false);
-          if (!touch && Math.hypot(dx, dy) >= MOVE_THRESHOLD) begin();
-          else return;
-        }
-        setOffset({ x: dx, y: dy });
-        hit = resolveHover(e.clientX, e.clientY, item.id);
-        setHover(hit);
-      };
-      const up = (e: PointerEvent) => {
-        if (e.pointerId === pointerId) end(true);
-      };
-      const cancel = (e: PointerEvent) => {
-        if (e.pointerId === pointerId) end(false);
-      };
-      const escape = (e: globalThis.KeyboardEvent) => {
-        if (e.key === 'Escape') end(false);
-      };
-      const noSelect = (e: Event) => e.preventDefault();
-      const hold = (e: TouchEvent) => {
-        if (active) e.preventDefault();
-      };
-
-      function end(drop: boolean) {
-        window.clearTimeout(timer);
-        window.removeEventListener('pointermove', move);
-        window.removeEventListener('pointerup', up);
-        window.removeEventListener('pointercancel', cancel);
-        window.removeEventListener('keydown', escape);
-        window.removeEventListener('touchmove', hold);
-        document.removeEventListener('selectstart', noSelect);
-        stop.current = null;
-        unlock();
-        setDragId(null);
-        setOffset({ x: 0, y: 0 });
-        setHover(null);
-        if (!active || !drop || !hit) return;
-        const { day, index: to } = hit;
-        if (day === item.day && to === index) return;
-        void after(() => moveTodo(item.id, day, to));
-      }
-
-      window.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', up);
-      window.addEventListener('pointercancel', cancel);
-      window.addEventListener('keydown', escape);
-      window.addEventListener('touchmove', hold, { passive: false });
-      stop.current = () => end(false);
+      if ((event.target as Element).closest(NOT_A_HANDLE)) return;
+      start(event, {
+        onBegin: () => setDragId(item.id),
+        onMove: (x, y) => {
+          const hit = resolveHover(x, y, item.id);
+          setHover(hit);
+          return hit;
+        },
+        onDrop: ({ day, index: to }) => {
+          if (day === item.day && to === index) return;
+          void after(() => moveTodo(item.id, day, to));
+        },
+        onEnd: () => {
+          setDragId(null);
+          setHover(null);
+        },
+      });
     },
-    [after],
+    [start, after],
   );
 
   const key = useCallback(
@@ -249,3 +183,5 @@ export function useTodoDrag(after: After) {
 
   return { dragId, row, over, layer };
 }
+
+export type RowProps = ReturnType<ReturnType<typeof useTodoDrag>['row']>;
