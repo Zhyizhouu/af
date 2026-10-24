@@ -39,8 +39,7 @@ type jobResponse struct {
 
 // limitsResponse lets the UI describe the rules without holding a copy of
 // them — which formats exist, what they are called, which of them take a
-// bitrate. Same principle as the reset cooldown: the server owns the policy,
-// the client renders whatever it is told.
+// bitrate. The server owns the policy, the client renders whatever it is told.
 type limitsResponse struct {
 	// False when this gateway runs without Temporal and the object store, so
 	// the page can say so instead of offering a button that cannot work. Same

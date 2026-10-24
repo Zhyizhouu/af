@@ -4,8 +4,6 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -53,33 +51,5 @@ func TestSweepBlobsRemovesOnlyObjectsPastTheBudget(t *testing.T) {
 	want := []string{"sources/old/a.wav", "results/old/a.mp3"}
 	if removed != 2 || !slices.Equal(blobs.deleted, want) {
 		t.Fatalf("removed %d %v, want %v", removed, blobs.deleted, want)
-	}
-}
-
-func TestSweepScratchRemovesOldDirectoriesOnly(t *testing.T) {
-	root := t.TempDir()
-	now := time.Now()
-	old := filepath.Join(root, "af-audio-old")
-	fresh := filepath.Join(root, "af-audio-fresh")
-	other := filepath.Join(root, "unrelated")
-	for _, dir := range []string{old, fresh, other} {
-		if err := os.Mkdir(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, dir := range []string{old, other} {
-		if err := os.Chtimes(dir, now.Add(-3*time.Hour), now.Add(-3*time.Hour)); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if removed := sweepScratch(root, scratchMaxAge, now); removed != 1 {
-		t.Fatalf("removed = %d, want 1", removed)
-	}
-	for dir, wantGone := range map[string]bool{old: true, fresh: false, other: false} {
-		_, err := os.Stat(dir)
-		if gone := os.IsNotExist(err); gone != wantGone {
-			t.Errorf("%s gone = %v, want %v", dir, gone, wantGone)
-		}
 	}
 }

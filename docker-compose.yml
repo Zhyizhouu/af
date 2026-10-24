@@ -10,8 +10,9 @@
 # Exposure: every published port below is bound to 127.0.0.1, so only this
 # machine reaches them. Temporal's gRPC port and SeaweedFS's S3 port carry no
 # real authentication, so they must never listen on the LAN. The one deliberate
-# exception is the `web` service (ports 3000 and 8443), which serves the built
-# app through Caddy so a phone on the same network can open it. Caddy proxies
+# exception is the `web` service's port 8443 (HTTPS), which serves the built app
+# through Caddy so a phone on the same network can open it. Its plain-HTTP port
+# 3000 stays on 127.0.0.1. Caddy proxies
 # /v1 to the api over the compose network.
 
 name: reafresh
@@ -130,6 +131,8 @@ services:
       AF_ALLOWED_ORIGINS: ${AF_ALLOWED_ORIGINS:-http://localhost:*,https://*.vercel.app}
       AF_MAX_UPLOAD_BYTES: ${AF_MAX_UPLOAD_BYTES:-536870912}
       AF_RESULT_TTL: ${AF_RESULT_TTL:-2h}
+      AF_MAX_OPEN_JOBS: ${AF_MAX_OPEN_JOBS:-3}
+      AF_PLAN_RATE_PER_10MIN: ${AF_PLAN_RATE_PER_10MIN:-20}
       # The assistant lives entirely in the gateway: one synchronous call, no
       # worker involved. Unset means the AI page says so instead of offering a
       # button that cannot work.
@@ -159,6 +162,7 @@ services:
       AF_S3_ENDPOINT: http://seaweedfs:8333
       AF_S3_ACCESS_KEY: ${AF_S3_ACCESS_KEY:-af-local}
       AF_S3_SECRET_KEY: ${AF_S3_SECRET_KEY:-af-local-secret}
+      AF_RESULT_TTL: ${AF_RESULT_TTL:-2h}
       # ffmpeg will use every core it is given, so one file at a time per
       # replica keeps each conversion fast. Add replicas, not concurrency.
       AF_WORKER_MAX_CONCURRENT: ${AF_WORKER_MAX_CONCURRENT:-1}
@@ -185,7 +189,7 @@ services:
       - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
       - "8443:8443"
     restart: unless-stopped
 

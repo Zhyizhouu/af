@@ -97,6 +97,14 @@ if [ -z "${LAN_IP:-}" ]; then
 fi
 export LAN_IP
 
+case "$(printf '%s' "${AF_AUTH_DISABLED:-}" | tr '[:upper:]' '[:lower:]')" in
+  1|true|yes|on)
+    case "$LAN_IP" in
+      127.*|localhost|::1) ;;
+      *) printf '%sWARNING: Auth is disabled and the stack is reachable on your LAN at https://%s:8443%s\n' "$YELLOW" "$LAN_IP" "$RESET" >&2 ;;
+    esac ;;
+esac
+
 # ---- 1. the whole stack ----------------------------------------------------
 
 step 1 "Docker stack"

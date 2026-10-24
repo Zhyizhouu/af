@@ -99,6 +99,10 @@ if (-not $env:LAN_IP) {
   $env:LAN_IP = if ($lan) { $lan } else { '127.0.0.1' }
 }
 
+if ($env:AF_AUTH_DISABLED -match '^(1|true|yes|on)$' -and $env:LAN_IP -notmatch '^(127\.|localhost$|::1$)') {
+  Write-Host "WARNING: Auth is disabled and the stack is reachable on your LAN at https://$($env:LAN_IP):8443" -ForegroundColor Yellow
+}
+
 # ---- 1. the whole stack ----------------------------------------------------
 
 Step 1 'Docker stack'

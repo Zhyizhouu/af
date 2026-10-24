@@ -3,18 +3,12 @@ package main
 import (
 	"context"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/Zhyizhouu/af/backend/internal/convert"
 )
 
-const (
-	sweepEvery     = time.Hour
-	scratchMaxAge  = 2 * time.Hour
-	scratchPattern = "af-audio-*"
-)
+const sweepEvery = time.Hour
 
 var blobPrefixes = []string{"sources/", "results/"}
 
@@ -23,12 +17,7 @@ func sweepLoop(
 	log *slog.Logger,
 	blobs convert.Blobs,
 	budget time.Duration,
-	tempDir string,
 ) {
-	if removed := sweepScratch(tempDir, scratchMaxAge, time.Now()); removed > 0 {
-		log.Info("stale scratch directories removed", "count", removed)
-	}
-
 	ticker := time.NewTicker(sweepEvery)
 	defer ticker.Stop()
 	for {
@@ -69,27 +58,6 @@ func sweepBlobs(
 	}
 	if removed > 0 {
 		log.Info("orphaned objects removed", "count", removed)
-	}
-	return removed
-}
-
-func sweepScratch(root string, maxAge time.Duration, now time.Time) int {
-	if root == "" {
-		root = os.TempDir()
-	}
-	matches, err := filepath.Glob(filepath.Join(root, scratchPattern))
-	if err != nil {
-		return 0
-	}
-	removed := 0
-	for _, path := range matches {
-		info, err := os.Stat(path)
-		if err != nil || !info.IsDir() || now.Sub(info.ModTime()) < maxAge {
-			continue
-		}
-		if os.RemoveAll(path) == nil {
-			removed++
-		}
 	}
 	return removed
 }

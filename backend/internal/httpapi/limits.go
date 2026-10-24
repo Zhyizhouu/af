@@ -11,18 +11,25 @@ import (
 	"github.com/Zhyizhouu/af/backend/internal/convert"
 )
 
-const rateWindow = 10 * time.Minute
+const (
+	rateWindow    = 10 * time.Minute
+	sweepInterval = time.Minute
+)
 
 type tokenBucket struct {
 	tokens float64
 	last   time.Time
 }
 
+// rateLimiter keeps its buckets in this process's memory, so the limit is per
+// instance: with N gateway instances behind a balancer the effective cap is N
+// times the configured one.
 type rateLimiter struct {
-	mu       sync.Mutex
-	capacity float64
-	buckets  map[string]*tokenBucket
-	now      func() time.Time
+	mu        sync.Mutex
+	capacity  float64
+	buckets   map[string]*tokenBucket
+	lastSweep time.Time
+	now       func() time.Time
 }
 
 func newRateLimiter(perWindow int) *rateLimiter {
@@ -42,7 +49,8 @@ func (l *rateLimiter) allow(uid string) bool {
 	defer l.mu.Unlock()
 
 	now := l.now()
-	if len(l.buckets) > 1024 {
+	if now.Sub(l.lastSweep) >= sweepInterval {
+		l.lastSweep = now
 		for id, b := range l.buckets {
 			if now.Sub(b.last) >= rateWindow {
 				delete(l.buckets, id)
@@ -65,13 +73,41 @@ func (l *rateLimiter) allow(uid string) bool {
 	return true
 }
 
+// openJobs tracks each account's open jobs in this process's memory, so the cap
+// is per instance: with N gateway instances the effective cap is N times the
+// configured one. An id older than budget is dropped by the periodic sweep, as
+// no job can still be running past its execution budget.
 type openJobs struct {
-	mu    sync.Mutex
-	byUID map[string]map[string]struct{}
+	mu        sync.Mutex
+	byUID     map[string]map[string]time.Time
+	budget    time.Duration
+	lastSweep time.Time
+	now       func() time.Time
 }
 
-func newOpenJobs() *openJobs {
-	return &openJobs{byUID: make(map[string]map[string]struct{})}
+func newOpenJobs(budget time.Duration) *openJobs {
+	return &openJobs{
+		byUID:  make(map[string]map[string]time.Time),
+		budget: budget,
+		now:    time.Now,
+	}
+}
+
+func (o *openJobs) sweep(now time.Time) {
+	if now.Sub(o.lastSweep) < sweepInterval {
+		return
+	}
+	o.lastSweep = now
+	for uid, set := range o.byUID {
+		for id, started := range set {
+			if now.Sub(started) >= o.budget {
+				delete(set, id)
+			}
+		}
+		if len(set) == 0 {
+			delete(o.byUID, uid)
+		}
+	}
 }
 
 func (o *openJobs) ids(uid string) []string {
@@ -113,13 +149,15 @@ func (o *openJobs) reserve(
 
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	now := o.now()
+	o.sweep(now)
 	if len(o.byUID[uid]) >= limit {
 		return false
 	}
 	if o.byUID[uid] == nil {
-		o.byUID[uid] = make(map[string]struct{})
+		o.byUID[uid] = make(map[string]time.Time)
 	}
-	o.byUID[uid][id] = struct{}{}
+	o.byUID[uid][id] = now
 	return true
 }
 

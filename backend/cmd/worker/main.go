@@ -51,7 +51,7 @@ func run(log *slog.Logger) error {
 	tempDir := os.Getenv("AF_TEMP_DIR")
 	sweepCtx, stopSweeping := context.WithCancel(ctx)
 	defer stopSweeping()
-	go sweepLoop(sweepCtx, log, blobs, convert.ExecutionBudget(cfg.ResultTTL), tempDir)
+	go sweepLoop(sweepCtx, log, blobs, convert.ExecutionBudget(cfg.ResultTTL))
 
 	w := worker.New(temporalClient, cfg.TaskQueue, worker.Options{
 		// ffmpeg saturates the cores it is given, so letting one replica take

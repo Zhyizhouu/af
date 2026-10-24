@@ -65,7 +65,7 @@ docker compose up --build
 | Temporal UI | http://localhost:8089 | every workflow, its history and its retries |
 | SeaweedFS | http://localhost:9333 | master status and volume browser |
 
-The `web` service also listens on HTTPS port 8443 for the LAN address in `LAN_IP` (auto-detected by dev-up; set it to override), so the app can be opened from a phone on the same network. A `tunnel` service (Cloudflare quick tunnel to `web`) is available under the `tunnel` compose profile.
+The `web` service also listens on HTTPS port 8443 for the LAN address in `LAN_IP` (auto-detected by dev-up; set it to override), so the app can be opened from a phone on the same network. Phones use `https://<LAN_IP>:8443`; plain-HTTP port 3000 is bound to this machine only. A `tunnel` service (Cloudflare quick tunnel to `web`) is available under the `tunnel` compose profile.
 
 To run the frontend with the Vite dev server against the local API:
 

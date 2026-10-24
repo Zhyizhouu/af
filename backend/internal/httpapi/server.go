@@ -65,7 +65,7 @@ func New(
 		log:      log,
 
 		planLimit: newRateLimiter(cfg.PlanRatePer10Min),
-		openJobs:  newOpenJobs(),
+		openJobs:  newOpenJobs(convert.ExecutionBudget(cfg.ResultTTL)),
 	}
 }
 

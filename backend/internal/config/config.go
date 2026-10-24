@@ -42,9 +42,11 @@ type Config struct {
 	S3Bucket    string
 
 	// Firebase, for verifying the caller's ID token
-	FirebaseProjectID   string
-	FirebaseCredsFile   string
-	AuthDisabled        bool
+	FirebaseProjectID string
+	FirebaseCredsFile string
+	AuthDisabled      bool
+	// The worker's blob sweeper derives its age cutoff from this, so the api
+	// and every worker must run with the same value.
 	ResultTTL           time.Duration
 	WorkerMaxConcurrent int
 

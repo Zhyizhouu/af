@@ -36,7 +36,7 @@ func TestRateLimiterRefillsOverTheWindow(t *testing.T) {
 func TestOpenJobsCap(t *testing.T) {
 	open := map[string]bool{"a": true, "b": true, "c": true, "d": true}
 	stillOpen := func(_ context.Context, id string) bool { return open[id] }
-	jobs := newOpenJobs()
+	jobs := newOpenJobs(time.Hour)
 	ctx := context.Background()
 
 	for _, id := range []string{"a", "b", "c"} {
@@ -59,6 +59,64 @@ func TestOpenJobsCap(t *testing.T) {
 	jobs.release("u1", "a")
 	if got := len(jobs.ids("u1")); got != 2 {
 		t.Fatalf("open = %d, want 2 after a release", got)
+	}
+}
+
+func TestRateLimiterSweepsOncePerInterval(t *testing.T) {
+	clock := time.Unix(1000, 0)
+	limiter := newRateLimiter(20)
+	limiter.now = func() time.Time { return clock }
+
+	limiter.allow("old")
+	clock = clock.Add(rateWindow + time.Second)
+	limiter.allow("fresh")
+	if _, ok := limiter.buckets["old"]; ok {
+		t.Fatal("an expired bucket should be swept once the interval has passed")
+	}
+
+	clock = clock.Add(rateWindow)
+	limiter.lastSweep = clock.Add(-sweepInterval + time.Second)
+	limiter.allow("other")
+	if _, ok := limiter.buckets["fresh"]; !ok {
+		t.Fatal("no sweep should run inside the interval")
+	}
+
+	clock = clock.Add(sweepInterval)
+	limiter.allow("other")
+	if _, ok := limiter.buckets["fresh"]; ok {
+		t.Fatal("the sweep should run once the interval has elapsed")
+	}
+}
+
+func TestOpenJobsDropsEmptyAccountsAndExpiredIDs(t *testing.T) {
+	clock := time.Unix(1000, 0)
+	jobs := newOpenJobs(time.Hour)
+	jobs.now = func() time.Time { return clock }
+	stillOpen := func(context.Context, string) bool { return true }
+	ctx := context.Background()
+
+	jobs.reserve(ctx, "u1", "a", 3, stillOpen)
+	jobs.release("u1", "a")
+	if _, ok := jobs.byUID["u1"]; ok {
+		t.Fatal("an account with no open jobs should be removed")
+	}
+
+	jobs.reserve(ctx, "u2", "b", 3, stillOpen)
+	clock = clock.Add(2 * time.Hour)
+	jobs.reserve(ctx, "u3", "c", 3, stillOpen)
+	if _, ok := jobs.byUID["u2"]; ok {
+		t.Fatal("an id past the execution budget should be swept with its account")
+	}
+	if len(jobs.byUID["u3"]) != 1 {
+		t.Fatal("the new reservation must survive the sweep")
+	}
+
+	jobs.reserve(ctx, "u4", "d", 3, stillOpen)
+	clock = clock.Add(2 * time.Hour)
+	jobs.lastSweep = clock.Add(-sweepInterval + time.Second)
+	jobs.reserve(ctx, "u5", "e", 3, stillOpen)
+	if _, ok := jobs.byUID["u4"]; !ok {
+		t.Fatal("no sweep should run inside the interval")
 	}
 }
 
