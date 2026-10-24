@@ -13,6 +13,7 @@ const written = new Map<string, Record<string, unknown>>();
 const commits: number[] = [];
 const failingPrefixes = new Set<string>();
 const queried: string[] = [];
+let duringGetDocs: ((path: string) => Promise<void>) | null = null;
 
 vi.mock('./firebase', () => ({ firestore: () => ({}) }));
 
@@ -32,6 +33,7 @@ vi.mock('firebase/firestore', async () => {
       constraints?: { field: string; value: Timestamp }[];
     }) => {
       if (ref.constraints) queried.push(ref.path);
+      await duringGetDocs?.(ref.path);
       return {
         docs: [...remote.entries()]
           .filter(([key]) => key.startsWith(`${ref.path}/`))
@@ -74,6 +76,7 @@ describe('sync', () => {
     commits.length = 0;
     failingPrefixes.clear();
     queried.length = 0;
+    duringGetDocs = null;
     await openScope(`test-${Math.random().toString(36).slice(2)}`);
   });
 
@@ -548,6 +551,69 @@ describe('sync', () => {
     expect(written.has('users/uid-1/events/fine')).toBe(true);
     expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();
+  });
+
+  it('keeps a local edit made while the pull was in flight and pushes it next pass', async () => {
+    const now = Date.now();
+    await db().calendarEvents.put(event('racing', now - 10_000, { title: 'before' }));
+    remote.set('users/uid-1/events/racing', {
+      title: 'remote',
+      updatedAt: Timestamp.fromMillis(now - 5000),
+    });
+    duringGetDocs = async (path) => {
+      if (path !== 'users/uid-1/events') return;
+      await db().calendarEvents.put(event('racing', now + 5000, { title: 'edited mid-sync' }));
+    };
+
+    await syncAll('uid-1');
+
+    expect((await db().calendarEvents.get('racing'))!.title).toBe('edited mid-sync');
+    expect(written.has('users/uid-1/events/racing')).toBe(false);
+
+    duringGetDocs = null;
+    await syncAll('uid-1');
+
+    expect(written.get('users/uid-1/events/racing')!.title).toBe('edited mid-sync');
+  });
+
+  it('skips a document over 900,000 bytes even when it is under 900,000 characters', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await db().calendarEvents.put(event('wide', 10, { notes: 'é'.repeat(450_000) }));
+    await db().calendarEvents.put(event('fine', 10));
+
+    await expect(syncAll('uid-1')).resolves.toBeUndefined();
+
+    expect(written.has('users/uid-1/events/wide')).toBe(false);
+    expect(written.has('users/uid-1/events/fine')).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('cuts a batch early when its documents pass 9 MB', async () => {
+    await db().calendarEvents.bulkPut(
+      Array.from({ length: 12 }, (_, index) =>
+        event(`big-${String(index).padStart(2, '0')}`, 1000 + index, { notes: 'x'.repeat(800_000) }),
+      ),
+    );
+
+    await syncAll('uid-1');
+
+    expect(commits).toEqual([11, 1]);
+    expect(written.size).toBe(12);
+  });
+
+  it('reads through the updatedAt index, not the whole table, in incremental mode', async () => {
+    await db().calendarEvents.put(event('untouched', 4000));
+    await db().calendarEvents.put(event('edited', 8000));
+    await db().syncMarks.put({ name: 'events', syncedAt: 1_000_000, pushedAt: 6000, fullAt: Date.now() });
+    const toArray = vi.spyOn(db().calendarEvents, 'toArray');
+
+    await syncAll('uid-1');
+
+    expect(toArray).not.toHaveBeenCalled();
+    expect(written.has('users/uid-1/events/edited')).toBe(true);
+    expect(written.has('users/uid-1/events/untouched')).toBe(false);
+    toArray.mockRestore();
   });
 
   it('does a full read once the last full read is over 24 hours old', async () => {

@@ -9,6 +9,7 @@ import {
   writeBatch,
   type DocumentData,
 } from 'firebase/firestore';
+import type { Table } from 'dexie';
 import { firestore } from './firebase';
 import { readDashboardLayout } from '../programs/dashboard/layout';
 import { jakartaDayKey } from '../programs/habits/time';
@@ -61,16 +62,25 @@ const userCollection = (uid: string, name: string) =>
   collection(firestore(), 'users', uid, name);
 
 const BATCH_LIMIT = 400;
-const MAX_DOCUMENT_CHARS = 900_000;
+const BATCH_BYTES = 9_000_000;
+const MAX_DOCUMENT_BYTES = 900_000;
 const PULL_OVERLAP_MS = 60_000;
 const FULL_READ_MS = 24 * 60 * 60 * 1000;
 
 interface SyncTable<Row> {
   toArray(): Promise<Row[]>;
+  where(index: 'updatedAt'): { above(value: number): { toArray(): Promise<Row[]> } };
+  bulkGet(keys: string[]): Promise<(Row | undefined)[]>;
   bulkPut(rows: Row[]): Promise<unknown>;
 }
 
-const isPushable = (name: string, id: string, data: DocumentData): boolean => {
+interface PendingWrite {
+  id: string;
+  data: DocumentData;
+  bytes: number;
+}
+
+const pushableSize = (name: string, id: string, data: DocumentData): number | null => {
   let finite = true;
   const json = JSON.stringify(data, function (this: Record<string, unknown>, key, value) {
     const raw = this[key];
@@ -79,13 +89,14 @@ const isPushable = (name: string, id: string, data: DocumentData): boolean => {
   });
   if (!finite) {
     console.warn(`sync: skipped ${name}/${id}, a timestamp is not a finite time`);
-    return false;
+    return null;
   }
-  if (json.length > MAX_DOCUMENT_CHARS) {
-    console.warn(`sync: skipped ${name}/${id}, document is ${json.length} characters`);
-    return false;
+  const bytes = new TextEncoder().encode(json).length;
+  if (bytes > MAX_DOCUMENT_BYTES) {
+    console.warn(`sync: skipped ${name}/${id}, document is ${bytes} bytes`);
+    return null;
   }
-  return true;
+  return bytes;
 };
 
 /**
@@ -110,7 +121,10 @@ async function syncCollection<Row extends { updatedAt: number }>(
   const pushedAt = Date.now();
   const incremental =
     mark !== undefined && mark.syncedAt > 0 && pushedAt - mark.fullAt <= FULL_READ_MS;
-  const rows = await table.toArray();
+  const rows =
+    mark && incremental
+      ? await table.where('updatedAt').above(mark.pushedAt).toArray()
+      : await table.toArray();
 
   const reference = userCollection(uid, name);
   const remote = await getDocs(
@@ -120,29 +134,47 @@ async function syncCollection<Row extends { updatedAt: number }>(
   );
   const remoteDocs = new Map(remote.docs.map((snapshot) => [snapshot.id, snapshot.data()]));
 
-  const writes: { id: string; data: DocumentData }[] = [];
+  const writes: PendingWrite[] = [];
   for (const row of rows) {
-    if (mark && incremental && row.updatedAt <= mark.pushedAt) continue;
     const id = keyOf(row);
     const data = remoteDocs.get(id);
     if (data && !localWins(row.updatedAt, data)) continue;
     const document = toDocument(row);
-    if (isPushable(name, id, document)) writes.push({ id, data: document });
+    const bytes = pushableSize(name, id, document);
+    if (bytes !== null) writes.push({ id, data: document, bytes });
   }
 
-  const localByKey = new Map(rows.map((row) => [keyOf(row), row]));
-  const pulled: Row[] = [];
+  const pulledIds = [...remoteDocs.keys()];
   let newest = mark?.syncedAt ?? 0;
-  for (const [id, data] of remoteDocs) {
-    newest = Math.max(newest, millis(data.syncedAt));
-    const local = localByKey.get(id);
-    if (!local || millis(data.updatedAt) > local.updatedAt) pulled.push(fromDocument(id, data));
+  for (const data of remoteDocs.values()) newest = Math.max(newest, millis(data.syncedAt));
+  if (pulledIds.length) {
+    await database.transaction('rw', table as unknown as Table, async () => {
+      const current = await table.bulkGet(pulledIds);
+      const pulled: Row[] = [];
+      pulledIds.forEach((id, index) => {
+        const data = remoteDocs.get(id)!;
+        const local = current[index];
+        if (!local || millis(data.updatedAt) > local.updatedAt) pulled.push(fromDocument(id, data));
+      });
+      if (pulled.length) await table.bulkPut(pulled);
+    });
   }
-  if (pulled.length) await table.bulkPut(pulled);
 
-  for (let start = 0; start < writes.length; start += BATCH_LIMIT) {
+  const batches: PendingWrite[][] = [];
+  let batchBytes = 0;
+  for (const write of writes) {
+    const last = batches[batches.length - 1];
+    if (!last || last.length >= BATCH_LIMIT || batchBytes + write.bytes > BATCH_BYTES) {
+      batches.push([write]);
+      batchBytes = write.bytes;
+    } else {
+      last.push(write);
+      batchBytes += write.bytes;
+    }
+  }
+  for (const group of batches) {
     const batch = writeBatch(firestore());
-    for (const { id, data } of writes.slice(start, start + BATCH_LIMIT)) {
+    for (const { id, data } of group) {
       batch.set(doc(reference, id), { ...data, syncedAt: serverTimestamp() });
     }
     await batch.commit();
