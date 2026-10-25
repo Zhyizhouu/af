@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { openScope } from '../../data/db';
+import { db, openScope } from '../../data/db';
 import { TasksWidget } from '../dashboard/widgets/TasksWidget';
 import { createPage, fillTaskDefaults, listPages, savePageValue, seedDefaultProperties } from './store';
 import { TasksScreen } from './TasksScreen';
@@ -311,6 +311,112 @@ describe('Console view unset row and column', () => {
     expect(await valuesOf('Mover')).toMatchObject({ [priority]: high, [status]: notStarted });
     delete (document as { elementFromPoint?: unknown }).elementFromPoint;
     vi.unstubAllGlobals();
+  });
+});
+
+describe('Filter', () => {
+  const untickDone = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Filter' }));
+    const dialog = await screen.findByRole('dialog');
+    const box = within(dialog).getByRole('checkbox', { name: 'Done' });
+    expect(box).toBeChecked();
+    fireEvent.click(box);
+    expect(box).not.toBeChecked();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  };
+
+  const seedPair = async () => {
+    const finished = await createPage('Finished');
+    await savePageValue(finished.id, status, done);
+    await createPage('Waiting');
+  };
+
+  it('drops the unticked status from the grid rows and columns', async () => {
+    await seedPair();
+    render(<TasksScreen />);
+    await screen.findByRole('button', { name: 'Finished' });
+    expect(screen.getByRole('columnheader', { name: 'Done' })).toBeInTheDocument();
+
+    await untickDone();
+
+    expect(screen.queryByRole('button', { name: 'Finished' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Waiting' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Done' })).toBeNull();
+    expect(screen.getByRole('columnheader', { name: 'Not started' })).toBeInTheDocument();
+  });
+
+  it('keeps the filter after the screen is rendered again', async () => {
+    await seedPair();
+    const first = render(<TasksScreen />);
+    await screen.findByRole('button', { name: 'Finished' });
+    await untickDone();
+    first.unmount();
+
+    render(<TasksScreen />);
+    expect(await screen.findByRole('button', { name: 'Waiting' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Finished' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Done' })).toBeNull();
+  });
+
+  it('hides unticked pages in the Table view too', async () => {
+    localStorage.setItem('af.tasks.view', 'table');
+    await seedPair();
+    render(<TasksScreen />);
+    await screen.findByText('Finished');
+
+    await untickDone();
+
+    expect(screen.queryByText('Finished')).toBeNull();
+    expect(screen.getByText('Waiting')).toBeInTheDocument();
+  });
+
+  it('removes a page moved to an unticked status after the reload', async () => {
+    await seedPair();
+    render(<TasksScreen />);
+    await screen.findByRole('button', { name: 'Waiting' });
+    await untickDone();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Waiting' }));
+    const menu = await screen.findByRole('menu');
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Done' }));
+
+    await waitFor(async () => expect((await valuesOf('Waiting'))?.[status]).toBe(done));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Waiting' })).toBeNull());
+  });
+
+  it('falls back to no filters when the stored value is malformed', async () => {
+    localStorage.setItem(`af.tasks.filters:${db().name}`, '{not json');
+    await seedPair();
+    render(<TasksScreen />);
+    expect(await screen.findByRole('button', { name: 'Finished' })).toBeInTheDocument();
+  });
+
+  it('ignores a saved clause whose property no longer exists', async () => {
+    localStorage.setItem(
+      `af.tasks.filters:${db().name}`,
+      JSON.stringify([{ kind: 'contains', propertyId: 'gone:property', text: 'zzz' }]),
+    );
+    await seedPair();
+    render(<TasksScreen />);
+    expect(await screen.findByRole('button', { name: 'Finished' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Waiting' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Filter' })).toBeInTheDocument();
+  });
+
+  it('keeps saved filters separate per account', async () => {
+    await seedPair();
+    const first = render(<TasksScreen />);
+    await screen.findByRole('button', { name: 'Finished' });
+    await untickDone();
+    first.unmount();
+
+    await openScope(`other-${Math.random()}`);
+    await seedDefaultProperties();
+    const finished = await createPage('Finished');
+    await savePageValue(finished.id, status, done);
+    render(<TasksScreen />);
+    expect(await screen.findByRole('button', { name: 'Finished' })).toBeInTheDocument();
   });
 });
 

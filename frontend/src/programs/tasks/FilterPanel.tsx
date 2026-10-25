@@ -46,13 +46,13 @@ export function FilterPanel({
             const current = filterFor(property.id);
 
             if (property.type === 'select' || property.type === 'multiSelect' || property.type === 'status') {
-              const included = current?.kind === 'options' ? current.included : new Set<string>();
+              const excluded = current?.kind === 'options' ? current.excluded : new Set<string>();
               return (
                 <div key={property.id} className="tsk__filter-row">
                   <span className="tsk__section-label">{property.name}</span>
                   <div className="tsk__filter-options">
                     {property.options.map((option) => {
-                      const checked = included.has(option.id);
+                      const checked = !excluded.has(option.id);
                       const color = toneColor(option.toneIndex);
                       return (
                         <label key={option.id} className="tsk__filter-option">
@@ -60,12 +60,12 @@ export function FilterPanel({
                             type="checkbox"
                             checked={checked}
                             onChange={() => {
-                              const next = new Set(included);
-                              if (checked) next.delete(option.id);
-                              else next.add(option.id);
+                              const next = new Set(excluded);
+                              if (checked) next.add(option.id);
+                              else next.delete(option.id);
                               setFilter(
                                 next.size > 0
-                                  ? { kind: 'options', propertyId: property.id, included: next }
+                                  ? { kind: 'options', propertyId: property.id, excluded: next }
                                   : null,
                                 property.id,
                               );

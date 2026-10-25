@@ -2,7 +2,7 @@ import type { Ref } from 'react';
 import { cn } from 'cn';
 import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../data/db';
 import { optionOfPage, statusRole } from './roles';
-import { findPriorityProperty } from './store';
+import { findPriorityProperty, type PropertyFilter } from './store';
 import type { TriageDrag } from './useTriageDrag';
 import './badges.css';
 
@@ -16,6 +16,7 @@ const unset: TaskPropertyOption = { id: '', label: 'Unset', toneIndex: 4 };
 interface TriageGridProps {
   pages: TaskPageRow[];
   properties: TaskPropertyRow[];
+  filters?: readonly PropertyFilter[];
   onChip: (page: TaskPageRow, anchor: HTMLElement) => void;
   drag: TriageDrag;
   containerRef?: Ref<HTMLDivElement>;
@@ -30,21 +31,36 @@ interface TriageGridProps {
  * collapses to one "All" row, and likewise for status. A page whose value is
  * missing, cleared or points at a deleted option sits in a muted "Unset" row
  * or column, shown only while a page needs it; chips can be dragged out of it
- * but nothing can be dropped into it.
+ * but nothing can be dropped into it. Options unticked in the filter are left
+ * off the axes, while glow and the hot zone keep following each option's place
+ * in the full priority list; if nothing is left on an axis the grid is replaced
+ * by a short note.
  */
-export function TriageGrid({ pages, properties, onChip, drag, containerRef }: TriageGridProps) {
+export function TriageGrid({ pages, properties, filters = [], onChip, drag, containerRef }: TriageGridProps) {
   const status = properties.find((property) => property.type === 'status');
   const priority = findPriorityProperty(properties);
   const hasPriority = Boolean(priority?.options.length);
   const hasStatus = Boolean(status?.options.length);
   const needsUnset = (property: TaskPropertyRow | undefined, enabled: boolean) =>
     enabled && pages.some((page) => !optionOfPage(property, page));
+  const shown = (property: TaskPropertyRow) => {
+    const clause = filters.find((filter) => filter.kind === 'options' && filter.propertyId === property.id);
+    return property.options.filter((option) => !(clause?.kind === 'options' && clause.excluded.has(option.id)));
+  };
   const rows = hasPriority
-    ? [...priority!.options, ...(needsUnset(priority, hasPriority) ? [unset] : [])]
+    ? [...shown(priority!), ...(needsUnset(priority, hasPriority) ? [unset] : [])]
     : [everything];
   const columns = hasStatus
-    ? [...status!.options, ...(needsUnset(status, hasStatus) ? [unset] : [])]
+    ? [...shown(status!), ...(needsUnset(status, hasStatus) ? [unset] : [])]
     : [everything];
+
+  if (rows.length === 0 || columns.length === 0) {
+    return (
+      <div className="tsk-grid-wrap" ref={containerRef}>
+        <p className="text-[13px] text-muted-foreground">Nothing matches the filter.</p>
+      </div>
+    );
+  }
 
   const onAxis = (
     property: TaskPropertyRow | undefined,
@@ -76,7 +92,7 @@ export function TriageGrid({ pages, properties, onChip, drag, containerRef }: Tr
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, rowIndex) => (
+          {rows.map((row) => (
             <tr key={row.id}>
               <th scope="row">
                 {hasPriority ? (
@@ -91,7 +107,7 @@ export function TriageGrid({ pages, properties, onChip, drag, containerRef }: Tr
                 const priorityId = hasPriority && row !== unset ? row.id : undefined;
                 const statusId = hasStatus && column !== unset ? column.id : undefined;
                 const role = statusId ? statusRole(status!, column) : null;
-                const hot = hasPriority && rowIndex === 0 && role !== 'done' && here.length > 0;
+                const hot = hasPriority && row === priority!.options[0] && role !== 'done' && here.length > 0;
                 return (
                   <td
                     key={column.id}
@@ -112,7 +128,7 @@ export function TriageGrid({ pages, properties, onChip, drag, containerRef }: Tr
                           {...chip}
                           className={cn(
                             chip.className,
-                            priorityId && `is-glow-${glowOf(rowIndex, priority!.options.length)}`,
+                            priorityId && `is-glow-${glowOf(priority!.options.indexOf(row), priority!.options.length)}`,
                             role === 'done' && 'is-done',
                             role === 'review' && 'is-calm',
                           )}

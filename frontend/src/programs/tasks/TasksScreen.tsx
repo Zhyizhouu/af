@@ -5,7 +5,7 @@ import { Checkbox } from '../../components/ui/checkbox';
 import { cn } from 'cn';
 import { useSession } from '../../app/session';
 import { tintStyle, toneColor } from '../../data/tones';
-import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../data/db';
+import { db, type TaskPageRow, type TaskPropertyOption, type TaskPropertyRow } from '../../data/db';
 import type { TaskCommandResult } from './command';
 import { CommandBar } from './CommandBar';
 import { formatDateValue } from './dateValue';
@@ -52,6 +52,49 @@ const saveView = (view: View) => {
   }
 };
 
+const filterStorageKey = (): string => `af.tasks.filters:${db().name}`;
+
+const parseFilter = (entry: unknown): PropertyFilter | null => {
+  if (!entry || typeof entry !== 'object') return null;
+  const item = entry as Record<string, unknown>;
+  if (typeof item.propertyId !== 'string') return null;
+  const propertyId = item.propertyId;
+  if (item.kind === 'options' && Array.isArray(item.excluded) && item.excluded.every((id) => typeof id === 'string')) {
+    return { kind: 'options', propertyId, excluded: new Set(item.excluded as string[]) };
+  }
+  if (item.kind === 'contains' && typeof item.text === 'string') {
+    return { kind: 'contains', propertyId, text: item.text };
+  }
+  if (item.kind === 'checkbox' && typeof item.want === 'boolean') {
+    return { kind: 'checkbox', propertyId, want: item.want };
+  }
+  return null;
+};
+
+const loadFilters = (): PropertyFilter[] => {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(filterStorageKey()) ?? '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((entry) => {
+      const filter = parseFilter(entry);
+      return filter ? [filter] : [];
+    });
+  } catch {
+    return [];
+  }
+};
+
+const saveFilters = (filters: readonly PropertyFilter[]) => {
+  try {
+    localStorage.setItem(
+      filterStorageKey(),
+      JSON.stringify(filters.map((f) => (f.kind === 'options' ? { ...f, excluded: [...f.excluded] } : f))),
+    );
+  } catch {
+    return;
+  }
+};
+
 /**
  * reAFresh · Task Tracker: user-defined "pages", each one a task with typed,
  * CRUD-able properties, shown either as a triage console (a priority-by-status
@@ -67,7 +110,7 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
   const [openPage, setOpenPage] = useState<OpenPage | null>(null);
   const [showProperties, setShowProperties] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<PropertyFilter[]>([]);
+  const [filters, setFilters] = useState<PropertyFilter[]>(loadFilters);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [view, setView] = useState<View>(loadView);
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -92,9 +135,15 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
     [reload, requestSync],
   );
 
+  useEffect(() => {
+    saveFilters(filters);
+  }, [filters]);
+
   const closeMenu = useCallback(() => setMenu(null), []);
 
-  const visiblePages = pages.filter((page) => matchesFilters(page, filters));
+  // Clauses for deleted properties are ignored, not pruned: properties are empty until the first load, so saving a pruned list would wipe stored filters.
+  const activeFilters = filters.filter((filter) => properties.some((property) => property.id === filter.propertyId));
+  const visiblePages = pages.filter((page) => matchesFilters(page, activeFilters));
   const openPageRow = openPage ? pages.find((page) => page.id === openPage.id) : undefined;
   const status = properties.find((property) => property.type === 'status');
   const priority = findPriorityProperty(properties);
@@ -158,7 +207,7 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
       <div className="tsk__bar">
         <Button variant="raised" onClick={() => setShowFilters(true)}>
           <SlidersHorizontal size={16} aria-hidden />
-          {filters.length > 0 ? `Filter (${filters.length})` : 'Filter'}
+          {activeFilters.length > 0 ? `Filter (${activeFilters.length})` : 'Filter'}
         </Button>
         <Button variant="raised" onClick={() => setShowProperties(true)}>
           Properties
@@ -182,6 +231,7 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
         <TriageGrid
           pages={visiblePages}
           properties={properties}
+          filters={activeFilters}
           drag={drag}
           containerRef={gridRef}
           onChip={(page, anchor) =>
@@ -322,7 +372,7 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
       {showFilters && (
         <FilterPanel
           properties={properties}
-          filters={filters}
+          filters={activeFilters}
           onChange={setFilters}
           onClose={() => setShowFilters(false)}
         />

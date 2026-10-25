@@ -488,7 +488,7 @@ describe('matchesFilters', () => {
     expect(matchesFilters(page, [])).toBe(true);
   });
 
-  it('filters a select value by an included set', async () => {
+  it('hides a select value that is excluded and shows one that is not', async () => {
     const property = await saveProperty({ name: 'Status', type: 'select' });
     await addOption(property.id, 'Done');
     const { options } = (await listProperties())[0]!;
@@ -496,36 +496,54 @@ describe('matchesFilters', () => {
     await savePageValue(page.id, property.id, options[0]!.id);
     const [reloaded] = await listPages();
 
-    const included: PropertyFilter = {
+    const hidden: PropertyFilter = {
       kind: 'options',
       propertyId: property.id,
-      included: new Set([options[0]!.id]),
+      excluded: new Set([options[0]!.id]),
     };
-    const excluded: PropertyFilter = {
+    const shown: PropertyFilter = {
       kind: 'options',
       propertyId: property.id,
-      included: new Set(['something-else']),
+      excluded: new Set(['something-else']),
     };
 
-    expect(matchesFilters(reloaded!, [included])).toBe(true);
-    expect(matchesFilters(reloaded!, [excluded])).toBe(false);
+    expect(matchesFilters(reloaded!, [hidden])).toBe(false);
+    expect(matchesFilters(reloaded!, [shown])).toBe(true);
   });
 
-  it('filters a multiSelect value when any id overlaps the included set', async () => {
-    const property = await saveProperty({ name: 'Tags', type: 'multiSelect' });
-    await addOption(property.id, 'Urgent');
-    await addOption(property.id, 'Bug');
+  it('shows a page with no value while an options clause exists', async () => {
+    const property = await saveProperty({ name: 'Status', type: 'select' });
+    await addOption(property.id, 'Done');
     const { options } = (await listProperties())[0]!;
     const page = await createPage('Task');
-    await savePageValue(page.id, property.id, [options[1]!.id]);
-    const [reloaded] = await listPages();
 
     const filter: PropertyFilter = {
       kind: 'options',
       propertyId: property.id,
-      included: new Set([options[0]!.id, options[1]!.id]),
+      excluded: new Set([options[0]!.id]),
     };
-    expect(matchesFilters(reloaded!, [filter])).toBe(true);
+    expect(matchesFilters(page, [filter])).toBe(true);
+  });
+
+  it('hides a multiSelect value only when every id is excluded', async () => {
+    const property = await saveProperty({ name: 'Tags', type: 'multiSelect' });
+    await addOption(property.id, 'Urgent');
+    await addOption(property.id, 'Bug');
+    const { options } = (await listProperties())[0]!;
+    const [urgent, bug] = [options[0]!.id, options[1]!.id];
+    const page = await createPage('Task');
+    const withIds = async (ids: string[]) => {
+      await savePageValue(page.id, property.id, ids);
+      return (await listPages())[0]!;
+    };
+
+    const bothOut: PropertyFilter = { kind: 'options', propertyId: property.id, excluded: new Set([urgent, bug]) };
+    const oneOut: PropertyFilter = { kind: 'options', propertyId: property.id, excluded: new Set([urgent]) };
+
+    expect(matchesFilters(await withIds([urgent, bug]), [bothOut])).toBe(false);
+    expect(matchesFilters(await withIds([urgent, bug]), [oneOut])).toBe(true);
+    expect(matchesFilters(await withIds([urgent]), [oneOut])).toBe(false);
+    expect(matchesFilters(await withIds([]), [bothOut])).toBe(true);
   });
 
   it('filters text case-insensitively with "contains"', async () => {
@@ -569,13 +587,13 @@ describe('matchesFilters', () => {
     const [reloaded] = await listPages();
 
     const filters: PropertyFilter[] = [
-      { kind: 'options', propertyId: status.id, included: new Set([doneId]) },
+      { kind: 'options', propertyId: status.id, excluded: new Set(['something-else']) },
       { kind: 'checkbox', propertyId: blocked.id, want: true },
     ];
     expect(matchesFilters(reloaded!, filters)).toBe(true);
 
     const failing: PropertyFilter[] = [
-      { kind: 'options', propertyId: status.id, included: new Set([doneId]) },
+      { kind: 'options', propertyId: status.id, excluded: new Set(['something-else']) },
       { kind: 'checkbox', propertyId: blocked.id, want: false },
     ];
     expect(matchesFilters(reloaded!, failing)).toBe(false);

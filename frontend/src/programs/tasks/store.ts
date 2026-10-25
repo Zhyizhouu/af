@@ -437,16 +437,20 @@ export async function deletePage(id: string): Promise<void> {
 // ---- filters ----
 
 export type PropertyFilter =
-  | { kind: 'options'; propertyId: string; included: Set<string> }
+  | { kind: 'options'; propertyId: string; excluded: Set<string> }
   | { kind: 'contains'; propertyId: string; text: string }
   | { kind: 'checkbox'; propertyId: string; want: boolean };
 
 /**
  * AND across every active filter clause (at most one clause per property).
- * A select/status value is a single option id; a multiSelect value is an
- * array of them — `options` clauses branch on the value's own shape rather
- * than needing the property's type passed in, since the two never collide
- * (a select value is never an array, a multiSelect value always is).
+ * An `options` clause lists the option ids the user has unticked, so with no
+ * clause every option is shown. A select/status value is a single option id,
+ * hidden only when it is excluded; a multiSelect value is an array of them,
+ * hidden only when it is non-empty and every id is excluded. A page with no
+ * value ("Unset") always passes. `options` clauses branch on the value's own
+ * shape rather than needing the property's type passed in, since the two
+ * never collide (a select value is never an array, a multiSelect value
+ * always is).
  */
 export function matchesFilters(page: TaskPageRow, filters: readonly PropertyFilter[]): boolean {
   return filters.every((filter) => {
@@ -454,9 +458,9 @@ export function matchesFilters(page: TaskPageRow, filters: readonly PropertyFilt
     switch (filter.kind) {
       case 'options':
         if (Array.isArray(value)) {
-          return (value as unknown[]).some((id) => filter.included.has(String(id)));
+          return value.length === 0 || (value as unknown[]).some((id) => !filter.excluded.has(String(id)));
         }
-        return typeof value === 'string' && filter.included.has(value);
+        return typeof value !== 'string' || !filter.excluded.has(value);
       case 'contains':
         return typeof value === 'string' && value.toLowerCase().includes(filter.text.toLowerCase());
       case 'checkbox':
