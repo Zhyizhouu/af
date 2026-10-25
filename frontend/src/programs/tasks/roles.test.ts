@@ -53,6 +53,12 @@ describe('statusRole', () => {
     expect(rolesOf(two)).toEqual(['todo', 'done']);
   });
 
+  it('keeps a custom option added after Done open while Done stays done', () => {
+    const added = { options: [...seeded.options, option('bl', 'Blocked')] };
+    expect(rolesOf(added)).toEqual(['todo', 'doing', 'review', 'done', 'review']);
+    expect(isDoneOption(added, added.options[4])).toBe(false);
+  });
+
   it('returns null for a missing option or one outside the list', () => {
     expect(statusRole(seeded, undefined)).toBeNull();
     expect(statusRole(seeded, option('zz', 'Custom'))).toBeNull();

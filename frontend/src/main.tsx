@@ -76,6 +76,11 @@ watchRuntimeConfig();
 // database `openScope` currently points at. See data/reminders.ts.
 startReminderScheduler();
 
+// Production only: in dev a cached shell would hide every edit behind a reload.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
 createRoot(root).render(
   <StrictMode>
     <BrowserRouter>

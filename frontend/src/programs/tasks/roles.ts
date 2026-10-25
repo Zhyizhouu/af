@@ -25,6 +25,9 @@ export function statusRole(
   if (byLabel) return byLabel;
   const at = owner.options.findIndex((candidate) => candidate.id === option.id);
   if (at < 0) return null;
+  // Position only stands in for labels when none are recognised. A custom
+  // option added to a labelled list lands last, after Done, and must stay open.
+  if (owner.options.some((candidate) => labelRoles[normalize(candidate.label)])) return 'review';
   if (at === 0) return 'todo';
   if (at === owner.options.length - 1) return 'done';
   return at === 1 ? 'doing' : 'review';
