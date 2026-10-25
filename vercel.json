@@ -4,7 +4,11 @@
   "installCommand": "echo 'installed inside frontend/'",
   "outputDirectory": "frontend/dist",
   "framework": null,
+  "functions": {
+    "api/gateway.go": { "maxDuration": 60 }
+  },
   "rewrites": [
+    { "source": "/v1/:path*", "destination": "/api/gateway?path=:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

@@ -99,7 +99,17 @@ if (-not $env:LAN_IP) {
   $env:LAN_IP = if ($lan) { $lan } else { '127.0.0.1' }
 }
 
-if ($env:AF_AUTH_DISABLED -match '^(1|true|yes|on)$' -and $env:LAN_IP -notmatch '^(127\.|localhost$|::1$)') {
+$authDisabled = $env:AF_AUTH_DISABLED
+$envFile = Join-Path $repo '.env'
+if (-not $authDisabled -and (Test-Path -LiteralPath $envFile)) {
+  $line = Get-Content -LiteralPath $envFile |
+    Where-Object { $_ -match '^\s*AF_AUTH_DISABLED\s*=' } | Select-Object -Last 1
+  if ($line) {
+    $authDisabled = (($line -replace '^\s*AF_AUTH_DISABLED\s*=', '') -replace '\s#.*$', '').Trim().Trim('"', "'").Trim()
+  }
+}
+
+if ($authDisabled -match '^(1|true|yes|on)$' -and $env:LAN_IP -notmatch '^(127\.|localhost$|::1$)') {
   Write-Host "WARNING: Auth is disabled and the stack is reachable on your LAN at https://$($env:LAN_IP):8443" -ForegroundColor Yellow
 }
 

@@ -133,6 +133,7 @@ services:
       AF_RESULT_TTL: ${AF_RESULT_TTL:-2h}
       AF_MAX_OPEN_JOBS: ${AF_MAX_OPEN_JOBS:-3}
       AF_PLAN_RATE_PER_10MIN: ${AF_PLAN_RATE_PER_10MIN:-20}
+      AF_PLAN_TIMEOUT: ${AF_PLAN_TIMEOUT:-}
       # The assistant lives entirely in the gateway: one synchronous call, no
       # worker involved. Unset means the AI page says so instead of offering a
       # button that cannot work.

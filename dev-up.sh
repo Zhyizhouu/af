@@ -97,7 +97,15 @@ if [ -z "${LAN_IP:-}" ]; then
 fi
 export LAN_IP
 
-case "$(printf '%s' "${AF_AUTH_DISABLED:-}" | tr '[:upper:]' '[:lower:]')" in
+AUTH_DISABLED="${AF_AUTH_DISABLED:-}"
+if [ -z "$AUTH_DISABLED" ] && [ -f "$REPO/.env" ]; then
+  AUTH_DISABLED="$(tr -d '\r' < "$REPO/.env" \
+    | sed -n 's/^[[:space:]]*AF_AUTH_DISABLED[[:space:]]*=//p' | tail -n 1 \
+    | sed -e 's/[[:space:]]#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+          -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")"
+fi
+
+case "$(printf '%s' "$AUTH_DISABLED" | tr '[:upper:]' '[:lower:]')" in
   1|true|yes|on)
     case "$LAN_IP" in
       127.*|localhost|::1) ;;

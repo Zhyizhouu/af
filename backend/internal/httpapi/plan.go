@@ -65,7 +65,7 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 	// Bounded independently of the client: a browser that hangs up should not
 	// leave a model call running, and one that asks for something enormous
 	// should not hold a connection open indefinitely.
-	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), s.planTimeout())
 	defer cancel()
 
 	var proposed plan.Plan
@@ -150,4 +150,16 @@ func capitalise(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// defaultPlanTimeout is what a Config built without AF_PLAN_TIMEOUT (a zero
+// value, as in tests and embedders) gets, so a plan call is never unbounded or
+// born already expired.
+const defaultPlanTimeout = 90 * time.Second
+
+func (s *Server) planTimeout() time.Duration {
+	if s.cfg.PlanTimeout <= 0 {
+		return defaultPlanTimeout
+	}
+	return s.cfg.PlanTimeout
 }

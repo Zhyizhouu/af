@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "check": "tsc -b --noEmit",
     "look": "node scripts/look.mjs",
+    "check:gomod": "sh ../scripts/check-go-mod.sh",
     "test": "vitest run",
     "test:watch": "vitest"
   },

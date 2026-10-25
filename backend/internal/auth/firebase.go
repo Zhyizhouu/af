@@ -10,12 +10,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
 	"google.golang.org/api/option"
+
+	"github.com/Zhyizhouu/af/backend/internal/config"
 )
 
 // ErrUnauthorized is returned for every rejection, whatever the cause. The
@@ -120,4 +123,17 @@ func BearerToken(r *http.Request) string {
 		return ""
 	}
 	return strings.TrimSpace(header[7:])
+}
+
+// FromConfig picks the verifier for a gateway: the open one when auth is
+// switched off, otherwise Firebase. Both entry points, the long-running api
+// and the serverless function, build it here so the warning and the choice
+// cannot drift apart.
+func FromConfig(ctx context.Context, cfg config.Config, log *slog.Logger) (Verifier, error) {
+	if cfg.AuthDisabled {
+		log.Warn("AF_AUTH_DISABLED is set: every request is accepted as one shared user. " +
+			"On a reachable host this lets anyone spend your CPU and disk.")
+		return Open{}, nil
+	}
+	return NewFirebase(ctx, cfg.FirebaseProjectID, cfg.FirebaseCredsFile)
 }

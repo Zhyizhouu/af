@@ -53,6 +53,11 @@ type Config struct {
 	PlanRatePer10Min int
 	MaxOpenJobs      int
 
+	// How long one assistant request may run before the model call is
+	// abandoned. A host with a hard function time limit sets it below that
+	// limit so the gateway answers instead of being cut off mid-call.
+	PlanTimeout time.Duration
+
 	// Gemini, for the assistant. Empty disables it rather than letting the
 	// page offer a button that cannot work.
 	GeminiAPIKey string
@@ -87,6 +92,9 @@ func Load() (Config, error) {
 		return c, err
 	}
 	if c.ResultTTL, err = duration("AF_RESULT_TTL", 2*time.Hour); err != nil {
+		return c, err
+	}
+	if c.PlanTimeout, err = duration("AF_PLAN_TIMEOUT", 90*time.Second); err != nil {
 		return c, err
 	}
 	return c, nil

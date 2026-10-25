@@ -20,7 +20,6 @@ import (
 	"github.com/Zhyizhouu/af/backend/internal/auth"
 	"github.com/Zhyizhouu/af/backend/internal/config"
 	"github.com/Zhyizhouu/af/backend/internal/convert"
-	"github.com/Zhyizhouu/af/backend/internal/gemini"
 	"github.com/Zhyizhouu/af/backend/internal/httpapi"
 	"github.com/Zhyizhouu/af/backend/internal/storage"
 	"github.com/Zhyizhouu/af/backend/internal/temporalclient"
@@ -44,7 +43,7 @@ func run(log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	verifier, err := verifier(ctx, cfg, log)
+	verifier, err := auth.FromConfig(ctx, cfg, log)
 	if err != nil {
 		return err
 	}
@@ -78,20 +77,9 @@ func run(log *slog.Logger) error {
 	// The assistant is the one feature that lives entirely in the gateway —
 	// one synchronous call, nothing stored, no worker involved. Nil without a
 	// key, and the page says so rather than offering a button that fails.
-	var planner httpapi.Planner
-	if cfg.GeminiAPIKey == "" {
-		log.Warn("AF_GEMINI_API_KEY is unset: the assistant is unavailable")
-	} else {
-		assistant, err := gemini.New(gemini.Options{
-			APIKey: cfg.GeminiAPIKey,
-			Model:  cfg.GeminiModel,
-			Logger: log,
-		})
-		if err != nil {
-			return err
-		}
-		planner = assistant
-		log.Info("assistant ready", "model", assistant.Model())
+	planner, err := httpapi.PlannerFromConfig(cfg, log)
+	if err != nil {
+		return err
 	}
 
 	server := &http.Server{
@@ -122,13 +110,4 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	return nil
-}
-
-func verifier(ctx context.Context, cfg config.Config, log *slog.Logger) (auth.Verifier, error) {
-	if cfg.AuthDisabled {
-		log.Warn("AF_AUTH_DISABLED is set: every request is accepted as one shared user. " +
-			"On a reachable host this lets anyone spend your CPU and disk.")
-		return auth.Open{}, nil
-	}
-	return auth.NewFirebase(ctx, cfg.FirebaseProjectID, cfg.FirebaseCredsFile)
 }

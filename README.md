@@ -32,6 +32,8 @@ Vercel builds and serves `frontend/` and nothing else. The Go backend is not par
 
 The frontend finds the API through `AF_CONVERT_API`, which is compiled in at build time, and it can also read the address from `config/runtime` in Firestore, which `dev-up` publishes so the deployed site follows a new tunnel without a redeploy.
 
+`sh scripts/check-go-mod.sh` fails when the root `go.mod` and `go.sum` (the module Vercel builds) have drifted from `backend/go.mod`.
+
 ## Audio Converter
 
 The audio program is the one part of reAFresh that is not local. Conversion runs on a Go worker with ffmpeg, orchestrated by [Temporal](https://temporal.io), with [SeaweedFS](https://github.com/seaweedfs/seaweedfs) holding the bytes. All of it lives in `backend/` and `docker-compose.yml`.
