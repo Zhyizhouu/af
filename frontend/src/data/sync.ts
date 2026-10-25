@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import type { Table } from 'dexie';
 import { firestore } from './firebase';
+import { normalizeTime } from './todoTime';
 import { readDashboardLayout } from '../programs/dashboard/layout';
 import { jakartaDayKey } from '../programs/habits/time';
 import {
@@ -417,6 +418,8 @@ const todoItemToDocument = (row: TodoItemRow): DocumentData => ({
   checked: row.checked,
   doneAt: row.doneAt === null ? null : stamp(row.doneAt),
   sortOrder: row.sortOrder,
+  taskId: row.taskId ?? null,
+  time: row.time ?? null,
   createdAt: stamp(row.createdAt),
   updatedAt: stamp(row.updatedAt),
   deleted: row.deleted,
@@ -429,6 +432,8 @@ const todoItemFromDocument = (id: string, data: DocumentData): TodoItemRow => ({
   checked: Boolean(data.checked),
   doneAt: data.doneAt ? millis(data.doneAt) : null,
   sortOrder: Number(data.sortOrder ?? 0),
+  taskId: typeof data.taskId === 'string' && data.taskId !== '' ? data.taskId : null,
+  time: normalizeTime(data.time),
   createdAt: millis(data.createdAt),
   updatedAt: millis(data.updatedAt),
   deleted: Boolean(data.deleted),

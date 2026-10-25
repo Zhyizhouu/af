@@ -59,7 +59,29 @@ self.addEventListener('fetch', (event) => {
 
   // Hashed bundles never change under one name, so a cached copy is always
   // right. A missing asset comes back as the index.html rewrite, never cached.
-  if (!isShellFile(new URL(request.url))) return;
+  const url = new URL(request.url);
+  if (!isShellFile(url)) return;
+  if (!url.pathname.startsWith('/assets/')) {
+    // Root icons keep their names across deploys, so a cached copy may be
+    // stale: answer from it at once and refresh it in the background.
+    event.respondWith(
+      caches.open(CACHE).then((cache) =>
+        cache.match(request).then((cached) => {
+          const refresh = fetch(request).then((response) => {
+            if (response.status === 200 && !isHtml(response)) {
+              const copy = response.clone();
+              event.waitUntil(cache.put(request, copy));
+            }
+            return response;
+          });
+          if (!cached) return refresh;
+          event.waitUntil(refresh.catch(() => {}));
+          return cached;
+        }),
+      ),
+    );
+    return;
+  }
   event.respondWith(
     caches.match(request).then(
       (cached) =>

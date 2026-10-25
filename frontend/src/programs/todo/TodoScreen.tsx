@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { cn } from 'cn';
 import { Button } from '../../components/ui/button';
 import { Checkbox } from '../../components/ui/checkbox';
 import { Input } from '../../components/ui/input';
 import { useSession } from '../../app/session';
+import type { AgendaEntry } from '../../data/agenda';
 import type { TodoItemRow } from '../../data/db';
-import { dayFromKey, jakartaDayKey, keyFromDay } from '../habits/time';
-import { addTodo, deleteTodo, listTodosInRange, toggleTodo } from './store';
-import { DayPanel } from './DayPanel';
+import { findOverlaps, readEntriesForDays } from '../../data/overlap';
+import { useIsMobile } from '../../hooks/use-mobile';
+import { addDaysToKey, dayFromKey, jakartaDayKey, keyFromDay } from '../habits/time';
+import { addTodo, deleteTodo, listTodosInRange, orderForDisplay, toggleTodo, withSteps, type TodoWithStep } from './store';
+import { StepMark } from './StepMark';
+import { DayPanel, DuringChip, dragIndexes, type MetaOf, type TodoMeta } from './DayPanel';
 import { useTodoDrag, type After, type RowProps } from './useTodoDrag';
 
 type View = 'day' | 'week' | 'month';
@@ -34,12 +38,6 @@ const dayLongFormat = new Intl.DateTimeFormat(undefined, {
 });
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
-const addDays = (key: string, count: number): string => {
-  const day = dayFromKey(key);
-  day.setUTCDate(day.getUTCDate() + count);
-  return keyFromDay(day);
-};
-
 /** Steps whole months, clamping to the last day when the target month is shorter. */
 const addMonths = (key: string, count: number): string => {
   const day = dayFromKey(key);
@@ -49,14 +47,14 @@ const addMonths = (key: string, count: number): string => {
   return keyFromDay(target);
 };
 
-const weekStart = (key: string): string => addDays(key, -((dayFromKey(key).getUTCDay() + 6) % 7));
+const weekStart = (key: string): string => addDaysToKey(key, -((dayFromKey(key).getUTCDay() + 6) % 7));
 
 /** The first and last day keys a view needs loaded around the selected day. */
 function rangeFor(view: View, day: string): { from: string; to: string } {
   if (view === 'day') return { from: day, to: day };
   if (view === 'week') {
     const from = weekStart(day);
-    return { from, to: addDays(from, 6) };
+    return { from, to: addDaysToKey(from, 6) };
   }
   const first = dayFromKey(day);
   first.setUTCDate(1);
@@ -71,7 +69,7 @@ function monthCells(day: string): (string | null)[] {
   const count = dayFromKey(to).getUTCDate();
   return [
     ...Array.from({ length: lead }, () => null),
-    ...Array.from({ length: count }, (_, i) => addDays(from, i)),
+    ...Array.from({ length: count }, (_, i) => addDaysToKey(from, i)),
   ];
 }
 
@@ -96,36 +94,62 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
   const [day, setDay] = useState(today);
   const [items, setItems] = useState<TodoItemRow[]>([]);
   const [weekAddDay, setWeekAddDay] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<Map<string, TodoWithStep['task']>>(new Map());
+  const [entries, setEntries] = useState<AgendaEntry[]>([]);
+  const narrow = useIsMobile() || paneWidth === 'split';
 
   const { from, to } = useMemo(() => rangeFor(view, day), [view, day]);
 
+  const latest = useRef(0);
+
   const reload = useCallback(async () => {
-    setItems(await listTodosInRange(from, to));
+    const request = ++latest.current;
+    const rows = await listTodosInRange(from, to);
+    const [stepped, found] = await Promise.all([withSteps(rows), readEntriesForDays(from, to)]);
+    if (request !== latest.current) return;
+    setItems(rows);
+    setTasks(new Map(stepped.map((step) => [step.todo.id, step.task])));
+    setEntries(found);
   }, [from, to]);
 
   useEffect(() => {
     void reload();
   }, [reload, revision]);
 
+  const [saveFailed, setSaveFailed] = useState(false);
+
   const after = useCallback<After>(
     async (action) => {
-      await action();
-      await reload();
-      requestSync();
+      try {
+        await action();
+        await reload();
+        requestSync();
+        setSaveFailed(false);
+        return true;
+      } catch {
+        setSaveFailed(true);
+        return false;
+      }
     },
     [reload, requestSync],
   );
 
   const drag = useTodoDrag(after);
 
+  const clashes = useMemo(() => findOverlaps(items, entries), [items, entries]);
+  const metaOf = useCallback<MetaOf>(
+    (id) => ({ task: tasks.get(id) ?? null, clash: clashes.get(id) ?? [] }),
+    [tasks, clashes],
+  );
+
   const forDay = (key: string) => items.filter((item) => item.day === key);
 
   const step = (direction: 1 | -1) =>
     setDay(
       view === 'day'
-        ? addDays(day, direction)
+        ? addDaysToKey(day, direction)
         : view === 'week'
-          ? addDays(day, 7 * direction)
+          ? addDaysToKey(day, 7 * direction)
           : addMonths(day, direction),
     );
 
@@ -134,8 +158,8 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
     setView('day');
   };
 
-  const open = forDay(day).filter((item) => !item.checked);
-  const archived = forDay(day).filter((item) => item.checked);
+  const open = orderForDisplay(forDay(day).filter((item) => !item.checked));
+  const archived = orderForDisplay(forDay(day).filter((item) => item.checked));
   const dayTitle = day === today ? 'Today' : dayFormat.format(dayFromKey(day));
 
   return (
@@ -199,7 +223,15 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto">
+      <div
+        className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto"
+        onInput={() => setSaveFailed(false)}
+      >
+        {saveFailed && (
+          <p role="alert" className="m-0 text-xs text-muted-foreground">
+            Could not save, try again
+          </p>
+        )}
         {view === 'day' && (
           <DayPanel
             day={day}
@@ -209,15 +241,18 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
             after={after}
             rowProps={drag.row}
             over={drag.over(day)}
+            metaOf={metaOf}
+            narrow={narrow}
             archived={archived}
           />
         )}
 
         {view === 'week' && (
           <div className="surface-3d shrink-0 rounded-2xl">
-            {Array.from({ length: 7 }, (_, index) => addDays(from, index)).map((key) => {
+            {Array.from({ length: 7 }, (_, index) => addDaysToKey(from, index)).map((key) => {
               const dayItems = forDay(key);
-              const dayOpen = dayItems.filter((item) => !item.checked);
+              const dayOpen = orderForDisplay(dayItems.filter((item) => !item.checked));
+              const indexes = dragIndexes(dayOpen);
               const done = dayItems.length - dayOpen.length;
               const wide = paneWidth !== 'split';
               const isToday = key === today;
@@ -269,7 +304,13 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
                     ) : (
                       <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-x-6 gap-y-[9px] p-0">
                         {dayOpen.map((item, index) => (
-                          <WeekItem key={item.id} item={item} after={after} rowProps={drag.row(item, index)} />
+                          <WeekItem
+                            key={item.id}
+                            item={item}
+                            after={after}
+                            rowProps={drag.row(item, indexes[index]!)}
+                            meta={metaOf(item.id)}
+                          />
                         ))}
                       </ul>
                     )}
@@ -277,7 +318,7 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
                       open={weekAddDay === key}
                       onOpen={() => setWeekAddDay(key)}
                       onClose={() => setWeekAddDay((current) => (current === key ? null : current))}
-                      onAdd={(value) => after(() => addTodo(value, key))}
+                      onAdd={(value, time) => after(() => addTodo(value, key, { time }))}
                     />
                   </div>
 
@@ -362,6 +403,8 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
             after={after}
             rowProps={drag.row}
             over={drag.over(day)}
+            metaOf={metaOf}
+            narrow={narrow}
             footer={archived.length > 0 && <p className="mt-3 text-xs text-muted-foreground">{archived.length} archived</p>}
           />
         )}
@@ -380,9 +423,10 @@ function WeekAdd({
   open: boolean;
   onOpen: () => void;
   onClose: () => void;
-  onAdd: (text: string) => Promise<void>;
+  onAdd: (text: string, time: string | null) => Promise<boolean>;
 }) {
   const [text, setText] = useState('');
+  const [time, setTime] = useState('');
 
   if (!open) {
     return (
@@ -398,25 +442,60 @@ function WeekAdd({
     );
   }
 
+  const submit = () => {
+    if (!text.trim()) return;
+    void onAdd(text, time || null).then((saved) => {
+      if (!saved) return;
+      setText('');
+      setTime('');
+    });
+  };
+
   return (
-    <Input
-      autoFocus
-      className="inset-field h-8 w-full text-[13px]"
-      placeholder="Add an item…"
-      value={text}
-      onChange={(event) => setText(event.target.value)}
-      onBlur={() => {
-        if (!text.trim()) onClose();
+    <div
+      className="flex flex-wrap gap-2"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget) && !text.trim()) onClose();
       }}
       onKeyDown={(event) => {
         if (event.key === 'Escape') onClose();
-        if (event.key === 'Enter' && text.trim()) void onAdd(text).then(() => setText(''));
+        if (event.key === 'Enter' && event.target instanceof HTMLInputElement) submit();
       }}
-    />
+    >
+      <Input
+        autoFocus
+        className="inset-field h-8 min-w-[8rem] flex-1 text-[13px]"
+        placeholder="Add an item…"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+      />
+      <Input
+        type="time"
+        step={300}
+        aria-label="Time"
+        className="inset-field h-8 w-auto text-[13px]"
+        value={time}
+        onChange={(event) => setTime(event.target.value)}
+      />
+      <Button variant="raised" size="sm" disabled={!text.trim()} onClick={submit}>
+        Add
+      </Button>
+    </div>
   );
 }
 
-function WeekItem({ item, after, rowProps }: { item: TodoItemRow; after: After; rowProps: RowProps }) {
+function WeekItem({
+  item,
+  after,
+  rowProps,
+  meta,
+}: {
+  item: TodoItemRow;
+  after: After;
+  rowProps: RowProps;
+  meta: TodoMeta;
+}) {
+  const chip = meta.clash.length > 0;
   return (
     <li {...rowProps} className={cn('group/item flex items-start gap-2.5', rowProps.className)}>
       <Checkbox
@@ -425,7 +504,18 @@ function WeekItem({ item, after, rowProps }: { item: TodoItemRow; after: After; 
         aria-label={item.text}
         className="inset-field mt-0.5 size-[18px] shrink-0 rounded-[5px] border-white/10 text-white"
       />
-      <span className="min-w-0 flex-1 text-sm [overflow-wrap:anywhere]">{item.text}</span>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm [overflow-wrap:anywhere]">
+          {item.time && <span className="mr-1.5 font-semibold text-muted-foreground tabular-nums">{item.time}</span>}
+          <span>{item.text}</span>
+        </div>
+        {(meta.task || chip) && (
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+            {meta.task && <StepMark task={meta.task} compact />}
+            {chip && <DuringChip clash={meta.clash} />}
+          </div>
+        )}
+      </div>
       <Button
         variant="ghost"
         size="icon-xs"

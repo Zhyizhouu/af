@@ -15,11 +15,6 @@ export interface PointerDragConfig<T> {
   onMove: (x: number, y: number) => T | null;
   onDrop: (target: T) => void;
   onEnd: () => void;
-  onCancel?: () => void;
-  threshold?: number;
-  holdMs?: number;
-  holdSlop?: number;
-  cursor?: string;
 }
 
 export function usePointerDrag<T>() {
@@ -30,7 +25,6 @@ export function usePointerDrag<T>() {
 
   const start = useCallback((event: ReactPointerEvent<HTMLElement>, config: PointerDragConfig<T>) => {
     if (event.button !== 0 || !event.isPrimary) return;
-    const { threshold = MOVE_THRESHOLD, holdMs = HOLD_MS, holdSlop = HOLD_SLOP, cursor = 'grabbing' } = config;
     const { pointerId, pointerType, clientX: startX, clientY: startY } = event;
     const touch = pointerType === 'touch';
     if (!touch) {
@@ -45,18 +39,18 @@ export function usePointerDrag<T>() {
       active = true;
       window.getSelection()?.removeAllRanges();
       document.addEventListener('selectstart', noSelect);
-      unlock = lockCursor(cursor);
+      unlock = lockCursor('grabbing');
       config.onBegin(event);
     };
-    const timer = touch ? window.setTimeout(begin, holdMs) : 0;
+    const timer = touch ? window.setTimeout(begin, HOLD_MS) : 0;
 
     const move = (e: PointerEvent) => {
       if (e.pointerId !== pointerId) return;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
       if (!active) {
-        if (touch && Math.hypot(dx, dy) > holdSlop) return end(false);
-        if (!touch && Math.hypot(dx, dy) >= threshold) begin();
+        if (touch && Math.hypot(dx, dy) > HOLD_SLOP) return end(false);
+        if (!touch && Math.hypot(dx, dy) >= MOVE_THRESHOLD) begin();
         else return;
       }
       setOffset({ x: dx, y: dy });
@@ -93,7 +87,6 @@ export function usePointerDrag<T>() {
       window.addEventListener('click', swallowClick, { capture: true, once: true });
       window.setTimeout(() => window.removeEventListener('click', swallowClick, true), 0);
       if (drop && hit) config.onDrop(hit);
-      else config.onCancel?.();
     }
 
     window.addEventListener('pointermove', move);

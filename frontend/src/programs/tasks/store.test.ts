@@ -20,8 +20,11 @@ import {
   savePageValue,
   saveProperty,
   seedDefaultProperties,
+  statusPropertyOf,
+  syncTaskStatusFromTodos,
   type PropertyFilter,
 } from './store';
+import { addTodo, deleteTodo, listStepsForTask, toggleTodo } from '../todo/store';
 
 beforeEach(async () => {
   await openScope(`test-${Math.random().toString(36).slice(2)}`);
@@ -597,5 +600,141 @@ describe('matchesFilters', () => {
       { kind: 'checkbox', propertyId: blocked.id, want: false },
     ];
     expect(matchesFilters(reloaded!, failing)).toBe(false);
+  });
+});
+
+describe('task to-do links', () => {
+  const statusOf = async (taskId: string) => (await db().taskPages.get(taskId))!.values['seed:status'];
+  const NOT_STARTED = 'seed:status:not-started';
+  const IN_PROGRESS = 'seed:status:in-progress';
+  const DONE = 'seed:status:done';
+
+  async function setup() {
+    await seedDefaultProperties();
+    const task = await createPage('Task');
+    const first = (await addTodo('one', '2026-03-10', { taskId: task.id }))!;
+    const second = (await addTodo('two', '2026-03-11', { taskId: task.id }))!;
+    return { task, first, second };
+  }
+
+  it('ticking one to-do moves the task to In progress, both to Done', async () => {
+    const { task, first, second } = await setup();
+    expect(await statusOf(task.id)).toBe(NOT_STARTED);
+
+    await toggleTodo(first);
+    expect(await statusOf(task.id)).toBe(IN_PROGRESS);
+
+    await toggleTodo(second);
+    expect(await statusOf(task.id)).toBe(DONE);
+  });
+
+  it('unticking steps the task back down', async () => {
+    const { task, first, second } = await setup();
+    await toggleTodo(first);
+    await toggleTodo(second);
+
+    await toggleTodo(first);
+    expect(await statusOf(task.id)).toBe(IN_PROGRESS);
+
+    await toggleTodo(second);
+    expect(await statusOf(task.id)).toBe(NOT_STARTED);
+  });
+
+  it('deleting the last unchecked to-do completes the task', async () => {
+    const { task, first, second } = await setup();
+    await toggleTodo(first);
+
+    await deleteTodo(second);
+
+    expect(await statusOf(task.id)).toBe(DONE);
+  });
+
+  it('marking the task Done ticks the remaining open to-dos, and leaving Done keeps them ticked', async () => {
+    const { task, first, second } = await setup();
+    await toggleTodo(first);
+
+    await savePageValue(task.id, 'seed:status', DONE);
+
+    const todos = (await listStepsForTask(task.id)).map((step) => step.todo);
+    expect(todos.every((row) => row.checked && typeof row.doneAt === 'number')).toBe(true);
+    expect(todos.map((row) => row.id)).toEqual([first, second]);
+
+    await savePageValue(task.id, 'seed:status', IN_PROGRESS);
+
+    expect((await listStepsForTask(task.id)).every((step) => step.todo.checked)).toBe(true);
+    expect(await statusOf(task.id)).toBe(IN_PROGRESS);
+  });
+
+  it('adding a step to a Done task with every other step ticked moves it to In progress', async () => {
+    const { task, first, second } = await setup();
+    await toggleTodo(first);
+    await toggleTodo(second);
+    expect(await statusOf(task.id)).toBe(DONE);
+
+    await addTodo('three', '2026-03-12', { taskId: task.id });
+
+    expect(await statusOf(task.id)).toBe(IN_PROGRESS);
+  });
+
+  it('picks the same status property for linking and for ticking, by sortOrder then createdAt', async () => {
+    await seedDefaultProperties();
+    const seeded = (await db().taskProperties.get('seed:status'))!;
+    const done = { id: 'other:done', label: 'Done', toneIndex: 1 };
+    const todo = { id: 'other:todo', label: 'Not started', toneIndex: 4 };
+    await db().taskProperties.put({
+      ...seeded,
+      id: 'other:status',
+      name: 'Other',
+      options: [todo, done],
+      sortOrder: -1,
+      createdAt: 1,
+    });
+    expect(statusPropertyOf(await db().taskProperties.toArray())!.id).toBe('other:status');
+    const task = await createPage('Task');
+    const step = (await addTodo('one', '2026-03-10', { taskId: task.id }))!;
+
+    await savePageValue(task.id, 'seed:status', DONE);
+    expect((await db().todoItems.get(step))!.checked).toBe(false);
+
+    await savePageValue(task.id, 'other:status', done.id);
+    expect((await db().todoItems.get(step))!.checked).toBe(true);
+
+    await toggleTodo(step);
+    expect((await db().taskPages.get(task.id))!.values['other:status']).toBe(todo.id);
+    expect((await db().taskPages.get(task.id))!.values['seed:status']).toBe(DONE);
+  });
+
+  it('statusPropertyOf ignores deleted and non-status properties and breaks ties by createdAt', async () => {
+    await seedDefaultProperties();
+    const [status, priority] = [await db().taskProperties.get('seed:status'), await db().taskProperties.get('seed:priority')];
+    const rows = [
+      { ...priority!, sortOrder: -5 },
+      { ...status!, id: 'gone', sortOrder: -5, deleted: true },
+      { ...status!, id: 'later', sortOrder: 2, createdAt: 9 },
+      { ...status!, id: 'earlier', sortOrder: 2, createdAt: 3 },
+    ];
+    expect(statusPropertyOf(rows)!.id).toBe('earlier');
+    expect(statusPropertyOf([priority!])).toBeUndefined();
+  });
+
+  it('deleting the task tombstones its to-dos and spares standalone ones', async () => {
+    const { task, first, second } = await setup();
+    const alone = (await addTodo('alone', '2026-03-10'))!;
+
+    await deletePage(task.id);
+
+    expect((await db().todoItems.get(first))!.deleted).toBe(true);
+    expect((await db().todoItems.get(second))!.deleted).toBe(true);
+    expect((await db().todoItems.get(alone))!.deleted).toBe(false);
+  });
+
+  it('does nothing for a task without to-dos', async () => {
+    await seedDefaultProperties();
+    const task = await createPage('Bare');
+    const before = (await db().taskPages.get(task.id))!;
+
+    await syncTaskStatusFromTodos(task.id);
+
+    expect(await db().taskPages.get(task.id)).toEqual(before);
   });
 });

@@ -32,7 +32,6 @@ const setup = (overrides: Partial<PointerDragConfig<string>> = {}) => {
     onMove: vi.fn(() => 'target'),
     onDrop: vi.fn(),
     onEnd: vi.fn(),
-    onCancel: vi.fn(),
     ...overrides,
   };
   const view = renderHook(() => usePointerDrag<string>());
@@ -74,7 +73,6 @@ describe('usePointerDrag', () => {
     expect(config.onEnd).toHaveBeenCalledTimes(1);
     expect(config.onBegin).not.toHaveBeenCalled();
     expect(config.onDrop).not.toHaveBeenCalled();
-    expect(config.onCancel).not.toHaveBeenCalled();
   });
 
   it('lifts a finger after the hold and cancels the hold when the finger scrolls', () => {
@@ -85,7 +83,8 @@ describe('usePointerDrag', () => {
     act(() => void vi.advanceTimersByTime(1));
     expect(held.config.onBegin).toHaveBeenCalledTimes(1);
     fire('pointerup');
-    expect(held.config.onCancel).toHaveBeenCalledTimes(1);
+    expect(held.config.onDrop).not.toHaveBeenCalled();
+    expect(held.config.onEnd).toHaveBeenCalledTimes(1);
 
     const scrolled = setup();
     scrolled.begin(press('touch'));
@@ -113,8 +112,9 @@ describe('usePointerDrag', () => {
     begin();
     fire('pointermove', 30, 30);
     fire('keydown', 0, 0, { key: 'Escape' });
-    expect(config.onCancel).toHaveBeenCalledTimes(1);
+    expect(config.onBegin).toHaveBeenCalledTimes(1);
     expect(config.onDrop).not.toHaveBeenCalled();
+    expect(config.onEnd).toHaveBeenCalledTimes(1);
     fire('pointerup', 30, 30);
     expect(config.onEnd).toHaveBeenCalledTimes(1);
   });
@@ -125,7 +125,7 @@ describe('usePointerDrag', () => {
     fire('pointermove', 30, 30);
     fire('pointerup', 30, 30);
     expect(config.onDrop).not.toHaveBeenCalled();
-    expect(config.onCancel).toHaveBeenCalledTimes(1);
+    expect(config.onEnd).toHaveBeenCalledTimes(1);
   });
 
   it('swallows the click that follows a drag, once, but not after a plain press', () => {
@@ -180,30 +180,27 @@ describe('usePointerDrag', () => {
     begin();
     fire('pointermove', 40, 40);
     view.unmount();
-    expect(config.onCancel).toHaveBeenCalledTimes(1);
+    expect(config.onEnd).toHaveBeenCalledTimes(1);
+    expect(config.onDrop).not.toHaveBeenCalled();
     expect(document.body.style.cursor).toBe('');
     fire('pointermove', 80, 80);
     expect(config.onMove).toHaveBeenCalledTimes(1);
   });
 
-  it('honours custom threshold, hold and slop', () => {
-    const { config, begin } = setup({ threshold: 20, holdMs: 50, holdSlop: 2 });
-    begin();
-    fire('pointermove', 25, 10);
-    expect(config.onBegin).not.toHaveBeenCalled();
-    fire('pointermove', 30, 10);
-    expect(config.onBegin).toHaveBeenCalledTimes(1);
-    fire('pointerup', 30, 10);
-
-    const touch = setup({ holdMs: 50, holdSlop: 2 });
-    touch.begin(press('touch'));
-    act(() => void vi.advanceTimersByTime(50));
-    expect(touch.config.onBegin).toHaveBeenCalledTimes(1);
-    fire('pointerup');
-
-    const drift = setup({ holdSlop: 2 });
-    drift.begin(press('touch'));
+  it('begins a mouse drag at the fixed threshold and a touch drag after the fixed hold', () => {
+    const mouse = setup();
+    mouse.begin();
     fire('pointermove', 14, 10);
+    expect(mouse.config.onBegin).not.toHaveBeenCalled();
+    fire('pointermove', 15, 10);
+    expect(mouse.config.onBegin).toHaveBeenCalledTimes(1);
+    fire('pointerup', 15, 10);
+
+    const drift = setup();
+    drift.begin(press('touch'));
+    fire('pointermove', 18, 10);
+    expect(drift.config.onEnd).not.toHaveBeenCalled();
+    fire('pointermove', 19, 10);
     expect(drift.config.onEnd).toHaveBeenCalledTimes(1);
   });
 });

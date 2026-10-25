@@ -10,9 +10,10 @@ import {
   listProperties,
   prepareTaskData,
   savePageValue,
+  statusPropertyOf,
 } from '../../tasks/store';
 import { isPageDone } from '../../../data/agenda';
-import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../../data/db';
+import type { TaskPageRow, TaskPropertyRow } from '../../../data/db';
 
 const emptyOwner = { options: [] };
 
@@ -60,7 +61,7 @@ export function TasksWidget() {
     void reload();
   }, [reload, revision]);
 
-  const status = properties.find((property) => property.type === 'status');
+  const status = statusPropertyOf(properties);
   const priority = findPriorityProperty(properties);
 
   const queue = pages
@@ -89,11 +90,8 @@ export function TasksWidget() {
     }
   };
 
-  const optionOf = (property: TaskPropertyRow | undefined, page: TaskPageRow): TaskPropertyOption | undefined =>
-    property?.options.find((option) => option.id === page.values[property.id]);
-
-  const statusOption = current && optionOf(status, current);
-  const priorityOption = current && optionOf(priority, current);
+  const statusOption = current && optionOfPage(status, current);
+  const priorityOption = current && optionOfPage(priority, current);
   const nextStatus =
     status && statusOption ? status.options[status.options.indexOf(statusOption) + 1] : undefined;
   const menuProperty = menu && properties.find((property) => property.id === menu.propertyId);
@@ -162,7 +160,7 @@ export function TasksWidget() {
               {upcoming.map((page) => (
                 <li key={page.id} className="flex items-baseline justify-between gap-2 text-[12.5px]">
                   <span className="min-w-0 [overflow-wrap:anywhere]">{page.title}</span>
-                  <span className="shrink-0 text-muted-foreground">{optionOf(priority, page)?.label}</span>
+                  <span className="shrink-0 text-muted-foreground">{optionOfPage(priority, page)?.label}</span>
                 </li>
               ))}
             </ul>

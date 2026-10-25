@@ -31,7 +31,8 @@ export function useOpenMatches(
 }
 
 interface CommandPaletteProps {
-  matches: TaskPageRow[];
+  rows: TaskPageRow[];
+  total: number;
   activeRow: number;
   listId: string;
   optionId: (pageId: string) => string;
@@ -44,7 +45,8 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({
-  matches,
+  rows,
+  total,
   activeRow,
   listId,
   optionId,
@@ -55,7 +57,6 @@ export function CommandPalette({
   drag,
   onPick,
 }: CommandPaletteProps) {
-  const rows = matches.slice(0, maxRows);
   return (
     <div className="tsk-palette">
       <ul className="tsk-palette__list" role="listbox" id={listId} aria-label="Open tasks">
@@ -83,8 +84,8 @@ export function CommandPalette({
           );
         })}
       </ul>
-      {matches.length === 0 && <p className="tsk-palette__note">No open tasks match</p>}
-      {matches.length > maxRows && <p className="tsk-palette__note">{matches.length - maxRows} more</p>}
+      {total === 0 && <p className="tsk-palette__note">No open tasks match</p>}
+      {total > rows.length && <p className="tsk-palette__note">{total - rows.length} more</p>}
     </div>
   );
 }

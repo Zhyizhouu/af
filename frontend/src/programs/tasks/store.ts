@@ -7,7 +7,9 @@ import {
   type TaskPropertyType,
 } from '../../data/db';
 import { categoryTones } from '../../data/tones';
-import { defaultPriorityOption, statusRole } from './roles';
+import { defaultPriorityOption, statusPropertyOf, statusRole } from './roles';
+
+export { statusPropertyOf };
 
 /**
  * Task Tracker: user-defined typed properties (columns) and the pages (rows)
@@ -303,7 +305,7 @@ export function defaultOptions(
 ): { property: TaskPropertyRow; option: TaskPropertyOption }[] {
   const picked: { property: TaskPropertyRow; option: TaskPropertyOption }[] = [];
 
-  const status = properties.find((property) => property.type === 'status');
+  const status = statusPropertyOf(properties);
   const statusOption =
     status?.options.find((option) => statusRole(status, option) === 'todo') ?? status?.options[0];
   if (status && statusOption) picked.push({ property: status, option: statusOption });
@@ -419,11 +421,47 @@ export async function savePageValue(
   propertyId: string,
   value: unknown,
 ): Promise<void> {
-  const page = await db().taskPages.get(pageId);
-  if (!page) return;
+  const { taskPages, taskProperties, todoItems } = db();
+  await db().transaction('rw', taskPages, taskProperties, todoItems, async () => {
+    const page = await taskPages.get(pageId);
+    if (!page) return;
+    await taskPages.put({
+      ...page,
+      values: { ...page.values, [propertyId]: value },
+      updatedAt: Date.now(),
+    });
+    const property = statusPropertyOf(await taskProperties.toArray());
+    if (property?.id !== propertyId) return;
+    const option = property.options.find((candidate) => candidate.id === value);
+    if (statusRole(property, option) !== 'done') return;
+    const now = Date.now();
+    const open = await liveTodosOf(pageId).then((rows) => rows.filter((row) => !row.checked));
+    if (open.length > 0) {
+      await todoItems.bulkPut(open.map((row) => ({ ...row, checked: true, doneAt: now, updatedAt: now })));
+    }
+  });
+}
+
+const liveTodosOf = (taskId: string) =>
+  db().todoItems.where('taskId').equals(taskId).filter((row) => !row.deleted).toArray();
+
+/** Sets a task's status from its linked to-dos: all ticked is done, some is
+ *  doing, none is todo. Does nothing without to-dos, a status property, or a
+ *  matching option. Writes the page directly so it never ticks to-dos back. */
+export async function syncTaskStatusFromTodos(taskId: string): Promise<void> {
+  const page = await db().taskPages.get(taskId);
+  if (!page || page.deleted) return;
+  const property = statusPropertyOf(await db().taskProperties.toArray());
+  if (!property) return;
+  const todos = await liveTodosOf(taskId);
+  if (todos.length === 0) return;
+  const checked = todos.filter((row) => row.checked).length;
+  const role = checked === todos.length ? 'done' : checked > 0 ? 'doing' : 'todo';
+  const option = property.options.find((candidate) => statusRole(property, candidate) === role);
+  if (!option || page.values[property.id] === option.id) return;
   await db().taskPages.put({
     ...page,
-    values: { ...page.values, [propertyId]: value },
+    values: { ...page.values, [property.id]: option.id },
     updatedAt: Date.now(),
   });
 }
@@ -431,7 +469,12 @@ export async function savePageValue(
 export async function deletePage(id: string): Promise<void> {
   const existing = await db().taskPages.get(id);
   if (!existing || existing.deleted) return;
-  await db().taskPages.put({ ...existing, deleted: true, updatedAt: Date.now() });
+  await db().transaction('rw', db().taskPages, db().todoItems, async () => {
+    const now = Date.now();
+    await db().taskPages.put({ ...existing, deleted: true, updatedAt: now });
+    const todos = await liveTodosOf(id);
+    if (todos.length > 0) await db().todoItems.bulkPut(todos.map((row) => ({ ...row, deleted: true, updatedAt: now })));
+  });
 }
 
 // ---- filters ----

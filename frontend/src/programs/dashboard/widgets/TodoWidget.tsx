@@ -7,22 +7,17 @@ import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
 import { useSession } from '../../../app/session';
 import type { TodoItemRow } from '../../../data/db';
-import { dayFromKey, jakartaDayKey, keyFromDay } from '../../habits/time';
-import { addTodo, deleteTodo, listTodosInRange, toggleTodo } from '../../todo/store';
+import { addDaysToKey, jakartaDayKey } from '../../habits/time';
+import { dragIndexes } from '../../todo/DayPanel';
+import { addTodo, deleteTodo, listTodosInRange, orderForDisplay, toggleTodo } from '../../todo/store';
 import { useTodoDrag } from '../../todo/useTodoDrag';
-
-const nextDay = (key: string): string => {
-  const day = dayFromKey(key);
-  day.setUTCDate(day.getUTCDate() + 1);
-  return keyFromDay(day);
-};
 
 /** Today's open items with an add box, and tomorrow's faded underneath. Items
  *  drag to reorder and to move between the two days. */
 export function TodoWidget() {
   const { revision, requestSync } = useSession();
   const today = jakartaDayKey();
-  const tomorrow = nextDay(today);
+  const tomorrow = addDaysToKey(today, 1);
   const [items, setItems] = useState<TodoItemRow[]>([]);
   const [text, setText] = useState('');
 
@@ -39,6 +34,7 @@ export function TodoWidget() {
       await action();
       await reload();
       requestSync();
+      return true;
     },
     [reload, requestSync],
   );
@@ -50,36 +46,39 @@ export function TodoWidget() {
     void after(() => addTodo(text, today)).then(() => setText(''));
   };
 
-  const open = (day: string) => items.filter((item) => item.day === day && !item.checked);
+  const open = (day: string) => orderForDisplay(items.filter((item) => item.day === day && !item.checked));
   const todays = open(today);
   const tomorrows = open(tomorrow);
 
-  const list = (rows: TodoItemRow[]) => (
-    <ul className="m-0 flex list-none flex-col gap-2 p-0">
-      {rows.map((item, index) => {
-        const rowProps = drag.row(item, index);
-        return (
-          <li key={item.id} {...rowProps} className={cn('flex items-center gap-2.5', rowProps.className)}>
-            <Checkbox
-              checked={false}
-              onCheckedChange={() => void after(() => toggleTodo(item.id))}
-              aria-label={item.text}
-              className="inset-field size-[18px] rounded-[5px] border-white/10 text-white data-[state=checked]:border-white/20 data-[state=checked]:bg-white/10"
-            />
-            <span className="min-w-0 flex-1 truncate text-sm">{item.text}</span>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Delete"
-              onClick={() => void after(() => deleteTodo(item.id))}
-            >
-              <X size={14} aria-hidden />
-            </Button>
-          </li>
-        );
-      })}
-    </ul>
-  );
+  const list = (rows: TodoItemRow[]) => {
+    const indexes = dragIndexes(rows);
+    return (
+      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+        {rows.map((item, index) => {
+          const rowProps = drag.row(item, indexes[index]!);
+          return (
+            <li key={item.id} {...rowProps} className={cn('flex items-center gap-2.5', rowProps.className)}>
+              <Checkbox
+                checked={false}
+                onCheckedChange={() => void after(() => toggleTodo(item.id))}
+                aria-label={item.text}
+                className="inset-field size-[18px] rounded-[5px] border-white/10 text-white data-[state=checked]:border-white/20 data-[state=checked]:bg-white/10"
+              />
+              <span className="min-w-0 flex-1 truncate text-sm">{item.text}</span>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Delete"
+                onClick={() => void after(() => deleteTodo(item.id))}
+              >
+                <X size={14} aria-hidden />
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
 
   return (
     <div className="flex h-full flex-col gap-3.5">

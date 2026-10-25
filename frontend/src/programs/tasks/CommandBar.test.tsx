@@ -247,7 +247,7 @@ describe('Command bar submit', () => {
     return (
       <>
         {drag.layer}
-        <CommandBar properties={properties} pages={[]} drag={drag} commit={runAction} onSubmit={onSubmit} onOpen={() => {}} />
+        <CommandBar properties={properties} pages={[]} drag={drag} onSubmit={onSubmit} onOpen={() => {}} />
       </>
     );
   }
@@ -266,8 +266,8 @@ describe('Command bar submit', () => {
     const onSubmit = vi.fn().mockRejectedValue(new Error('offline'));
     const input = await typed(onSubmit);
 
-    expect(await screen.findByText('Could not add, try again')).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not add, try again');
+    expect(await screen.findByText('Could not save, try again')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not save, try again');
     expect(input).toHaveValue('Write notes !high');
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
@@ -277,7 +277,7 @@ describe('Command bar submit', () => {
       throw new Error('boom');
     });
 
-    expect(await screen.findByText('Could not add, try again')).toBeInTheDocument();
+    expect(await screen.findByText('Could not save, try again')).toBeInTheDocument();
     expect(input).toHaveValue('Write notes !high');
   });
 
@@ -292,18 +292,92 @@ describe('Command bar submit', () => {
 
     finish('page-1');
     await waitFor(() => expect(input).toHaveValue(''));
-    expect(screen.queryByText('Could not add, try again')).toBeNull();
+    expect(screen.queryByText('Could not save, try again')).toBeNull();
   });
 
   it('retries after a failure and clears the hint once it succeeds', async () => {
     const onSubmit = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce('page-1');
     const input = await typed(onSubmit);
-    await screen.findByText('Could not add, try again');
+    await screen.findByText('Could not save, try again');
 
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => expect(input).toHaveValue(''));
     expect(onSubmit).toHaveBeenCalledTimes(2);
-    expect(screen.queryByText('Could not add, try again')).toBeNull();
+    expect(screen.queryByText('Could not save, try again')).toBeNull();
+  });
+});
+
+describe('Command bar tagging a picked page', () => {
+  async function renderPicked(runAction: (action: () => Promise<unknown>) => Promise<void>) {
+    const page = await createPage('Alpha');
+    const properties = await listProperties();
+    function Picked() {
+      const drag = useTriageDrag(runAction, undefined, undefined);
+      return (
+        <>
+          {drag.layer}
+          <CommandBar properties={properties} pages={[page]} drag={drag} onSubmit={() => {}} onOpen={() => {}} />
+        </>
+      );
+    }
+    render(<Picked />);
+    const input = await screen.findByLabelText('New page command');
+    fireEvent.change(input, { target: { value: '/' } });
+    await screen.findAllByRole('option');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await screen.findByRole('button', { name: 'Clear picked task' });
+    return { input, page };
+  }
+
+  it('keeps the tag text and shows the retry hint when the write fails, and clears it once a retry succeeds', async () => {
+    let failing = true;
+    const { input, page } = await renderPicked(async (action) => {
+      if (failing) throw new Error('offline');
+      await action();
+    });
+    fireEvent.change(input, { target: { value: '!high' } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save, try again');
+    expect(input).toHaveValue('!high');
+
+    failing = false;
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+
+    await waitFor(() => expect(input).toHaveValue(''));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect((await listPages()).find((row) => row.id === page.id)?.values[priority]).toBe(high);
+  });
+
+  it('shows the retry hint when a status step fails', async () => {
+    await renderPicked(async () => {
+      throw new Error('offline');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'In progress' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save, try again');
+  });
+});
+
+describe('Command palette row limit', () => {
+  it('lists the first eight matches and counts the rest', async () => {
+    for (let n = 1; n <= 10; n += 1) await createPage(`Task ${n}`);
+    const input = await bar();
+    await screen.findByRole('button', { name: 'Task 1' });
+
+    fireEvent.change(input, { target: { value: '/' } });
+
+    expect(await screen.findAllByRole('option')).toHaveLength(8);
+    expect(screen.getByText('2 more')).toBeInTheDocument();
+    fireEvent.keyDown(input, { key: 'ArrowUp' });
+    const options = screen.getAllByRole('option');
+    expect(options[7]).toHaveAttribute('aria-selected', 'true');
+    expect(input).toHaveAttribute('aria-activedescendant', options[7]!.id);
   });
 });

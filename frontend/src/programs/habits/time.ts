@@ -46,6 +46,17 @@ export function dayFromKey(key: string): Date {
 export const keyFromDay = (day: Date): string =>
   `${day.getUTCFullYear()}-${pad(day.getUTCMonth() + 1)}-${pad(day.getUTCDate())}`;
 
+export function addDaysToKey(key: string, days: number): string {
+  const day = dayFromKey(key);
+  day.setUTCDate(day.getUTCDate() + days);
+  return keyFromDay(day);
+}
+
+export function jakartaClock(ms: number): string {
+  const shifted = new Date(ms + jakartaOffsetMs);
+  return `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
+}
+
 /**
  * The [count] day keys ending at [todayKey], newest first.
  *

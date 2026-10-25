@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { db, openScope, type TaskPageRow, type TaskPropertyRow } from '../../data/db';
 import { PageDetail } from './PageDetail';
@@ -243,5 +244,81 @@ describe('PageBody sync', () => {
 
     expect((await db().taskPages.get(page.id))!.updatedAt).toBe(page.updatedAt);
     expect(editor.innerHTML).toBe('<p>synced</p>');
+  });
+});
+
+describe('PageDetail steps', () => {
+  const statusLabel = async (id: string) => {
+    const status = (await listProperties()).find((property) => property.type === 'status')!;
+    const value = (await db().taskPages.get(id))!.values[status.id];
+    return status.options.find((option) => option.id === value)?.label;
+  };
+
+  const addStep = async (text: string) => {
+    fireEvent.change(screen.getByPlaceholderText('Add a step…'), { target: { value: text } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await screen.findByRole('checkbox', { name: new RegExp(`: ${text}$`) });
+  };
+
+  it('invites splitting the task when it has no steps', async () => {
+    await seedDefaultProperties();
+    const page = await createPage('P');
+    mount(page, await listProperties());
+
+    expect(await screen.findByText('Split this task into steps on different days.')).toBeInTheDocument();
+    expect(screen.queryByText(/steps done/)).toBeNull();
+  });
+
+  it('adds steps and drives the task status as they are ticked', async () => {
+    await seedDefaultProperties();
+    const page = await createPage('P');
+    mount(page, await listProperties());
+
+    await addStep('One');
+    await addStep('Two');
+    expect(await screen.findByText('0 of 2 steps done')).toBeInTheDocument();
+    const nodes = screen.getAllByRole('checkbox', { name: /^Step \d: / });
+    expect(nodes).toHaveLength(2);
+    expect(screen.getByPlaceholderText('Add a step…')).toHaveValue('');
+
+    fireEvent.click(nodes[0]!);
+    expect(await screen.findByText('1 of 2 steps done')).toBeInTheDocument();
+    await expect.poll(() => statusLabel(page.id)).toBe('In progress');
+
+    fireEvent.click(screen.getAllByRole('checkbox', { name: /^Step \d: / })[1]!);
+    expect(await screen.findByText('2 of 2 steps done')).toBeInTheDocument();
+    await expect.poll(() => statusLabel(page.id)).toBe('Done');
+  });
+
+  it('shows the steps ticked and clears removed ones when the task is set to Done in the detail', async () => {
+    await seedDefaultProperties();
+    const page = await createPage('P');
+    const properties = await listProperties();
+    const Live = () => {
+      const [current, setCurrent] = useState(page);
+      return (
+        <PageDetail
+          page={current}
+          properties={properties}
+          mode="peek"
+          onClose={noop}
+          onFullscreen={noop}
+          onExitFullscreen={noop}
+          onChange={() => void db().taskPages.get(page.id).then((row) => row && setCurrent(row))}
+        />
+      );
+    };
+    render(<Live />);
+
+    await addStep('One');
+    await addStep('Two');
+    expect(await screen.findByText('0 of 2 steps done')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(await screen.findByText('2 of 2 steps done')).toBeInTheDocument();
+    for (const node of screen.getAllByRole('checkbox', { name: /^Step \d: / })) {
+      expect(node).toHaveAttribute('aria-checked', 'true');
+    }
   });
 });

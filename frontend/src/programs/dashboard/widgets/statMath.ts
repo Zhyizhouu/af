@@ -1,5 +1,6 @@
 import type { AgendaEntry } from '../../../data/agenda';
 import type { TaskPageRow, TaskPropertyRow } from '../../../data/db';
+import { statusPropertyOf } from '../../tasks/roles';
 import { dayFromKey, jakartaDayKey, jakartaOffsetMs } from '../../habits/time';
 
 const dayMs = 86_400_000;
@@ -65,7 +66,7 @@ export function countByStatus(
   pages: readonly TaskPageRow[],
   properties: readonly TaskPropertyRow[],
 ): StatusCount[] {
-  const status = properties.find((property) => property.type === 'status');
+  const status = statusPropertyOf(properties);
   const options = status ? status.options : [];
   const counts = new Map<string, number>();
   let noStatus = 0;

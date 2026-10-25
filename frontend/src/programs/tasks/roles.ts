@@ -64,3 +64,10 @@ export function optionOfPage(
   const value = page.values[property.id];
   return typeof value === 'string' ? property.options.find((option) => option.id === value) : undefined;
 }
+
+/** The one live Status property that drives a task's status: the first by `sortOrder`, then by creation, ignoring deleted rows and every other type. */
+export function statusPropertyOf(properties: readonly TaskPropertyRow[]): TaskPropertyRow | undefined {
+  return properties
+    .filter((row) => row.type === 'status' && !row.deleted)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt)[0];
+}

@@ -434,6 +434,68 @@ describe('sync', () => {
     expect(written.get('users/uid-1/todoItems/todo-3')!.day).toBe('2026-03-10');
   });
 
+  it('round-trips a to-do item taskId and time through Firestore', async () => {
+    await db().todoItems.put({
+      id: 'todo-4',
+      text: 'Draft report',
+      day: '2026-03-10',
+      checked: false,
+      doneAt: null,
+      sortOrder: 0,
+      taskId: 'task-9',
+      time: '09:30',
+      createdAt: 500,
+      updatedAt: 2000,
+      deleted: false,
+    });
+
+    await syncAll('uid-1');
+
+    const pushed = written.get('users/uid-1/todoItems/todo-4')!;
+    expect(pushed.taskId).toBe('task-9');
+    expect(pushed.time).toBe('09:30');
+
+    await db().todoItems.clear();
+    remote.set('users/uid-1/todoItems/todo-4', { ...pushed, updatedAt: Timestamp.fromMillis(9000) });
+    await syncAll('uid-1');
+
+    const local = await db().todoItems.get('todo-4');
+    expect(local!.taskId).toBe('task-9');
+    expect(local!.time).toBe('09:30');
+  });
+
+  it('pulls an older to-do document without taskId or time as null', async () => {
+    remote.set('users/uid-1/todoItems/todo-5', {
+      text: 'Old',
+      checked: false,
+      sortOrder: 0,
+      updatedAt: Timestamp.fromMillis(5000),
+    });
+
+    await syncAll('uid-1');
+
+    const local = await db().todoItems.get('todo-5');
+    expect(local!.taskId).toBeNull();
+    expect(local!.time).toBeNull();
+  });
+
+  it('pulls an invalid to-do time as null', async () => {
+    remote.set('users/uid-1/todoItems/todo-6', {
+      text: 'Bad time',
+      checked: false,
+      sortOrder: 0,
+      taskId: '',
+      time: '25:99',
+      updatedAt: Timestamp.fromMillis(5000),
+    });
+
+    await syncAll('uid-1');
+
+    const local = await db().todoItems.get('todo-6');
+    expect(local!.time).toBeNull();
+    expect(local!.taskId).toBeNull();
+  });
+
   // Checklist items and habits are still Flutter-only. A pass that pushed an
   // empty local table over them would be a data loss, not a no-op.
   it('leaves collections it does not model alone', async () => {

@@ -15,24 +15,22 @@ import { parseTaskCommand, type TaskCommandResult } from './command';
 import { CommandPalette, maxRows, PickedChip, StatusSteps, useOpenMatches } from './CommandPalette';
 import { PriorityText } from './PriorityText';
 import { StatusBadge, toneStyle } from './StatusBadge';
-import { defaultOptions, findPriorityProperty, savePageValue } from './store';
+import { defaultOptions, findPriorityProperty, savePageValue, statusPropertyOf } from './store';
 import { TagMirror } from './TagMirror';
 import { useAddFlight } from './useAddFlight';
 import { tagFor, useTagSuggestions } from './useTagSuggestions';
-import type { TriageDrag } from './useTriageDrag';
+import { failedHint, type TriageDrag } from './useTriageDrag';
 import './badges.css';
 
 const placeholder = 'New page… try: Grade quiz 3 !high >progress';
 const pickedPlaceholder = 'Add !priority or >status and press Enter';
 
 const emptyTitleHint = 'Type a title first';
-const failedHint = 'Could not add, try again';
 
 interface CommandBarProps {
   properties: TaskPropertyRow[];
   pages: TaskPageRow[];
   drag: TriageDrag;
-  commit: (action: () => Promise<unknown>) => Promise<void>;
   /** Called with the parsed command when a non-empty title is submitted; resolves to the new page's id. */
   onSubmit: (command: TaskCommandResult) => Promise<string | void> | void;
   onOpen: (pageId: string) => void;
@@ -45,7 +43,7 @@ interface CommandBarProps {
  * and press Enter to create the page without opening it; or start with `/` to
  * find an open page, pick it, then step its status, tag it, or open it.
  */
-export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen, gridRef }: CommandBarProps) {
+export function CommandBar({ properties, pages, drag, onSubmit, onOpen, gridRef }: CommandBarProps) {
   const [text, setText] = useState('');
   const [hint, setHint] = useState<string | null>(null);
   const [pickedId, setPickedId] = useState<string | null>(null);
@@ -56,7 +54,7 @@ export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen, 
   const uid = useId();
   const listId = `${uid}-list`;
 
-  const status = properties.find((property) => property.type === 'status');
+  const status = statusPropertyOf(properties);
   const priority = findPriorityProperty(properties);
   const statusOptions = useMemo(() => status?.options ?? [], [status]);
   const priorityOptions = useMemo(() => priority?.options ?? [], [priority]);
@@ -85,6 +83,13 @@ export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen, 
   const priorityOption =
     priority?.options.find((option) => option.id === command.priorityId) ??
     defaults.find((entry) => entry.property.id === priority?.id)?.option;
+
+  const shownHint = hint ?? (drag.failed ? failedHint : null);
+  const hintNode = shownHint && (
+    <span role="alert" className="tsk-command__hint">
+      {shownHint}
+    </span>
+  );
 
   const expanded = finding || suggestions.length > 0;
   const activeId = finding
@@ -140,18 +145,18 @@ export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen, 
 
   function setStatus(optionId: string) {
     if (!picked || !status || picked.values[status.id] === optionId) return false;
-    void commit(() => savePageValue(picked.id, status.id, optionId));
+    void drag.run(() => savePageValue(picked.id, status.id, optionId));
     return true;
   }
 
-  function applyTags() {
+  async function applyTags() {
     if (!picked || command.tokens.length === 0) return;
     const { statusId, priorityId } = command;
-    setText('');
-    void commit(async () => {
+    const saved = await drag.run(async () => {
       if (status && statusId) await savePageValue(picked.id, status.id, statusId);
       if (priority && priorityId) await savePageValue(picked.id, priority.id, priorityId);
     });
+    if (saved && add.alive.current) setText('');
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -184,7 +189,7 @@ export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen, 
         }
       } else if (key === 'Enter') {
         event.preventDefault();
-        if (text.trim()) applyTags();
+        if (text.trim()) void applyTags();
         else onOpen(picked.id);
       }
       return;
@@ -230,6 +235,7 @@ export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen, 
             onChange={(event) => {
               setText(event.target.value);
               setHint(null);
+              drag.dismiss();
               setActive(0);
               tags.reset();
               track(event.target);
@@ -269,7 +275,8 @@ export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen, 
 
       {finding && (
         <CommandPalette
-          matches={matches}
+          rows={rows}
+          total={matches.length}
           activeRow={activeRow}
           listId={listId}
           optionId={(pageId) => `${uid}-opt-${pageId}`}
@@ -306,13 +313,11 @@ export function CommandBar({ properties, pages, drag, commit, onSubmit, onOpen, 
           ) : (
             <span>Type a title and press Enter.</span>
           )}
-          {hint && (
-            <span role="alert" className="tsk-command__hint">
-              {hint}
-            </span>
-          )}
+          {hintNode}
         </div>
       )}
+
+      {(finding || picked) && hintNode && <div className="tsk-command__preview">{hintNode}</div>}
 
       {(priority || status) && (
         <div className="tsk-command__help">

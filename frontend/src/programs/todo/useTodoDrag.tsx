@@ -10,10 +10,11 @@ import { createPortal } from 'react-dom';
 import { cn } from 'cn';
 import { usePointerDrag } from '../../components/pointerDragController';
 import type { TodoItemRow } from '../../data/db';
-import { dayFromKey, keyFromDay } from '../habits/time';
+import { addDaysToKey } from '../habits/time';
 import { moveTodo } from './store';
 
-export type After = (action: () => Promise<unknown>) => Promise<void>;
+/** Runs a write and refreshes; resolves true when it saved, false when it failed and the screen has reported that. */
+export type After = (action: () => Promise<unknown>) => Promise<boolean>;
 
 /** An index past any list, which `moveTodo` clamps to the end. */
 const END = Number.MAX_SAFE_INTEGER;
@@ -21,12 +22,6 @@ const END = Number.MAX_SAFE_INTEGER;
 const NOT_A_HANDLE = 'button, input, textarea, select, a, [role="checkbox"]';
 
 const HINT = 'Drag, or press Alt and an arrow key, to move';
-
-const shiftDay = (key: string, count: number): string => {
-  const day = dayFromKey(key);
-  day.setUTCDate(day.getUTCDate() + count);
-  return keyFromDay(day);
-};
 
 interface Line {
   left: number;
@@ -46,7 +41,8 @@ interface Hover {
  * Finds the drop target under the pointer.
  *
  * A target is any element carrying `data-todo-day`; its rows carry
- * `data-todo-index`. The position is the number of other rows that come
+ * `data-todo-index`, and timed rows also `data-todo-timed`, which keeps them
+ * out of the count. The position is the number of other untimed rows that come
  * before the pointer in reading order, which also holds for the Week view's
  * multi-column list. `data-todo-append` targets, such as month cells, always
  * take the item at the end.
@@ -57,7 +53,7 @@ function resolveHover(x: number, y: number, dragId: string): Hover | null {
   const day = zone.dataset.todoDay!;
   if (zone.dataset.todoAppend !== undefined) return { day, index: END, line: null };
 
-  const rects = [...zone.querySelectorAll<HTMLElement>('[data-todo-index]')]
+  const rects = [...zone.querySelectorAll<HTMLElement>('[data-todo-index]:not([data-todo-timed])')]
     .filter((row) => row.dataset.todoId !== dragId)
     .map((row) => row.getBoundingClientRect());
 
@@ -123,10 +119,10 @@ export function useTodoDrag(after: After) {
     (item: TodoItemRow, index: number) => (event: KeyboardEvent<HTMLElement>) => {
       if (!event.altKey || event.target !== event.currentTarget) return;
       const moves: Record<string, { day: string; index: number } | null> = {
-        ArrowUp: index > 0 ? { day: item.day, index: index - 1 } : null,
-        ArrowDown: { day: item.day, index: index + 1 },
-        ArrowLeft: { day: shiftDay(item.day, -1), index: END },
-        ArrowRight: { day: shiftDay(item.day, 1), index: END },
+        ArrowUp: index > 0 && !item.time ? { day: item.day, index: index - 1 } : null,
+        ArrowDown: item.time ? null : { day: item.day, index: index + 1 },
+        ArrowLeft: { day: addDaysToKey(item.day, -1), index: END },
+        ArrowRight: { day: addDaysToKey(item.day, 1), index: END },
       };
       if (!(event.key in moves)) return;
       event.preventDefault();
@@ -148,6 +144,7 @@ export function useTodoDrag(after: After) {
     return {
       'data-todo-id': item.id,
       'data-todo-index': index,
+      ...(item.time ? { 'data-todo-timed': '' } : {}),
       tabIndex: 0,
       'aria-describedby': hintId,
       onPointerDown: press(item, index),

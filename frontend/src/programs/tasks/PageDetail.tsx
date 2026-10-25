@@ -19,6 +19,7 @@ import { tintStyle, toneColor } from '../../data/tones';
 import { dateValueFromKey, dateValueKey } from './dateValue';
 import { IconPicker } from './IconPicker';
 import { PageBody } from './PageBody';
+import { PageSteps } from './PageSteps';
 import { deletePage, findPriorityProperty, savePageField, savePageValue } from './store';
 
 /**
@@ -221,6 +222,8 @@ export function PageDetail({
           </div>
         ))}
       </div>
+
+      <PageSteps key={page.id} page={page} onChange={onChange} />
 
       <PageBody page={page} onChange={onChange} />
 

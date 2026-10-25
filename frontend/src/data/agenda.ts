@@ -1,5 +1,5 @@
 import { dateValueFromKey, dateValueKey } from '../programs/tasks/dateValue';
-import { isDoneOption } from '../programs/tasks/roles';
+import { isDoneOption, statusPropertyOf } from '../programs/tasks/roles';
 import { db, type CalendarEventRow, type ProctorSessionRow, type TaskPageRow, type TaskPropertyRow } from './db';
 
 /**
@@ -78,7 +78,7 @@ export const entryFromTaskPage = (page: TaskPageRow, property: TaskPropertyRow, 
 /** True when the page's Status-type property (if it has one) resolves to an
  *  option playing the done role (`programs/tasks/roles.ts`). */
 export const isPageDone = (page: TaskPageRow, properties: TaskPropertyRow[]): boolean => {
-  const status = properties.find((property) => property.type === 'status');
+  const status = statusPropertyOf(properties);
   if (!status) return false;
   const option = status.options.find((candidate) => candidate.id === page.values[status.id]);
   return isDoneOption(status, option);

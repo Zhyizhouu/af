@@ -13,6 +13,8 @@ import { savePageValue } from './store';
 
 type After = (action: () => Promise<unknown>) => Promise<void>;
 
+export const failedHint = 'Could not save, try again';
+
 const HINT = 'Drag, or press Alt and an arrow key, to change priority and status';
 
 /** The cell under the pointer. A missing value means that axis has no options and stays unchanged. */
@@ -50,7 +52,24 @@ export function useTriageDrag(
   const hintId = useId();
   const [dragId, setDragId] = useState<string | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
+  const [failed, setFailed] = useState(false);
   const { start, offset } = usePointerDrag<Hover>();
+
+  const run = useCallback(
+    async (action: () => Promise<unknown>): Promise<boolean> => {
+      setFailed(false);
+      try {
+        await after(action);
+        return true;
+      } catch {
+        setFailed(true);
+        return false;
+      }
+    },
+    [after],
+  );
+
+  const dismiss = useCallback(() => setFailed(false), []);
 
   const place = useCallback(
     (page: TaskPageRow, target: Hover) => {
@@ -61,12 +80,12 @@ export function useTriageDrag(
       if (status && target.status !== undefined && page.values[status.id] !== target.status) {
         writes.push([status.id, target.status]);
       }
-      if (writes.length === 0) return Promise.resolve();
-      return after(async () => {
+      if (writes.length === 0) return Promise.resolve(true);
+      return run(async () => {
         for (const [propertyId, optionId] of writes) await savePageValue(page.id, propertyId, optionId);
       });
     },
-    [after, priority, status],
+    [run, priority, status],
   );
 
   const press = useCallback(
@@ -136,7 +155,7 @@ export function useTriageDrag(
     </span>
   );
 
-  return { dragId, chip, over, layer };
+  return { dragId, chip, over, layer, run, failed, dismiss };
 }
 
 export type TriageDrag = ReturnType<typeof useTriageDrag>;

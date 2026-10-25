@@ -125,6 +125,7 @@ export interface Placed<T> {
   entry: T;
   column: number;
   columns: number;
+  cluster: number;
 }
 
 export function packColumns<T>(
@@ -143,6 +144,7 @@ export function packColumns<T>(
 
   let cluster: T[] = [];
   let clusterEnd = -Infinity;
+  let clusterIndex = 0;
 
   const flush = () => {
     if (cluster.length === 0) return;
@@ -157,10 +159,11 @@ export function packColumns<T>(
       return { entry, column };
     });
     for (const item of assigned) {
-      placed.push({ ...item, columns: columnEnds.length });
+      placed.push({ ...item, columns: columnEnds.length, cluster: clusterIndex });
     }
     cluster = [];
     clusterEnd = -Infinity;
+    clusterIndex += 1;
   };
 
   for (const entry of sorted) {
@@ -171,4 +174,56 @@ export function packColumns<T>(
   flush();
 
   return placed;
+}
+
+export interface Lane<T> {
+  entry: T;
+  left: number;
+  width: number;
+}
+
+const lightWeight = 3;
+const heavyWeight = 7;
+
+/**
+ * `packColumns` with unequal lane widths, as percentages of the day column.
+ *
+ * Within a cluster, a lane holding only `isLight` items (a to-do) weighs 3 and
+ * any other lane weighs 7, so an event beside a to-do takes 70% and the to-do
+ * 30%, to its right. A cluster of heavy lanes stays equal, exactly as `packColumns` draws it.
+ */
+export function packWeighted<T>(
+  entries: T[],
+  startOf: (entry: T) => number,
+  endOf: (entry: T) => number,
+  isLight: (entry: T) => boolean,
+): Lane<T>[] {
+  const groups = new Map<number, Placed<T>[]>();
+  for (const item of packColumns(entries, startOf, endOf)) {
+    const group = groups.get(item.cluster) ?? [];
+    group.push(item);
+    groups.set(item.cluster, group);
+  }
+
+  const lanes: Lane<T>[] = [];
+  for (const group of groups.values()) {
+    const weights = Array.from({ length: group[0]!.columns }, (_, column) =>
+      group.filter((item) => item.column === column).every((item) => isLight(item.entry))
+        ? lightWeight
+        : heavyWeight,
+    );
+    const total = weights.reduce((sum, weight) => sum + weight, 0);
+    const order = weights.map((_, column) => column).sort((a, b) => weights[b]! - weights[a]! || a - b);
+    for (const item of group) {
+      const before = order
+        .slice(0, order.indexOf(item.column))
+        .reduce((sum, column) => sum + weights[column]!, 0);
+      lanes.push({
+        entry: item.entry,
+        left: (before / total) * 100,
+        width: (weights[item.column]! / total) * 100,
+      });
+    }
+  }
+  return lanes;
 }

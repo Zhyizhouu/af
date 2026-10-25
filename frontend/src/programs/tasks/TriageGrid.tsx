@@ -2,7 +2,7 @@ import type { Ref } from 'react';
 import { cn } from 'cn';
 import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../data/db';
 import { optionOfPage, statusRole } from './roles';
-import { findPriorityProperty, type PropertyFilter } from './store';
+import { findPriorityProperty, statusPropertyOf, type PropertyFilter } from './store';
 import type { TriageDrag } from './useTriageDrag';
 import './badges.css';
 
@@ -37,7 +37,7 @@ interface TriageGridProps {
  * by a short note.
  */
 export function TriageGrid({ pages, properties, filters = [], onChip, drag, containerRef }: TriageGridProps) {
-  const status = properties.find((property) => property.type === 'status');
+  const status = statusPropertyOf(properties);
   const priority = findPriorityProperty(properties);
   const hasPriority = Boolean(priority?.options.length);
   const hasStatus = Boolean(status?.options.length);

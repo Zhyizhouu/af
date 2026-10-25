@@ -231,6 +231,11 @@ export interface TodoItemRow {
   createdAt: number;
   updatedAt: number;
   deleted: boolean;
+  /** The Task Tracker page this to-do is a step of, or null/absent for a
+   *  standalone to-do. Old rows without the field are standalone. */
+  taskId?: string | null;
+  /** A Jakarta wall-clock time `HH:MM` (24h), or null/absent for "any time". */
+  time?: string | null;
 }
 
 export interface SyncMarkRow {
@@ -291,6 +296,7 @@ export class AfDatabase extends Dexie {
           });
       });
     this.version(6).stores({ syncMarks: 'name' });
+    this.version(7).stores({ todoItems: 'id, day, sortOrder, updatedAt, deleted, taskId' });
   }
 }
 

@@ -24,6 +24,7 @@ import {
   prepareTaskData,
   savePageValue,
   seedDefaultProperties,
+  statusPropertyOf,
   type PropertyFilter,
 } from './store';
 import { TriageGrid } from './TriageGrid';
@@ -145,7 +146,7 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
   const activeFilters = filters.filter((filter) => properties.some((property) => property.id === filter.propertyId));
   const visiblePages = pages.filter((page) => matchesFilters(page, activeFilters));
   const openPageRow = openPage ? pages.find((page) => page.id === openPage.id) : undefined;
-  const status = properties.find((property) => property.type === 'status');
+  const status = statusPropertyOf(properties);
   const priority = findPriorityProperty(properties);
   const drag = useTriageDrag(commit, priority, status);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -220,7 +221,6 @@ export function TasksScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'spli
         pages={pages}
         drag={drag}
         gridRef={gridRef}
-        commit={commit}
         onSubmit={createFromCommand}
         onOpen={(id) => setOpenPage({ id, mode: 'peek' })}
       />
