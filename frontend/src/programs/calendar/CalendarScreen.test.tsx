@@ -8,19 +8,6 @@ import { addTodo, listTodosForDay, listTodosInRange } from '../todo/store';
 import { CalendarScreen } from './CalendarScreen';
 import { saveEvent } from './store';
 
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = ((query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  })) as typeof window.matchMedia;
-}
-
 vi.mock('../../data/agenda', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../data/agenda')>();
   return { ...actual, readAgenda: vi.fn(actual.readAgenda) };
@@ -249,5 +236,17 @@ describe('CalendarScreen compact week docks', () => {
     expect(screen.getByText('During Standup')).toBeInTheDocument();
     expect(screen.getByText('Around 10:00')).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Free one' })).toBeInTheDocument();
+  });
+
+  it('folds a next-hour free to-do into an event dock less than a pill above it', async () => {
+    window.innerWidth = 375;
+    await saveEvent({ title: 'Late sync', start: todoInstant(today, '10:45'), end: todoInstant(today, '11:15') });
+    await addTodo('During late', today, { time: '10:50' });
+    await addTodo('Next hour', today, { time: '11:20' });
+    render(<CalendarScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Week' }));
+
+    expect(await screen.findByRole('button', { name: '2 to-dos during Late sync' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /around 11:00/ })).not.toBeInTheDocument();
   });
 });

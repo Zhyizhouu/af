@@ -19,19 +19,6 @@ if (typeof localStorage === 'undefined' || !localStorage) {
   });
 }
 
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = ((query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  })) as typeof window.matchMedia;
-}
-
 vi.mock('./session', async () => {
   const actual = await vi.importActual<typeof import('./session')>('./session');
   return {

@@ -10,9 +10,9 @@ import type { TodoItemRow } from '../../data/db';
 import { findOverlaps, readEntriesForDays } from '../../data/overlap';
 import { useIsMobile } from '../../hooks/use-mobile';
 import { addDaysToKey, dayFromKey, jakartaDayKey, keyFromDay } from '../habits/time';
-import { addTodo, deleteTodo, listTodosInRange, orderForDisplay, toggleTodo, withSteps, type TodoWithStep } from './store';
+import { addTodo, deleteTodo, dragIndexes, listTodosInRange, orderForDisplay, toggleTodo, withSteps, type TodoWithStep } from './store';
 import { StepMark } from './StepMark';
-import { DayPanel, DuringChip, dragIndexes, type MetaOf, type TodoMeta } from './DayPanel';
+import { DayPanel, DuringChip, type MetaOf, type TodoMeta } from './DayPanel';
 import { useTodoDrag, type After, type RowProps } from './useTodoDrag';
 
 type View = 'day' | 'week' | 'month';
@@ -122,14 +122,14 @@ export function TodoScreen({ paneWidth = 'full' }: { paneWidth?: 'full' | 'split
     async (action) => {
       try {
         await action();
-        await reload();
-        requestSync();
-        setSaveFailed(false);
-        return true;
       } catch {
         setSaveFailed(true);
         return false;
       }
+      setSaveFailed(false);
+      requestSync();
+      await reload().catch(() => undefined);
+      return true;
     },
     [reload, requestSync],
   );

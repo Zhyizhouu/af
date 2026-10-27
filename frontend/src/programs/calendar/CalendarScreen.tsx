@@ -9,7 +9,6 @@ import { entryEnd, findOverlaps, todoInstant } from '../../data/overlap';
 import { hexToRgba } from '../../data/tones';
 import { useIsMobile } from '../../hooks/use-mobile';
 import { dayFromKey, keyFromDay } from '../habits/time';
-import { StepMark } from '../todo/StepMark';
 import { listTodosInRange, toggleTodo, withSteps, type TodoWithStep } from '../todo/store';
 import {
   builtInCategories,
@@ -37,6 +36,7 @@ import {
   DockPill,
   TickBox,
   TodoBlock,
+  TodoStep,
   TodoText,
   dashed,
   todoMinHeight,
@@ -512,11 +512,7 @@ function DayAgenda({
                 {item.todo.time ?? 'any time'}
               </span>
               <TodoText item={item} className="flex-1 text-sm" />
-              {item.task && (
-                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <StepMark task={item.task} compact />
-                </span>
-              )}
+              <TodoStep item={item} />
             </li>
           ))}
         </ul>
@@ -529,6 +525,7 @@ const hours = Array.from({ length: 24 }, (_, hour) => hour);
 const hourHeight = 44;
 const maxChips = 3;
 const dockInset = 1;
+const pillHeight = 24;
 const todoSpanMs = (todoMinHeight / hourHeight) * 60 * 60_000;
 
 interface GridItem {
@@ -603,17 +600,16 @@ function layoutDay(
     dock.todos.push(item);
     docked.set(id, dock);
   };
-  // A free to-do whose hour holds an event dock joins that dock rather than
-  // drawing an hour pill on top of it.
-  const eventDockIn = (hour: number) =>
-    [...docked.values()].find(
-      (dock) =>
-        timedEntries.some((entry) => entry.id === dock.id) &&
-        Math.floor((dock.top - dockInset) / hourHeight) === hour,
+  // A free to-do joins an event dock in its hour, or one sitting less than a
+  // pill above its hour's top, rather than drawing an overlapping hour pill.
+  const eventDockIn = (hour: number) => {
+    const hourTop = hour * hourHeight + dockInset;
+    return [...docked.values()].find(
+      (dock) => dock.kind === 'event' && (dock.hour === hour || (dock.top < hourTop && hourTop - dock.top < pillHeight)),
     );
+  };
   const eventHits = timedTodos.filter((item) => hits.has(item.todo.id));
-  const freeTodos = timedTodos.filter((item) => !hits.has(item.todo.id));
-  for (const item of [...eventHits, ...freeTodos]) {
+  for (const item of [...eventHits, ...free]) {
     const first = hits.get(item.todo.id)?.[0];
     if (first) {
       const lane = lanes.find((candidate) => candidate.entry.entry?.id === first.id);
@@ -621,6 +617,8 @@ function layoutDay(
         dockOn(
           first.id,
           () => ({
+            kind: 'event',
+            hour: first.start.getHours(),
             when: `during ${first.title}`,
             top: (minutesOf(first.start) / 60) * hourHeight + dockInset,
             edge: lane.left + lane.width,
@@ -639,7 +637,7 @@ function layoutDay(
       }
       dockOn(
         `${day.toISOString()}:${hour}`,
-        () => ({ when: `around ${label}`, top: hour * hourHeight + dockInset, edge: 100 }),
+        () => ({ kind: 'hour', hour, when: `around ${label}`, top: hour * hourHeight + dockInset, edge: 100 }),
         item,
       );
     }
@@ -824,34 +822,15 @@ function TimeGrid({
               }
 
               if (!entry) return null;
-              const startMinutes = minutesOf(entry.start);
-              const spanMinutes = Math.min(
-                (entryEnd(entry) - entry.start.getTime()) / 60_000,
-                24 * 60 - startMinutes,
-              );
-              const color = entryColour(entry, categories);
-              const isPast = entry.end.getTime() < now.getTime();
-              const hasDock = docks.some((dock) => dock.id === entry.id);
               return (
-                <div
+                <EventBlock
                   key={lane.entry.id}
-                  className={cn(
-                    'absolute overflow-hidden rounded-lg px-2.5 py-1.5 text-[12px]',
-                    hasDock && 'pr-12',
-                    isPast && 'opacity-50',
-                  )}
-                  style={{
-                    top: (startMinutes / 60) * hourHeight,
-                    height: (spanMinutes / 60) * hourHeight - 2,
-                    ...place,
-                    background: hexToRgba(color, 0.14),
-                    border: `1px solid ${hexToRgba(color, 0.35)}`,
-                    color: tintedText(color),
-                  }}
-                  title={entry.title}
-                >
-                  <span className="block truncate font-semibold">{entry.title}</span>
-                </div>
+                  entry={entry}
+                  categories={categories}
+                  place={place}
+                  past={entry.end.getTime() < now.getTime()}
+                  docked={docks.some((dock) => dock.id === entry.id)}
+                />
               );
             })}
 
@@ -865,19 +844,58 @@ function TimeGrid({
               />
             ))}
 
-            {isSameDay(day, now) && (
-              <div
-                className="pointer-events-none absolute right-0 left-0 h-[2px] bg-[#fb7185] shadow-[0_0_10px_#fb7185]"
-                style={{ top: (minutesOf(now) / 60) * hourHeight }}
-              >
-                <span className="absolute -top-1 -left-[5px] size-2.5 rounded-full bg-[#fb7185] shadow-[0_0_12px_#fb7185]" />
-              </div>
-            )}
+            {isSameDay(day, now) && <NowLine now={now} />}
           </div>
         ))}
       </div>
 
       {opened && <DockPanel dock={opened} id={panelId} onTick={onTick} />}
+    </div>
+  );
+}
+
+/** One timed event in its lane, clipped at midnight; `docked` leaves room for its to-do pill. */
+function EventBlock({
+  entry,
+  categories,
+  place,
+  past,
+  docked,
+}: {
+  entry: AgendaEntry;
+  categories: EventCategory[];
+  place: { left: string; width: string };
+  past: boolean;
+  docked: boolean;
+}) {
+  const startMinutes = minutesOf(entry.start);
+  const spanMinutes = Math.min((entryEnd(entry) - entry.start.getTime()) / 60_000, 24 * 60 - startMinutes);
+  const color = entryColour(entry, categories);
+  return (
+    <div
+      className={cn('absolute overflow-hidden rounded-lg px-2.5 py-1.5 text-[12px]', docked && 'pr-12', past && 'opacity-50')}
+      style={{
+        top: (startMinutes / 60) * hourHeight,
+        height: (spanMinutes / 60) * hourHeight - 2,
+        ...place,
+        background: hexToRgba(color, 0.14),
+        border: `1px solid ${hexToRgba(color, 0.35)}`,
+        color: tintedText(color),
+      }}
+      title={entry.title}
+    >
+      <span className="block truncate font-semibold">{entry.title}</span>
+    </div>
+  );
+}
+
+function NowLine({ now }: { now: Date }) {
+  return (
+    <div
+      className="pointer-events-none absolute right-0 left-0 h-[2px] bg-[#fb7185] shadow-[0_0_10px_#fb7185]"
+      style={{ top: (minutesOf(now) / 60) * hourHeight }}
+    >
+      <span className="absolute -top-1 -left-[5px] size-2.5 rounded-full bg-[#fb7185] shadow-[0_0_12px_#fb7185]" />
     </div>
   );
 }
@@ -917,11 +935,7 @@ function AllDayCell({
             >
               <TickBox item={item} onTick={onTick} touch={touch} className="size-3.5 rounded-[4px]" />
               <TodoText item={item} className="flex-1" />
-              {item.task && !dense && (
-                <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                  <StepMark task={item.task} compact />
-                </span>
-              )}
+              {!dense && <TodoStep item={item} className="shrink-0 gap-1" />}
             </div>
           );
         }

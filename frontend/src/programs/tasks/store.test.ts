@@ -20,10 +20,10 @@ import {
   savePageValue,
   saveProperty,
   seedDefaultProperties,
-  statusPropertyOf,
   syncTaskStatusFromTodos,
   type PropertyFilter,
 } from './store';
+import { statusPropertyOf } from './roles';
 import { addTodo, deleteTodo, listStepsForTask, toggleTodo } from '../todo/store';
 
 beforeEach(async () => {

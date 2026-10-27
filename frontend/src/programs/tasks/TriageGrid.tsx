@@ -1,8 +1,8 @@
 import type { Ref } from 'react';
 import { cn } from 'cn';
 import type { TaskPageRow, TaskPropertyOption, TaskPropertyRow } from '../../data/db';
-import { optionOfPage, statusRole } from './roles';
-import { findPriorityProperty, statusPropertyOf, type PropertyFilter } from './store';
+import { optionOfPage, statusPropertyOf, statusRole } from './roles';
+import { findPriorityProperty, type PropertyFilter } from './store';
 import type { TriageDrag } from './useTriageDrag';
 import './badges.css';
 

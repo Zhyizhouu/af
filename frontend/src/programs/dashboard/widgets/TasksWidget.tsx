@@ -3,14 +3,13 @@ import { Link } from 'react-router-dom';
 import { Button } from '../../../components/ui/button';
 import { useSession } from '../../../app/session';
 import { OptionMark, OptionMenu } from '../../tasks/OptionMenu';
-import { optionOfPage, priorityRank, statusUrgency } from '../../tasks/roles';
+import { optionOfPage, priorityRank, statusPropertyOf, statusUrgency } from '../../tasks/roles';
 import {
   findPriorityProperty,
   listPages,
   listProperties,
   prepareTaskData,
   savePageValue,
-  statusPropertyOf,
 } from '../../tasks/store';
 import { isPageDone } from '../../../data/agenda';
 import type { TaskPageRow, TaskPropertyRow } from '../../../data/db';

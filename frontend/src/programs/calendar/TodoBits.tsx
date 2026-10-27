@@ -21,6 +21,8 @@ export const dashed = 'border border-dashed border-white/20';
  */
 export interface Dock {
   id: string;
+  kind: 'event' | 'hour';
+  hour: number;
   when: string;
   todos: TodoWithStep[];
   around: TodoWithStep[];
@@ -104,11 +106,7 @@ export function TodoBlock({
       <TickBox item={item} onTick={onTick} touch={touch} className="size-[15px] rounded-[4px]" />
       <span className="min-w-0 flex-1">
         <TodoText item={item} />
-        {item.task && (
-          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <StepMark task={item.task} compact />
-          </span>
-        )}
+        <TodoStep item={item} />
       </span>
     </div>
   );
@@ -158,6 +156,16 @@ export function DockPill({
   );
 }
 
+/** A to-do's task step mark, or nothing for a standalone to-do. */
+export function TodoStep({ item, className }: { item: TodoWithStep; className?: string }) {
+  if (!item.task) return null;
+  return (
+    <span className={cn('flex items-center gap-1.5 text-[11px] text-muted-foreground', className)}>
+      <StepMark task={item.task} compact />
+    </span>
+  );
+}
+
 /** The list a dock pill opens, with each to-do tickable. */
 export function DockPanel({
   dock,
@@ -177,7 +185,7 @@ export function DockPanel({
   return (
     <div id={id} className="border-t border-white/[0.07] bg-white/[0.02] px-4 py-3">
       {sections.map((section) => (
-        <Fragment key={section.when}>
+        <Fragment key={section.items === dock.around ? 'around' : 'during'}>
           <span className="block text-[11px] font-semibold tracking-wide text-muted-foreground uppercase not-first:mt-2">
             {section.when.charAt(0).toUpperCase() + section.when.slice(1)}
           </span>
@@ -189,11 +197,7 @@ export function DockPanel({
                   {item.todo.time}
                 </span>
                 <TodoText item={item} className="flex-1" />
-                {item.task && (
-                  <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <StepMark task={item.task} compact />
-                  </span>
-                )}
+                <TodoStep item={item} className="shrink-0" />
               </li>
             ))}
           </ul>

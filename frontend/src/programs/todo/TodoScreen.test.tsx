@@ -7,19 +7,6 @@ import { dayFromKey, jakartaDayKey, keyFromDay } from '../habits/time';
 import { addTodo, listTodosForDay, listTodosInRange, toggleTodo } from './store';
 import { TodoScreen } from './TodoScreen';
 
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = ((query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  })) as typeof window.matchMedia;
-}
-
 vi.mock('../../app/session', () => ({
   useSession: () => ({ revision: 0, requestSync: () => {} }),
 }));

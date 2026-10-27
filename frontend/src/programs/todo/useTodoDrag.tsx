@@ -128,9 +128,9 @@ export function useTodoDrag(after: After) {
       event.preventDefault();
       const move = moves[event.key];
       if (!move) return;
-      void after(() => moveTodo(item.id, move.day, move.index)).then(() =>
-        window.setTimeout(() => document.querySelector<HTMLElement>(`[data-todo-id="${item.id}"]`)?.focus(), 0),
-      );
+      void after(() => moveTodo(item.id, move.day, move.index)).then((saved) => {
+        if (saved) window.setTimeout(() => document.querySelector<HTMLElement>(`[data-todo-id="${item.id}"]`)?.focus(), 0);
+      });
     },
     [after],
   );

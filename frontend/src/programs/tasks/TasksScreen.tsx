@@ -24,9 +24,9 @@ import {
   prepareTaskData,
   savePageValue,
   seedDefaultProperties,
-  statusPropertyOf,
   type PropertyFilter,
 } from './store';
+import { statusPropertyOf } from './roles';
 import { TriageGrid } from './TriageGrid';
 import { useTriageDrag } from './useTriageDrag';
 import './tasks.css';

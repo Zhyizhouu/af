@@ -290,10 +290,10 @@ export function Shell() {
             'flex h-full min-h-0 w-full flex-col',
             showIntro && !introDocked ? 'opacity-0' : 'opacity-100',
             !reducedMotion &&
-              (showIntro && !introDocked ? 'translate-y-[18px] scale-[0.985]' : 'translate-y-0 scale-100'),
+              (showIntro && !introDocked ? 'translate-y-[18px] scale-[0.985]' : ''),
             reducedMotion
               ? 'transition-opacity duration-700'
-              : 'transition-[opacity,transform] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]',
+              : 'transition-[opacity,translate,scale] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]',
           )}
         >
           <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] bg-black/60 px-4 backdrop-blur sm:px-6">

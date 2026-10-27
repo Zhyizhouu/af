@@ -9,8 +9,6 @@ import {
 import { categoryTones } from '../../data/tones';
 import { defaultPriorityOption, statusPropertyOf, statusRole } from './roles';
 
-export { statusPropertyOf };
-
 /**
  * Task Tracker: user-defined typed properties (columns) and the pages (rows)
  * that carry values for them.
@@ -442,8 +440,9 @@ export async function savePageValue(
   });
 }
 
-const liveTodosOf = (taskId: string) =>
-  db().todoItems.where('taskId').equals(taskId).filter((row) => !row.deleted).toArray();
+/** Live to-dos linked to any of the given tasks, in one indexed query. */
+export const liveTodosOf = (...taskIds: string[]) =>
+  db().todoItems.where('taskId').anyOf(taskIds).filter((row) => !row.deleted).toArray();
 
 /** Sets a task's status from its linked to-dos: all ticked is done, some is
  *  doing, none is todo. Does nothing without to-dos, a status property, or a

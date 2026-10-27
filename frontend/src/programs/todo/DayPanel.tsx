@@ -9,7 +9,7 @@ import type { TodoItemRow } from '../../data/db';
 import { entryEnd } from '../../data/overlap';
 import { jakartaClock } from '../habits/time';
 import { StepMark } from './StepMark';
-import { addTodo, deleteTodo, setTodoTime, toggleTodo, type TodoWithStep } from './store';
+import { addTodo, deleteTodo, dragIndexes, setTodoTime, toggleTodo, type TodoWithStep } from './store';
 import type { After, RowProps } from './useTodoDrag';
 
 export interface TodoMeta {
@@ -20,13 +20,6 @@ export interface TodoMeta {
 export type MetaOf = (id: string) => TodoMeta;
 
 const accent = 'text-[var(--af-accent)]';
-
-/** The drag index of each row of an `orderForDisplay` list: untimed rows count up from 0, and every timed row shares the index after them, so timed rows cannot be reordered. */
-export function dragIndexes(rows: TodoItemRow[]): number[] {
-  const untimed = rows.filter((row) => !row.time).length;
-  let next = 0;
-  return rows.map((row) => (row.time ? untimed : next++));
-}
 
 export function DuringChip({ clash }: { clash: AgendaEntry[] }) {
   const first = clash[0];

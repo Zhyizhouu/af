@@ -1,7 +1,7 @@
 import { db, type TodoItemRow } from '../../data/db';
 import { jakartaDayKey } from '../habits/time';
 import { normalizeTime } from '../../data/todoTime';
-import { syncTaskStatusFromTodos } from '../tasks/store';
+import { liveTodosOf, syncTaskStatusFromTodos } from '../tasks/store';
 
 export { normalizeTime };
 
@@ -20,6 +20,13 @@ export function orderForDisplay(rows: TodoItemRow[]): TodoItemRow[] {
   const timed = rows.filter((row) => row.time).sort(byTime);
   const untimed = rows.filter((row) => !row.time).sort(byOrder);
   return [...timed, ...untimed];
+}
+
+/** The drag index of each row of an `orderForDisplay` list: untimed rows count up from 0, and every timed row shares the index after them, so timed rows cannot be reordered. */
+export function dragIndexes(rows: TodoItemRow[]): number[] {
+  const untimed = rows.filter((row) => !row.time).length;
+  let next = 0;
+  return rows.map((row) => (row.time ? untimed : next++));
 }
 
 /** Live items on one Jakarta day, in list order. */
@@ -145,14 +152,11 @@ const stepOrder = (a: TodoItemRow, b: TodoItemRow) =>
   (a.time ?? '').localeCompare(b.time ?? '') ||
   a.createdAt - b.createdAt;
 
-const liveStepsOf = async (taskId: string): Promise<TodoItemRow[]> =>
-  (await db().todoItems.where('taskId').equals(taskId).filter((row) => !row.deleted).toArray()).sort(stepOrder);
-
 /** The live to-dos of one task as numbered steps, ordered by day, then time (untimed last), then creation; empty for a missing or deleted task. */
 export async function listStepsForTask(taskId: string): Promise<TodoWithStep[]> {
   const page = await db().taskPages.get(taskId);
   if (!page || page.deleted) return [];
-  const todos = await liveStepsOf(taskId);
+  const todos = (await liveTodosOf(taskId)).sort(stepOrder);
   return todos.map((todo, at) => ({ todo, task: { id: taskId, title: page.title, index: at + 1, total: todos.length } }));
 }
 
@@ -163,13 +167,11 @@ export async function withSteps(rows: TodoItemRow[]): Promise<TodoWithStep[]> {
   const ids = [...new Set(rows.flatMap((row) => (row.taskId ? [row.taskId] : [])))];
   const pages = await db().taskPages.bulkGet(ids);
   const steps = new Map<string, { title: string; ids: string[] }>();
-  await Promise.all(
-    ids.map(async (taskId, i) => {
-      const page = pages[i];
-      if (!page || page.deleted) return;
-      steps.set(taskId, { title: page.title, ids: (await liveStepsOf(taskId)).map((row) => row.id) });
-    }),
-  );
+  ids.forEach((taskId, i) => {
+    const page = pages[i];
+    if (page && !page.deleted) steps.set(taskId, { title: page.title, ids: [] });
+  });
+  for (const row of (await liveTodosOf(...steps.keys())).sort(stepOrder)) steps.get(row.taskId!)!.ids.push(row.id);
   return rows.map((todo) => {
     const step = todo.taskId ? steps.get(todo.taskId) : undefined;
     const at = step ? step.ids.indexOf(todo.id) : -1;

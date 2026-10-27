@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest';
 // component that reads or writes a row throws on mount.
 import 'fake-indexeddb/auto';
 
-// jsdom has no crypto.randomUUID and no scrollTo on elements. Both are used by
+// jsdom has no crypto.randomUUID, no scrollTo on elements and no matchMedia. All are used by
 // code under test, so they are stubbed rather than worked around in the code —
 // production should not carry shims for a test environment.
 if (!globalThis.crypto?.randomUUID) {
@@ -14,3 +14,16 @@ if (!globalThis.crypto?.randomUUID) {
 }
 
 Element.prototype.scrollTo = Element.prototype.scrollTo ?? (() => {});
+
+if (typeof window.matchMedia !== 'function') {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })) as typeof window.matchMedia;
+}

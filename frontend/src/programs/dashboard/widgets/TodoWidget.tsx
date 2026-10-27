@@ -8,8 +8,7 @@ import { Checkbox } from '../../../components/ui/checkbox';
 import { useSession } from '../../../app/session';
 import type { TodoItemRow } from '../../../data/db';
 import { addDaysToKey, jakartaDayKey } from '../../habits/time';
-import { dragIndexes } from '../../todo/DayPanel';
-import { addTodo, deleteTodo, listTodosInRange, orderForDisplay, toggleTodo } from '../../todo/store';
+import { addTodo, deleteTodo, dragIndexes, listTodosInRange, orderForDisplay, toggleTodo } from '../../todo/store';
 import { useTodoDrag } from '../../todo/useTodoDrag';
 
 /** Today's open items with an add box, and tomorrow's faded underneath. Items
